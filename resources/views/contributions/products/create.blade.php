@@ -28,7 +28,7 @@
         </div>
         @endif
 
-        <form action="{{ route('contributions.products.store') }}" method="POST">
+        <form id="contributionProductForm" action="{{ route('contributions.products.store') }}" method="POST">
             @csrf
             
             <div class="row">
@@ -439,6 +439,121 @@
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
         toggleChargeFields();
+        
+        // Handle form submission via AJAX
+        const form = document.getElementById('contributionProductForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const btnText = submitBtn.querySelector('.btn-text');
+        const originalText = btnText.textContent;
+        
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Disable buttons
+            submitBtn.disabled = true;
+            cancelBtn.style.pointerEvents = 'none';
+            cancelBtn.style.opacity = '0.6';
+            
+            // Show loading state
+            btnText.textContent = 'Saving...';
+            submitBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> <span class="btn-text">Saving...</span>';
+            
+            // Show SweetAlert loading
+            Swal.fire({
+                title: 'Processing...',
+                html: 'Please wait while we save the contribution product.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            // Prepare form data
+            const formData = new FormData(form);
+            
+            // Submit via AJAX
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json().catch(() => {
+                        // If response is not JSON (redirect), return success
+                        return { success: true, redirect: true };
+                    });
+                } else {
+                    return response.json().then(data => {
+                        throw { validation: true, errors: data.errors || data };
+                    });
+                }
+            })
+            .then(data => {
+                if (data.redirect || data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: data.message || 'Contribution product created successfully!',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        window.location.href = '{{ route("contributions.products.index") }}';
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: data.message || 'Contribution product created successfully!',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        window.location.href = '{{ route("contributions.products.index") }}';
+                    });
+                }
+            })
+            .catch(error => {
+                // Re-enable buttons
+                submitBtn.disabled = false;
+                cancelBtn.style.pointerEvents = 'auto';
+                cancelBtn.style.opacity = '1';
+                btnText.textContent = originalText;
+                submitBtn.innerHTML = '<i class="bx bx-save me-1"></i> <span class="btn-text">' + originalText + '</span>';
+                
+                if (error.validation) {
+                    // Handle validation errors
+                    let errorMessage = 'Please fix the following errors:\n\n';
+                    if (error.errors) {
+                        if (typeof error.errors === 'object') {
+                            Object.keys(error.errors).forEach(key => {
+                                errorMessage += `• ${error.errors[key][0]}\n`;
+                            });
+                        } else {
+                            errorMessage += error.errors;
+                        }
+                    }
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Validation Error',
+                        text: errorMessage,
+                        confirmButtonText: 'OK'
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: error.message || 'An error occurred while saving the product. Please try again.',
+                        confirmButtonText: 'OK'
+                    });
+                }
+            });
+        });
     });
 </script>
 @endpush

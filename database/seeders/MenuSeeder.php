@@ -87,6 +87,14 @@ class MenuSeeder extends Seeder
                 'hiddenRoutes' => ['loan-products.edit', 'loan-products.destroy', 'loan-products.show', 'groups.edit', 'groups.destroy', 'groups.show', 'groups.create', 'groups.payment', 'loans.edit', 'loans.destroy', 'loans.show', 'loans.create', 'loans.list'],
             ],
 
+            'Shares Management' => [
+                'icon' => 'bx bx-bar-chart-square',
+                'visibleRoutes' => [
+                    ['name' => 'Shares Management', 'route' => 'shares.management'],
+                ],
+                'hiddenRoutes' => ['shares.products.index', 'shares.accounts.index', 'shares.deposits.index', 'shares.withdrawals.index', 'shares.transfers.index'],
+            ],
+
             'Reports' => [
                 'icon' => 'bx bx-file',
                 'visibleRoutes' => [

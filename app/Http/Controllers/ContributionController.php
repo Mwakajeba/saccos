@@ -90,7 +90,8 @@ class ContributionController extends Controller
 
     public function productsStore(Request $request)
     {
-        $validated = $request->validate([
+        try {
+            $validated = $request->validate([
             'product_name' => 'required|string|max:255',
             'interest' => 'required|numeric|min:0|max:100',
             'category' => 'required|in:Voluntary,Mandatory',
@@ -120,15 +121,31 @@ class ContributionController extends Controller
             'riba_payable_journal_id' => 'required|exists:journal_references,id',
         ]);
 
-        $validated['can_withdraw'] = $request->has('can_withdraw');
-        $validated['has_charge'] = $request->has('has_charge');
+        $validated['can_withdraw'] = $request->has('can_withdraw') ? true : false;
+        $validated['has_charge'] = $request->has('has_charge') ? true : false;
         $validated['company_id'] = auth()->user()->company_id;
         $validated['branch_id'] = auth()->user()->branch_id;
 
-        ContributionProduct::create($validated);
+            ContributionProduct::create($validated);
 
-        return redirect()->route('contributions.products.index')
-            ->with('success', 'Contribution product created successfully!');
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Contribution product created successfully!'
+                ]);
+            }
+
+            return redirect()->route('contributions.products.index')
+                ->with('success', 'Contribution product created successfully!');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        }
     }
 
     public function accounts()

@@ -122,6 +122,35 @@ Route::get('/resend-otp/{phone}', [AuthController::class, 'resendOtp'])->name('r
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
+// Shares Management Routes
+Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function () {
+    Route::get('/management', function () {
+        return view('shares.management');
+    })->name('management');
+    
+    // Share Products Routes
+    Route::resource('products', \App\Http\Controllers\ShareProductController::class)->except(['show']);
+    Route::get('products/data', [\App\Http\Controllers\ShareProductController::class, 'getShareProductsData'])->name('products.data');
+    Route::get('products/{encodedId}', [\App\Http\Controllers\ShareProductController::class, 'show'])->name('products.show');
+    Route::patch('products/{encodedId}/toggle-status', [\App\Http\Controllers\ShareProductController::class, 'toggleStatus'])->name('products.toggle-status');
+    
+    // Share Accounts Routes (data route must come BEFORE resource to avoid route conflicts)
+    Route::get('accounts/data', [\App\Http\Controllers\ShareAccountController::class, 'getShareAccountsData'])->name('accounts.data');
+    Route::resource('accounts', \App\Http\Controllers\ShareAccountController::class);
+    
+    Route::get('/deposits', function () {
+        return view('shares.deposits.index');
+    })->name('deposits.index');
+    
+    Route::get('/withdrawals', function () {
+        return view('shares.withdrawals.index');
+    })->name('withdrawals.index');
+    
+    Route::get('/transfers', function () {
+        return view('shares.transfers.index');
+    })->name('transfers.index');
+});
+
 // Laravel Logs Route
 Route::get('/log', [LaravelLogsController::class, 'index'])->name('laravel-logs.index')->middleware('auth');
 Route::post('/log/clear', [LaravelLogsController::class, 'clearLogs'])->name('laravel-logs.clear')->middleware('auth');
