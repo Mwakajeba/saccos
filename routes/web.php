@@ -56,6 +56,7 @@ use App\Http\Controllers\Reports\BotLoansDisbursedController;
 use App\Http\Controllers\Reports\BotGeographicalDistributionController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\LaravelLogsController;
+use App\Http\Controllers\ContributionController;
 // Add other main app routes here
 Route::get('/dashboard/loan-product-disbursement', [DashboardController::class, 'loanProductDisbursement'])->middleware('auth');
 Route::get('/dashboard/delinquency-loan-buckets', [DashboardController::class, 'delinquencyLoanBuckets'])->middleware('auth');
@@ -245,6 +246,9 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
 
     //Filetypes settings
     Route::resource('filetypes', FiletypeController::class);
+    
+    //Journal References settings
+    Route::resource('journal-references', \App\Http\Controllers\JournalReferenceController::class);
 
     Route::get('/', [SettingsController::class, 'index'])->name('index');
 
@@ -815,6 +819,22 @@ Route::middleware(['auth'])->group(function () {
 });
 
 ////////////////////////////////////////////// END CUSTOMER MANAGEMENT ///////////////////////////////////////////
+
+//////////////////////////////////////////////////// CONTRIBUTIONS //////////////////////////////////////////////////////////////
+
+Route::get('/contributions', [ContributionController::class, 'index'])->name('contributions.index')->middleware('auth');
+Route::get('/contributions/products', [ContributionController::class, 'products'])->name('contributions.products.index')->middleware('auth');
+Route::get('/contributions/products/create', [ContributionController::class, 'productsCreate'])->name('contributions.products.create')->middleware('auth');
+Route::post('/contributions/products', [ContributionController::class, 'productsStore'])->name('contributions.products.store')->middleware('auth');
+Route::get('/contributions/accounts', [ContributionController::class, 'accounts'])->name('contributions.accounts.index')->middleware('auth');
+Route::get('/contributions/deposits', [ContributionController::class, 'deposits'])->name('contributions.deposits.index')->middleware('auth');
+Route::get('/contributions/withdrawals', [ContributionController::class, 'withdrawals'])->name('contributions.withdrawals.index')->middleware('auth');
+Route::get('/contributions/transfers', [ContributionController::class, 'transfers'])->name('contributions.transfers.index')->middleware('auth');
+Route::get('/contributions/transfers/pending', [ContributionController::class, 'pendingTransfers'])->name('contributions.transfers.pending')->middleware('auth');
+Route::get('/contributions/reports/balance', [ContributionController::class, 'balanceReport'])->name('contributions.reports.balance')->middleware('auth');
+Route::get('/contributions/reports/transactions', [ContributionController::class, 'transactionsReport'])->name('contributions.reports.transactions')->middleware('auth');
+
+//////////////////////////////////////////////////// END CONTRIBUTIONS //////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////// LOAN PRODUCT MANAGEMENT ///////////////////////////////////////////
 

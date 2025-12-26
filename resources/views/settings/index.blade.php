@@ -240,6 +240,22 @@
                                 </div>
                             </div>
                             @endcan
+
+                            <!-- Journal References Settings -->
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-info">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-book fs-1 text-info"></i>
+                                        </div>
+                                        <h5 class="card-title">Journal References Management</h5>
+                                        <p class="card-text">Manage journal references for contribution products and accounting entries.</p>
+                                        <a href="{{ route('settings.journal-references.index') }}" class="btn btn-info">
+                                            <i class="bx bx-list-ul me-1"></i> Manage Journal References
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
                             <!-- activity logs Settings -->
                             @can('view logs activity')
                             <div class="col-md-6 col-lg-4 mb-4">

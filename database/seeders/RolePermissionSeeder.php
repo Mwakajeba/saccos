@@ -411,6 +411,16 @@ class RolePermissionSeeder extends Seeder
             'view menus',
             'manage menus',
             'assign menu permissions',
+                    'view contributions',
+                    'manage contributions',
+                    'view contribution products',
+                    'view contributions accounts',
+                    'view contributions deposits',
+                    'view contributions withdrawal',
+                    'view contributions transfer',
+                    'view pending transfers',
+                    'view contribution balance report',
+                    'view contribution transactions report',
             'view logs activity',
 
             //bank accounts

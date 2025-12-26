@@ -18,6 +18,7 @@ class MenuSeeder extends Seeder
         }
 
         $entities = [
+                       
             'Dashboard' => [
                 'icon' => 'bx bx-home',
                 'visibleRoutes' => [
@@ -60,13 +61,21 @@ class MenuSeeder extends Seeder
                     'accounting.journals.show'
                 ],
             ],
-            'Deposit Accounts' => [
-                'icon' => 'bx bx-outline',
-                'visibleRoutes' => [
-                    ['name' => 'Cash Deposit Accounts', 'route' => 'cash_collateral_types.index'],
-                    ['name' => 'Cash Deposits', 'route' => 'cash_collaterals.index'],
-                ],
-                'hiddenRoutes' => ['cash_collateral_types.create', 'cash_collateral_types.edit', 'cash_collateral_types.destroy', 'cash_collateral_types.show', 'cash_collaterals.create', 'cash_collaterals.edit', 'cash_collaterals.destroy', 'cash_collaterals.show'],
+             'Contributions' => [
+                            'icon' => 'bx bx-donate-heart',
+                            'visibleRoutes' => [
+                                ['name' => 'Contributions', 'route' => 'contributions.index'],
+                            ],
+                            'hiddenRoutes' => [
+                                'contributions.products.index',
+                                'contributions.accounts.index',
+                                'contributions.deposits.index',
+                                'contributions.withdrawals.index',
+                                'contributions.transfers.index',
+                                'contributions.transfers.pending',
+                                'contributions.reports.balance',
+                                'contributions.reports.transactions',
+                            ],
             ],
             'Loan Management' => [
                 'icon' => 'bx bx-credit-card',
