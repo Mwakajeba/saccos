@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ShareProduct;
 use App\Models\ChartAccount;
 use App\Models\Fee;
+use App\Models\JournalReference;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Vinkla\Hashids\Facades\Hashids;
@@ -27,7 +28,7 @@ class ShareProductController extends Controller
     {
         if ($request->ajax()) {
             $shareProducts = ShareProduct::with([
-                'journalReferenceAccount',
+                'journalReference',
                 'liabilityAccount',
                 'incomeAccount',
                 'shareCapitalAccount',
@@ -93,6 +94,20 @@ class ShareProductController extends Controller
 
         // Get fees for charges dropdown
         $fees = Fee::where('status', 'active')->get();
+        
+        // Get journal references (filtered by company and branch like in JournalReferenceController)
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+        
+        $journalReferences = JournalReference::where('company_id', $companyId)
+            ->where(function($query) use ($branchId) {
+                $query->where('branch_id', $branchId)
+                      ->orWhereNull('branch_id');
+            })
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
 
         // Define period type options
         $periodTypes = [
@@ -145,6 +160,7 @@ class ShareProductController extends Controller
         return view('shares.products.create', compact(
             'chartAccounts',
             'fees',
+            'journalReferences',
             'periodTypes',
             'yesNoOptions',
             'chargeTypes',
@@ -204,7 +220,7 @@ class ShareProductController extends Controller
             'charge_id' => 'nullable|required_if:has_charges,1|exists:fees,id',
             'charge_type' => 'nullable|required_if:has_charges,1|in:fixed,percentage',
             'charge_amount' => 'nullable|required_if:has_charges,1|numeric|min:0',
-            'journal_reference_account_id' => 'required|exists:chart_accounts,id',
+            'journal_reference_id' => 'required|exists:journal_references,id',
             'hrms_code' => 'nullable|string|max:255',
             'liability_account_id' => 'required|exists:chart_accounts,id',
             'income_account_id' => 'required|exists:chart_accounts,id',
@@ -256,7 +272,7 @@ class ShareProductController extends Controller
         }
 
         $shareProduct = ShareProduct::with([
-            'journalReferenceAccount',
+            'journalReference',
             'liabilityAccount',
             'incomeAccount',
             'shareCapitalAccount',
@@ -280,6 +296,20 @@ class ShareProductController extends Controller
 
         // Get fees for charges dropdown
         $fees = Fee::where('status', 'active')->get();
+        
+        // Get journal references (filtered by company and branch like in JournalReferenceController)
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+        
+        $journalReferences = JournalReference::where('company_id', $companyId)
+            ->where(function($query) use ($branchId) {
+                $query->where('branch_id', $branchId)
+                      ->orWhereNull('branch_id');
+            })
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
 
         $periodTypes = [
             'Days' => 'Days',
@@ -331,6 +361,7 @@ class ShareProductController extends Controller
             'shareProduct',
             'chartAccounts',
             'fees',
+            'journalReferences',
             'periodTypes',
             'yesNoOptions',
             'chargeTypes',
@@ -396,7 +427,7 @@ class ShareProductController extends Controller
             'charge_id' => 'nullable|required_if:has_charges,1|exists:fees,id',
             'charge_type' => 'nullable|required_if:has_charges,1|in:fixed,percentage',
             'charge_amount' => 'nullable|required_if:has_charges,1|numeric|min:0',
-            'journal_reference_account_id' => 'required|exists:chart_accounts,id',
+            'journal_reference_id' => 'required|exists:journal_references,id',
             'hrms_code' => 'nullable|string|max:255',
             'liability_account_id' => 'required|exists:chart_accounts,id',
             'income_account_id' => 'required|exists:chart_accounts,id',

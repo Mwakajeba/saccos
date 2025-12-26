@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('contribution_products')) {
+            return; // Table already exists, skip migration
+        }
+
         Schema::create('contribution_products', function (Blueprint $table) {
             $table->id();
             $table->string('product_name');

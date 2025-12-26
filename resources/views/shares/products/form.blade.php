@@ -605,17 +605,17 @@
         <!-- Journal reference (share transfer) - Bank account field removed as per requirements -->
         <div class="col-md-6 mb-3">
             <label class="form-label">Journal reference (share transfer) <span class="text-danger">*</span></label>
-            <select name="journal_reference_account_id" 
-                    class="form-select select2-single @error('journal_reference_account_id') is-invalid @enderror" required>
+            <select name="journal_reference_id" 
+                    class="form-select select2-single @error('journal_reference_id') is-invalid @enderror" required>
                 <option value="">---select journal reference---</option>
-                @foreach($chartAccounts as $account)
-                    <option value="{{ $account->id }}" 
-                        {{ old('journal_reference_account_id', $shareProduct->journal_reference_account_id ?? '') == $account->id ? 'selected' : '' }}>
-                        {{ $account->account_code }} - {{ $account->account_name }}
+                @foreach($journalReferences ?? [] as $journalRef)
+                    <option value="{{ $journalRef->id }}" 
+                        {{ old('journal_reference_id', $shareProduct->journal_reference_id ?? '') == $journalRef->id ? 'selected' : '' }}>
+                        {{ $journalRef->name }} ({{ $journalRef->reference }})
                     </option>
                 @endforeach
             </select>
-            @error('journal_reference_account_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            @error('journal_reference_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
     </div>
 

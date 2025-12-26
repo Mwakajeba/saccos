@@ -138,9 +138,18 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::get('accounts/data', [\App\Http\Controllers\ShareAccountController::class, 'getShareAccountsData'])->name('accounts.data');
     Route::resource('accounts', \App\Http\Controllers\ShareAccountController::class);
     
-    Route::get('/deposits', function () {
-        return view('shares.deposits.index');
-    })->name('deposits.index');
+    // Share Deposits Routes (data route must come BEFORE resource to avoid route conflicts)
+    Route::get('deposits/data', [\App\Http\Controllers\ShareDepositController::class, 'getShareDepositsData'])->name('deposits.data');
+    Route::get('deposits/getAccountDetails', [\App\Http\Controllers\ShareDepositController::class, 'getShareAccountDetails'])->name('deposits.getAccountDetails');
+    Route::resource('deposits', \App\Http\Controllers\ShareDepositController::class)->names([
+        'index' => 'deposits.index',
+        'create' => 'deposits.create',
+        'store' => 'deposits.store',
+        'show' => 'deposits.show',
+        'edit' => 'deposits.edit',
+        'update' => 'deposits.update',
+        'destroy' => 'deposits.destroy',
+    ]);
     
     Route::get('/withdrawals', function () {
         return view('shares.withdrawals.index');

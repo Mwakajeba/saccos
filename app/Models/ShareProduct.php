@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Traits\LogsActivity;
 use App\Models\Fee;
+use App\Models\JournalReference;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -56,7 +57,7 @@ class ShareProduct extends Model
         'charge_id',
         'charge_type',
         'charge_amount',
-        'journal_reference_account_id',
+        'journal_reference_id',
         'hrms_code',
         'liability_account_id',
         'income_account_id',
@@ -94,11 +95,11 @@ class ShareProduct extends Model
     ];
 
     /**
-     * Get the journal reference account (for share transfer)
+     * Get the journal reference (for share transfer)
      */
-    public function journalReferenceAccount(): BelongsTo
+    public function journalReference(): BelongsTo
     {
-        return $this->belongsTo(ChartAccount::class, 'journal_reference_account_id');
+        return $this->belongsTo(JournalReference::class, 'journal_reference_id');
     }
 
     /**

@@ -450,8 +450,7 @@
                         <div class="row mb-3">
                             <div class="col-sm-6"><strong>Journal Reference:</strong></div>
                             <div class="col-sm-6">
-                                {{ $shareProduct->journalReferenceAccount->account_code ?? 'N/A' }} - 
-                                {{ $shareProduct->journalReferenceAccount->account_name ?? 'N/A' }}
+                                {{ $shareProduct->journalReference->name ?? 'N/A' }} ({{ $shareProduct->journalReference->reference ?? 'N/A' }})
                             </div>
                         </div>
                         <div class="row mb-3">
