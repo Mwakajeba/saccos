@@ -39,6 +39,7 @@
                     <table class="table table-bordered table-striped nowrap" id="shareAccountsTable">
                         <thead>
                             <tr>
+                                <th>SN</th>
                                 <th>Account Number</th>
                                 <th>Member Name</th>
                                 <th>Member Number</th>
@@ -113,6 +114,7 @@
                 }
             },
             columns: [
+                { data: 'DT_RowIndex', name: 'DT_RowIndex', title: 'SN', orderable: false, searchable: false },
                 { data: 'account_number', name: 'account_number', title: 'Account Number' },
                 { data: 'customer_name', name: 'customer.name', title: 'Member Name' },
                 { data: 'customer_number', name: 'customer.customerNo', title: 'Member Number' },
@@ -124,7 +126,7 @@
                 { data: 'actions', name: 'actions', title: 'Actions', orderable: false, searchable: false }
             ],
             responsive: true,
-            order: [[0, 'asc']],
+            order: [[1, 'asc']], // Order by Account Number (column index 1, since SN is index 0)
             pageLength: 10,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
             language: {
@@ -139,6 +141,10 @@
                 zeroRecords: "No matching share accounts found"
             },
             columnDefs: [
+                {
+                    targets: 0, // SN column
+                    className: 'text-center'
+                },
                 {
                     targets: -1, // Actions column
                     orderable: false,
@@ -159,6 +165,7 @@
             
             var accountId = $(this).data('id');
             var accountNumber = $(this).data('name');
+            var deleteBtn = $(this);
             
             Swal.fire({
                 title: 'Are you sure?',
@@ -171,27 +178,6 @@
                 cancelButtonText: 'Cancel'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Create a form to submit the delete request
-                    var form = $('<form>', {
-                        'method': 'POST',
-                        'action': '{{ route("shares.accounts.destroy", ":id") }}'.replace(':id', accountId)
-                    });
-                    
-                    var csrfToken = $('<input>', {
-                        'type': 'hidden',
-                        'name': '_token',
-                        'value': '{{ csrf_token() }}'
-                    });
-                    
-                    var methodField = $('<input>', {
-                        'type': 'hidden',
-                        'name': '_method',
-                        'value': 'DELETE'
-                    });
-                    
-                    form.append(csrfToken, methodField);
-                    $('body').append(form);
-                    
                     // Show loading
                     Swal.fire({
                         title: 'Deleting...',
@@ -202,7 +188,39 @@
                         }
                     });
                     
-                    form.submit();
+                    // Make AJAX delete request
+                    $.ajax({
+                        url: '{{ route("shares.accounts.destroy", ":id") }}'.replace(':id', accountId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            _method: 'DELETE'
+                        },
+                        success: function(response) {
+                            Swal.fire({
+                                title: 'Deleted!',
+                                text: 'Share account has been deleted successfully.',
+                                icon: 'success',
+                                confirmButtonText: 'OK'
+                            }).then(() => {
+                                // Reload DataTable
+                                table.ajax.reload(null, false);
+                            });
+                        },
+                        error: function(xhr) {
+                            var errorMessage = 'Failed to delete share account.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errorMessage = xhr.responseJSON.message;
+                            }
+                            
+                            Swal.fire({
+                                title: 'Error!',
+                                text: errorMessage,
+                                icon: 'error',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
                 }
             });
         });

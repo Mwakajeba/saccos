@@ -41,6 +41,30 @@
                         <form action="{{ route('shares.accounts.store') }}" method="POST" id="shareAccountForm">
                             @csrf
 
+                            <!-- Opening date and Notes (only for first line) -->
+                            <div class="row mb-3">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Opening date <span class="text-danger">*</span></label>
+                                    <input type="date" name="lines[0][opening_date]" 
+                                           class="form-control @error('lines.0.opening_date') is-invalid @enderror"
+                                           value="{{ old('lines.0.opening_date', date('Y-m-d')) }}" required>
+                                    @error('lines.0.opening_date') 
+                                        <div class="invalid-feedback">{{ $message }}</div> 
+                                    @enderror
+                                </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Notes</label>
+                                    <input type="text" name="lines[0][notes]" 
+                                           class="form-control @error('lines.0.notes') is-invalid @enderror"
+                                           value="{{ old('lines.0.notes') }}" 
+                                           placeholder="Optional notes">
+                                    @error('lines.0.notes') 
+                                        <div class="invalid-feedback">{{ $message }}</div> 
+                                    @enderror
+                                </div>
+                            </div>
+
                             <!-- Form Lines Container -->
                             <div id="shareAccountLines">
                                 <!-- Default Line -->
@@ -49,69 +73,36 @@
                                         <!-- Member name -->
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label">Member name <span class="text-danger">*</span></label>
-                                            <div class="input-group">
-                                                <span class="input-group-text bg-dark text-white">
-                                                    <i class="bx bx-user"></i>
-                                                </span>
-                                                <select name="lines[0][customer_id]" 
-                                                        class="form-select customer-select @error('lines.0.customer_id') is-invalid @enderror" required>
-                                                    <option value="">Select member</option>
-                                                    @foreach($customers as $customer)
-                                                        <option value="{{ $customer->id }}" 
-                                                            {{ old('lines.0.customer_id') == $customer->id ? 'selected' : '' }}>
-                                                            {{ $customer->name }} ({{ $customer->customerNo }})
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                                @error('lines.0.customer_id') 
-                                                    <div class="invalid-feedback">{{ $message }}</div> 
-                                                @enderror
-                                            </div>
+                                            <select name="lines[0][customer_id]" 
+                                                    class="form-select customer-select @error('lines.0.customer_id') is-invalid @enderror" required>
+                                                <option value="">Select member</option>
+                                                @foreach($customers as $customer)
+                                                    <option value="{{ $customer->id }}" 
+                                                        {{ old('lines.0.customer_id') == $customer->id ? 'selected' : '' }}>
+                                                        {{ $customer->name }} ({{ $customer->customerNo }})
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            @error('lines.0.customer_id') 
+                                                <div class="invalid-feedback">{{ $message }}</div> 
+                                            @enderror
                                         </div>
 
                                         <!-- Share product -->
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label">Share product <span class="text-danger">*</span></label>
-                                            <div class="input-group">
-                                                <span class="input-group-text bg-dark text-white">
-                                                    <i class="bx bx-box"></i>
-                                                </span>
-                                                <select name="lines[0][share_product_id]" 
-                                                        class="form-select share-product-select @error('lines.0.share_product_id') is-invalid @enderror" required>
-                                                    <option value="">Select account</option>
-                                                    @foreach($shareProducts as $product)
-                                                        <option value="{{ $product->id }}" 
-                                                            {{ old('lines.0.share_product_id') == $product->id ? 'selected' : '' }}
-                                                            data-nominal-price="{{ $product->nominal_price }}">
-                                                            {{ $product->share_name }}
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                                @error('lines.0.share_product_id') 
-                                                    <div class="invalid-feedback">{{ $message }}</div> 
-                                                @enderror
-                                            </div>
-                                        </div>
-
-                                        <!-- Opening date -->
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Opening date <span class="text-danger">*</span></label>
-                                            <input type="date" name="lines[0][opening_date]" 
-                                                   class="form-control @error('lines.0.opening_date') is-invalid @enderror"
-                                                   value="{{ old('lines.0.opening_date', date('Y-m-d')) }}" required>
-                                            @error('lines.0.opening_date') 
-                                                <div class="invalid-feedback">{{ $message }}</div> 
-                                            @enderror
-                                        </div>
-
-                                        <!-- Notes -->
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Notes</label>
-                                            <input type="text" name="lines[0][notes]" 
-                                                   class="form-control @error('lines.0.notes') is-invalid @enderror"
-                                                   value="{{ old('lines.0.notes') }}" 
-                                                   placeholder="Optional notes">
-                                            @error('lines.0.notes') 
+                                            <select name="lines[0][share_product_id]" 
+                                                    class="form-select share-product-select @error('lines.0.share_product_id') is-invalid @enderror" required>
+                                                <option value="">Select account</option>
+                                                @foreach($shareProducts as $product)
+                                                    <option value="{{ $product->id }}" 
+                                                        {{ old('lines.0.share_product_id') == $product->id ? 'selected' : '' }}
+                                                        data-nominal-price="{{ $product->nominal_price }}">
+                                                        {{ $product->share_name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            @error('lines.0.share_product_id') 
                                                 <div class="invalid-feedback">{{ $message }}</div> 
                                             @enderror
                                         </div>
@@ -234,53 +225,29 @@
                         <!-- Member name -->
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Member name <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-dark text-white">
-                                    <i class="bx bx-user"></i>
-                                </span>
-                                <select name="lines[${lineIndex}][customer_id]" 
-                                        class="form-select customer-select" required>
-                                    <option value="">Select member</option>
-                                    @foreach($customers as $customer)
-                                        <option value="{{ $customer->id }}">
-                                            {{ $customer->name }} ({{ $customer->customerNo }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
+                            <select name="lines[${lineIndex}][customer_id]" 
+                                    class="form-select customer-select" required>
+                                <option value="">Select member</option>
+                                @foreach($customers as $customer)
+                                    <option value="{{ $customer->id }}">
+                                        {{ $customer->name }} ({{ $customer->customerNo }})
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
                         <!-- Share product -->
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Share product <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-dark text-white">
-                                    <i class="bx bx-box"></i>
-                                </span>
-                                <select name="lines[${lineIndex}][share_product_id]" 
-                                        class="form-select share-product-select" required>
-                                    <option value="">Select account</option>
-                                    @foreach($shareProducts as $product)
-                                        <option value="{{ $product->id }}" data-nominal-price="{{ $product->nominal_price }}">
-                                            {{ $product->share_name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Opening date -->
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Opening date <span class="text-danger">*</span></label>
-                            <input type="date" name="lines[${lineIndex}][opening_date]" 
-                                   class="form-control" value="{{ date('Y-m-d') }}" required>
-                        </div>
-
-                        <!-- Notes -->
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Notes</label>
-                            <input type="text" name="lines[${lineIndex}][notes]" 
-                                   class="form-control" placeholder="Optional notes">
+                            <select name="lines[${lineIndex}][share_product_id]" 
+                                    class="form-select share-product-select" required>
+                                <option value="">Select account</option>
+                                @foreach($shareProducts as $product)
+                                    <option value="{{ $product->id }}" data-nominal-price="{{ $product->nominal_price }}">
+                                        {{ $product->share_name }}
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
                         <!-- Remove Line Button -->
@@ -332,8 +299,23 @@
             }
         });
 
-        // Form submission handler
+        // Form submission handler - copy opening_date and notes to all lines
         $('#shareAccountForm').on('submit', function(e) {
+            // Get opening date and notes from first line (the ones at the top)
+            const openingDate = $('input[name="lines[0][opening_date]"]').val();
+            const notes = $('input[name="lines[0][notes]"]').val();
+
+            // Copy opening date and notes to all additional lines as hidden inputs
+            $('.share-account-line[data-line-index!="0"]').each(function() {
+                const lineIndex = $(this).attr('data-line-index');
+                // Remove existing hidden inputs if any
+                $(this).find(`input[name="lines[${lineIndex}][opening_date]"]`).remove();
+                $(this).find(`input[name="lines[${lineIndex}][notes]"]`).remove();
+                // Add hidden inputs with values from first line
+                $(this).append(`<input type="hidden" name="lines[${lineIndex}][opening_date]" value="${openingDate}">`);
+                $(this).append(`<input type="hidden" name="lines[${lineIndex}][notes]" value="${notes || ''}">`);
+            });
+
             // Validate at least one line is filled
             let hasValidLine = false;
             $('.share-account-line').each(function() {
@@ -353,6 +335,7 @@
                     icon: 'error',
                     confirmButtonText: 'OK'
                 });
+                return false;
             }
         });
     });

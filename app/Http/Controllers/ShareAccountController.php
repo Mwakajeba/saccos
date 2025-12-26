@@ -38,6 +38,7 @@ class ShareAccountController extends Controller
                 ])->select('share_accounts.*');
 
                 return DataTables::eloquent($shareAccounts)
+                ->addIndexColumn()
                 ->addColumn('customer_name', function ($account) {
                     return $account->customer->name ?? 'N/A';
                 })
@@ -152,13 +153,7 @@ class ShareAccountController extends Controller
 
         $validator = Validator::make($request->all(), $rules, $messages);
 
-        if ($validator->fails()) {
-            return redirect()->back()
-                ->withErrors($validator)
-                ->withInput();
-        }
-
-        $createdCount = 0;
+        // Additional validation: Check for duplicates within the same request
         $lines = $request->lines ?? [
             [
                 'customer_id' => $request->customer_id,
@@ -168,10 +163,76 @@ class ShareAccountController extends Controller
             ]
         ];
 
-        foreach ($lines as $line) {
+        // Check for duplicates within the same request (same customer + share product combination)
+        $combinations = [];
+        foreach ($lines as $index => $line) {
+            if (!empty($line['customer_id']) && !empty($line['share_product_id'])) {
+                $combination = $line['customer_id'] . '_' . $line['share_product_id'];
+                if (isset($combinations[$combination])) {
+                    $validator->errors()->add(
+                        "lines.{$index}.customer_id",
+                        "Line " . ($index + 1) . ": This member already has this share product selected in another line."
+                    );
+                } else {
+                    $combinations[$combination] = $index;
+                }
+            }
+        }
+
+        // Check for duplicates against existing records in database
+        foreach ($lines as $index => $line) {
+            if (!empty($line['customer_id']) && !empty($line['share_product_id'])) {
+                // Check if this combination already exists in the database
+                $exists = ShareAccount::where('customer_id', $line['customer_id'])
+                    ->where('share_product_id', $line['share_product_id'])
+                    ->exists();
+                
+                if ($exists) {
+                    $customer = Customer::find($line['customer_id']);
+                    $product = ShareProduct::find($line['share_product_id']);
+                    $customerName = $customer ? $customer->name : 'Unknown';
+                    $productName = $product ? $product->share_name : 'Unknown';
+                    
+                    $validator->errors()->add(
+                        "lines.{$index}.customer_id",
+                        "Line " . ($index + 1) . ": Member \"{$customerName}\" already has a share account for product \"{$productName}\"."
+                    );
+                }
+            }
+        }
+
+        // Validate fails will be true if there are any errors (either from validation rules or manually added)
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        $createdCount = 0;
+        $createdInBatch = []; // Track what we're creating in this batch to prevent duplicates
+
+        foreach ($lines as $lineIndex => $line) {
             // Skip empty lines
             if (empty($line['customer_id']) || empty($line['share_product_id'])) {
                 continue;
+            }
+
+            $combination = $line['customer_id'] . '_' . $line['share_product_id'];
+            
+            // Final safety check: Skip if we've already created this combination in this batch
+            // This prevents duplicates even if validation somehow passes
+            if (isset($createdInBatch[$combination])) {
+                continue; // Skip duplicate within the same batch - don't save
+            }
+            
+            // Final check: Verify this combination doesn't exist in database before creating
+            $exists = ShareAccount::where('customer_id', $line['customer_id'])
+                ->where('share_product_id', $line['share_product_id'])
+                ->exists();
+            
+            if ($exists) {
+                // This should have been caught by validation, but skip just in case
+                continue; // Don't save if duplicate exists
             }
 
             // Generate account number
@@ -184,6 +245,7 @@ class ShareAccountController extends Controller
                 'customer_id' => $line['customer_id'],
                 'share_product_id' => $line['share_product_id'],
                 'account_number' => $accountNumber,
+                'share_balance' => 0,
                 'nominal_value' => $shareProduct->nominal_price ?? 0,
                 'opening_date' => $line['opening_date'],
                 'notes' => $line['notes'] ?? null,
@@ -194,6 +256,8 @@ class ShareAccountController extends Controller
                 'updated_by' => auth()->id(),
             ]);
 
+            // Mark this combination as created in this batch
+            $createdInBatch[$combination] = true;
             $createdCount++;
         }
 
@@ -263,6 +327,28 @@ class ShareAccountController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        // Check for duplicate: same customer + share product combination (excluding current account)
+        if ($request->customer_id != $shareAccount->customer_id || 
+            $request->share_product_id != $shareAccount->share_product_id) {
+            
+            $exists = ShareAccount::where('customer_id', $request->customer_id)
+                ->where('share_product_id', $request->share_product_id)
+                ->where('id', '!=', $shareAccount->id)
+                ->exists();
+            
+            if ($exists) {
+                $customer = Customer::find($request->customer_id);
+                $product = ShareProduct::find($request->share_product_id);
+                $customerName = $customer ? $customer->name : 'Unknown';
+                $productName = $product ? $product->share_name : 'Unknown';
+                
+                $validator->errors()->add(
+                    'customer_id',
+                    "Member \"{$customerName}\" already has a share account for product \"{$productName}\"."
+                );
+            }
+        }
+
         if ($validator->fails()) {
             return redirect()->back()
                 ->withErrors($validator)
@@ -289,15 +375,37 @@ class ShareAccountController extends Controller
      */
     public function destroy($id)
     {
-        $decoded = Hashids::decode($id);
-        if (empty($decoded)) {
-            abort(404, 'Share account not found.');
-        }
-        $shareAccount = ShareAccount::findOrFail($decoded[0]);
-        $shareAccount->delete();
+        try {
+            $decoded = Hashids::decode($id);
+            if (empty($decoded)) {
+                abort(404, 'Share account not found.');
+            }
+            $shareAccount = ShareAccount::findOrFail($decoded[0]);
+            $accountNumber = $shareAccount->account_number;
+            $shareAccount->delete();
 
-        return redirect()->route('shares.accounts.index')
-            ->with('success', 'Share account deleted successfully.');
+            if (request()->ajax() || request()->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Share account deleted successfully.'
+                ]);
+            }
+
+            return redirect()->route('shares.accounts.index')
+                ->with('success', 'Share account deleted successfully.');
+        } catch (\Exception $e) {
+            Log::error('Share Account Delete Error: ' . $e->getMessage());
+
+            if (request()->ajax() || request()->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete share account: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return redirect()->back()
+                ->with('error', 'Failed to delete share account. Please try again.');
+        }
     }
 
     /**
