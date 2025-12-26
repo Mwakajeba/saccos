@@ -41,9 +41,6 @@ class ShareWithdrawalController extends Controller
 
                 return DataTables::eloquent($withdrawals)
                 ->addIndexColumn()
-                ->addColumn('account_number', function ($withdrawal) {
-                    return $withdrawal->shareAccount->account_number ?? 'N/A';
-                })
                 ->addColumn('customer_name', function ($withdrawal) {
                     return $withdrawal->shareAccount->customer->name ?? 'N/A';
                 })
@@ -169,6 +166,7 @@ class ShareWithdrawalController extends Controller
             // Get chart accounts from share product
             $liabilityAccountId = $shareProduct->liability_account_id;
             $shareCapitalAccountId = $shareProduct->share_capital_account_id;
+            $feeIncomeAccountId = $shareProduct->fee_income_account_id;
             
             if (!$liabilityAccountId) {
                 throw new \Exception('Share product does not have a liability account configured. Please configure chart accounts in the share product.');
@@ -247,11 +245,28 @@ class ShareWithdrawalController extends Controller
             $customerId = $shareAccount->customer_id;
             $description = "Share withdrawal for {$shareAccount->account_number} - " . ($request->notes ?: "Withdrawal #{$withdrawal->id}");
 
-            // Credit: Bank Account (money paid out)
+            // Debit: Share Capital Account (if provided), otherwise Liability Account
+            // Debit the gross withdrawal amount (before fee deduction)
+            $debitAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+            
+            GlTransaction::create([
+                'chart_account_id' => $debitAccountId,
+                'customer_id' => $customerId,
+                'amount' => $withdrawalAmount, // Gross amount (before fee)
+                'nature' => 'debit',
+                'transaction_id' => $withdrawal->id,
+                'transaction_type' => 'share_withdrawal',
+                'date' => $request->withdrawal_date,
+                'description' => $description,
+                'branch_id' => $user->branch_id ?? null,
+                'user_id' => $user->id,
+            ]);
+
+            // Credit: Bank Account (money paid out - net amount after fee)
             GlTransaction::create([
                 'chart_account_id' => $bankAccount->chart_account_id,
                 'customer_id' => $customerId,
-                'amount' => $totalAmount,
+                'amount' => $totalAmount, // Net amount (after fee)
                 'nature' => 'credit',
                 'transaction_id' => $withdrawal->id,
                 'transaction_type' => 'share_withdrawal',
@@ -261,22 +276,21 @@ class ShareWithdrawalController extends Controller
                 'user_id' => $user->id,
             ]);
 
-            // Debit: Share Capital Account (if provided), otherwise Liability Account
-            // Only debit one account to maintain double-entry balance
-            $debitAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
-            
-            GlTransaction::create([
-                'chart_account_id' => $debitAccountId,
-                'customer_id' => $customerId,
-                'amount' => $totalAmount,
-                'nature' => 'debit',
-                'transaction_id' => $withdrawal->id,
-                'transaction_type' => 'share_withdrawal',
-                'date' => $request->withdrawal_date,
-                'description' => $description,
-                'branch_id' => $user->branch_id ?? null,
-                'user_id' => $user->id,
-            ]);
+            // Credit: Fee Income Account (if fee exists and fee income account is configured)
+            if ($withdrawalFee > 0 && $feeIncomeAccountId) {
+                GlTransaction::create([
+                    'chart_account_id' => $feeIncomeAccountId,
+                    'customer_id' => $customerId,
+                    'amount' => $withdrawalFee,
+                    'nature' => 'credit',
+                    'transaction_id' => $withdrawal->id,
+                    'transaction_type' => 'share_withdrawal',
+                    'date' => $request->withdrawal_date,
+                    'description' => $description . ' - Fee',
+                    'branch_id' => $user->branch_id ?? null,
+                    'user_id' => $user->id,
+                ]);
+            }
 
             // Update share account balance (decrease)
             $shareAccount->share_balance -= $request->number_of_shares;
@@ -372,6 +386,7 @@ class ShareWithdrawalController extends Controller
             // Get chart accounts from share product
             $liabilityAccountId = $shareProduct->liability_account_id;
             $shareCapitalAccountId = $shareProduct->share_capital_account_id;
+            $feeIncomeAccountId = $shareProduct->fee_income_account_id;
             
             if (!$liabilityAccountId) {
                 throw new \Exception('Share product does not have a liability account configured.');
@@ -443,11 +458,28 @@ class ShareWithdrawalController extends Controller
                 $customerId = $shareAccount->customer_id;
                 $description = "Share withdrawal for {$shareAccount->account_number} - " . ($request->notes ?: "Withdrawal #{$withdrawal->id}");
 
-                // Credit: Bank Account
+                // Debit: Share Capital Account (if provided), otherwise Liability Account
+                // Debit the gross withdrawal amount (before fee deduction)
+                $debitAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+                
+                GlTransaction::create([
+                    'chart_account_id' => $debitAccountId,
+                    'customer_id' => $customerId,
+                    'amount' => $withdrawalAmount, // Gross amount (before fee)
+                    'nature' => 'debit',
+                    'transaction_id' => $withdrawal->id,
+                    'transaction_type' => 'share_withdrawal',
+                    'date' => $request->withdrawal_date,
+                    'description' => $description,
+                    'branch_id' => $user->branch_id ?? null,
+                    'user_id' => $user->id,
+                ]);
+
+                // Credit: Bank Account (money paid out - net amount after fee)
                 GlTransaction::create([
                     'chart_account_id' => $bankAccount->chart_account_id,
                     'customer_id' => $customerId,
-                    'amount' => $totalAmount,
+                    'amount' => $totalAmount, // Net amount (after fee)
                     'nature' => 'credit',
                     'transaction_id' => $withdrawal->id,
                     'transaction_type' => 'share_withdrawal',
@@ -457,21 +489,21 @@ class ShareWithdrawalController extends Controller
                     'user_id' => $user->id,
                 ]);
 
-                // Debit: Share Capital Account (if provided), otherwise Liability Account
-                $debitAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
-                
-                GlTransaction::create([
-                    'chart_account_id' => $debitAccountId,
-                    'customer_id' => $customerId,
-                    'amount' => $totalAmount,
-                    'nature' => 'debit',
-                    'transaction_id' => $withdrawal->id,
-                    'transaction_type' => 'share_withdrawal',
-                    'date' => $request->withdrawal_date,
-                    'description' => $description,
-                    'branch_id' => $user->branch_id ?? null,
-                    'user_id' => $user->id,
-                ]);
+                // Credit: Fee Income Account (if fee exists and fee income account is configured)
+                if ($withdrawalFee > 0 && $feeIncomeAccountId) {
+                    GlTransaction::create([
+                        'chart_account_id' => $feeIncomeAccountId,
+                        'customer_id' => $customerId,
+                        'amount' => $withdrawalFee,
+                        'nature' => 'credit',
+                        'transaction_id' => $withdrawal->id,
+                        'transaction_type' => 'share_withdrawal',
+                        'date' => $request->withdrawal_date,
+                        'description' => $description . ' - Fee',
+                        'branch_id' => $user->branch_id ?? null,
+                        'user_id' => $user->id,
+                    ]);
+                }
             }
 
             DB::commit();

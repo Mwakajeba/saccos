@@ -224,6 +224,7 @@ class ShareProductController extends Controller
             'hrms_code' => 'nullable|string|max:255',
             'liability_account_id' => 'required|exists:chart_accounts,id',
             'share_capital_account_id' => 'nullable|exists:chart_accounts,id',
+            'fee_income_account_id' => 'nullable|exists:chart_accounts,id',
         ]);
 
         if ($validator->fails()) {
@@ -433,6 +434,7 @@ class ShareProductController extends Controller
             'hrms_code' => 'nullable|string|max:255',
             'liability_account_id' => 'required|exists:chart_accounts,id',
             'share_capital_account_id' => 'nullable|exists:chart_accounts,id',
+            'fee_income_account_id' => 'nullable|exists:chart_accounts,id',
         ]);
 
         if ($validator->fails()) {

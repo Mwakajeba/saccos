@@ -40,7 +40,6 @@
                         <thead>
                             <tr>
                                 <th>SN</th>
-                                <th>Account Number</th>
                                 <th>Member Name</th>
                                 <th>Member Number</th>
                                 <th>Share Product</th>
@@ -113,7 +112,6 @@
             },
             columns: [
                 { data: 'DT_RowIndex', name: 'DT_RowIndex', title: 'SN', orderable: false, searchable: false, className: 'text-center' },
-                { data: 'account_number', name: 'account_number', title: 'Account Number' },
                 { data: 'customer_name', name: 'customer_name', title: 'Member Name' },
                 { data: 'customer_number', name: 'customer_number', title: 'Member Number' },
                 { data: 'share_product_name', name: 'share_product_name', title: 'Share Product' },
@@ -127,7 +125,7 @@
                 { data: 'actions', name: 'actions', title: 'Actions', orderable: false, searchable: false }
             ],
             responsive: true,
-            order: [[5, 'desc']], // Order by Withdrawal Date descending
+            order: [[4, 'desc']], // Order by Withdrawal Date descending
             pageLength: 10,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
             language: {
@@ -159,9 +157,11 @@
             }
         });
 
-        // Handle delete button clicks
-        $('#shareWithdrawalsTable').on('click', '.delete-btn', function(e) {
+        // Handle delete button clicks using event delegation
+        $(document).on('click', '#shareWithdrawalsTable .delete-btn', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            
             var withdrawalId = $(this).data('id');
             var withdrawalName = $(this).data('name');
 
@@ -173,7 +173,8 @@
                 confirmButtonColor: '#d33',
                 cancelButtonColor: '#3085d6',
                 confirmButtonText: 'Yes, delete it!',
-                cancelButtonText: 'Cancel'
+                cancelButtonText: 'Cancel',
+                reverseButtons: true
             }).then((result) => {
                 if (result.isConfirmed) {
                     $.ajax({
@@ -188,23 +189,42 @@
                                 title: 'Deleting...',
                                 text: 'Please wait while we delete the share withdrawal.',
                                 allowOutsideClick: false,
-                                didOpen: () => { Swal.showLoading(); }
+                                allowEscapeKey: false,
+                                showConfirmButton: false,
+                                didOpen: () => { 
+                                    Swal.showLoading(); 
+                                }
                             });
                         },
                         success: function(response) {
                             Swal.fire({
                                 title: 'Deleted!',
-                                text: response.message,
+                                text: response.message || 'Share withdrawal has been deleted successfully.',
                                 icon: 'success',
-                                confirmButtonText: 'OK'
+                                confirmButtonText: 'OK',
+                                timer: 2000,
+                                timerProgressBar: true
+                            }).then(() => {
+                                table.ajax.reload(null, false); // Reload DataTable without resetting pagination
                             });
-                            table.ajax.reload(null, false); // Reload DataTable
                         },
                         error: function(xhr) {
                             console.error('Delete Error:', xhr.responseText);
+                            
+                            let errorMessage = 'Failed to delete share withdrawal.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errorMessage = xhr.responseJSON.message;
+                            } else if (xhr.status === 404) {
+                                errorMessage = 'Share withdrawal not found.';
+                            } else if (xhr.status === 403) {
+                                errorMessage = 'You do not have permission to delete this withdrawal.';
+                            } else if (xhr.status === 500) {
+                                errorMessage = 'An internal server error occurred. Please try again later.';
+                            }
+                            
                             Swal.fire({
                                 title: 'Error!',
-                                text: 'Failed to delete share withdrawal. ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : ''),
+                                text: errorMessage,
                                 icon: 'error',
                                 confirmButtonText: 'OK'
                             });

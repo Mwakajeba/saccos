@@ -62,6 +62,7 @@ class ShareProduct extends Model
         'liability_account_id',
         'income_account_id',
         'share_capital_account_id',
+        'fee_income_account_id',
         'is_active',
     ];
 
@@ -132,5 +133,13 @@ class ShareProduct extends Model
     public function shareCapitalAccount(): BelongsTo
     {
         return $this->belongsTo(ChartAccount::class, 'share_capital_account_id');
+    }
+
+    /**
+     * Get the fee income account
+     */
+    public function feeIncomeAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartAccount::class, 'fee_income_account_id');
     }
 }
