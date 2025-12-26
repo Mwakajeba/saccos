@@ -20,7 +20,7 @@ return new class extends Migration
             $table->decimal('charge_amount', 15, 2)->nullable(); // Charge amount if applicable
             $table->decimal('total_amount', 15, 2); // deposit_amount + charge_amount
             $table->string('transaction_reference')->nullable();
-            $table->string('payment_method')->nullable(); // cash, bank_transfer, cheque, etc.
+            $table->foreignId('bank_account_id')->nullable()->constrained('bank_accounts')->onDelete('restrict');
             $table->string('cheque_number')->nullable();
             $table->text('notes')->nullable();
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');

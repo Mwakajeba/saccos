@@ -26,7 +26,7 @@ return new class extends Migration
             $table->foreignId('journal_reference_account_id')->constrained('chart_accounts')->onDelete('restrict'); // Journal reference (share transfer)
             $table->string('hrms_code')->nullable(); // Optional as per user requirement
             $table->foreignId('liability_account_id')->constrained('chart_accounts')->onDelete('restrict');
-            $table->foreignId('income_account_id')->constrained('chart_accounts')->onDelete('restrict');
+            $table->foreignId('income_account_id')->nullable()->constrained('chart_accounts')->onDelete('restrict');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

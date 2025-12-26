@@ -79,8 +79,8 @@
                             <div class="col-sm-8"><span class="text-primary fw-bold">{{ number_format($deposit->total_amount, 2) }}</span></div>
                         </div>
                         <div class="row mb-3">
-                            <div class="col-sm-4"><strong>Payment Method:</strong></div>
-                            <div class="col-sm-8">{{ $deposit->payment_method ? ucfirst(str_replace('_', ' ', $deposit->payment_method)) : 'N/A' }}</div>
+                            <div class="col-sm-4"><strong>Bank Account:</strong></div>
+                            <div class="col-sm-8">{{ $deposit->bankAccount->name ?? 'N/A' }} {{ $deposit->bankAccount ? '(' . $deposit->bankAccount->account_number . ')' : '' }}</div>
                         </div>
                         @if($deposit->cheque_number)
                         <div class="row mb-3">

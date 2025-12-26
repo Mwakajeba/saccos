@@ -13,9 +13,14 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0 text-uppercase">SHARE DEPOSITS</h6>
-            <a href="{{ route('shares.deposits.create') }}" class="btn btn-primary">
-                <i class="bx bx-plus me-1"></i> Add Share Deposit
-            </a>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importModal">
+                    <i class="bx bx-import me-1"></i> Import Share Deposits
+                </button>
+                <a href="{{ route('shares.deposits.create') }}" class="btn btn-primary">
+                    <i class="bx bx-plus me-1"></i> Add Share Deposit
+                </a>
+            </div>
         </div>
         <hr />
 
@@ -35,6 +40,18 @@
                     </div>
                 @endif
 
+                @if(session('import_errors') && count(session('import_errors')) > 0)
+                    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                        <strong>Import Errors:</strong>
+                        <ul class="mb-0 mt-2">
+                            @foreach(session('import_errors') as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                @endif
+
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped nowrap" id="shareDepositsTable">
                         <thead>
@@ -49,7 +66,7 @@
                                 <th>Number of Shares</th>
                                 <th>Charge Amount</th>
                                 <th>Total Amount</th>
-                                <th>Payment Method</th>
+                                <th>Bank Account</th>
                                 <th>Status</th>
                                 <th class="text-center">Actions</th>
                             </tr>
@@ -122,7 +139,7 @@
                 { data: 'number_of_shares_formatted', name: 'number_of_shares', title: 'Number of Shares' },
                 { data: 'charge_amount_formatted', name: 'charge_amount', title: 'Charge Amount' },
                 { data: 'total_amount_formatted', name: 'total_amount', title: 'Total Amount' },
-                { data: 'payment_method', name: 'payment_method', title: 'Payment Method' },
+                { data: 'bank_account_name', name: 'bank_account_name', title: 'Bank Account' },
                 { data: 'status_badge', name: 'status', title: 'Status' },
                 { data: 'actions', name: 'actions', title: 'Actions', orderable: false, searchable: false }
             ],
@@ -213,6 +230,68 @@
                 }
             });
         });
+
+        // Handle template download - use event delegation for modal button
+        $(document).on('click', '#downloadTemplateBtn', function(e) {
+            e.preventDefault();
+            
+            // Build URL for download
+            const url = '{{ route("shares.deposits.download-template") }}';
+            
+            // Open in new window to trigger download
+            window.location.href = url;
+        });
     });
 </script>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importModalLabel">
+                    <i class="bx bx-import me-2"></i>Import Share Deposits
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ route('shares.deposits.import') }}" method="POST" enctype="multipart/form-data" id="importForm">
+                @csrf
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bx bx-info-circle me-2"></i>
+                        <strong>Instructions:</strong>
+                        <ol class="mb-0 mt-2">
+                            <li>Click "Download Template" to get Excel file with share accounts</li>
+                            <li>Fill in the Excel file with deposit data (deposit_date, deposit_amount, bank_account_name, etc.)</li>
+                            <li>Upload the filled Excel file</li>
+                        </ol>
+                    </div>
+
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-outline-primary" id="downloadTemplateBtn">
+                            <i class="bx bx-download me-1"></i> Download Template
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Upload Excel File <span class="text-danger">*</span></label>
+                        <input type="file" name="import_file" id="import_file" 
+                               class="form-control @error('import_file') is-invalid @enderror"
+                               accept=".xlsx,.xls" required>
+                        @error('import_file') 
+                            <div class="invalid-feedback">{{ $message }}</div> 
+                        @enderror
+                        <small class="text-muted">Only .xlsx and .xls files are allowed</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bx bx-upload me-1"></i> Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endpush

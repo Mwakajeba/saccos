@@ -20,7 +20,9 @@ class ShareDeposit extends Model
         'charge_amount',
         'total_amount',
         'transaction_reference',
-        'payment_method',
+        'bank_account_id',
+        'liability_account_id',
+        'share_capital_account_id',
         'cheque_number',
         'notes',
         'status',
@@ -44,6 +46,30 @@ class ShareDeposit extends Model
     public function shareAccount(): BelongsTo
     {
         return $this->belongsTo(ShareAccount::class);
+    }
+
+    /**
+     * Get the bank account
+     */
+    public function bankAccount(): BelongsTo
+    {
+        return $this->belongsTo(BankAccount::class);
+    }
+
+    /**
+     * Get the liability account
+     */
+    public function liabilityAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartAccount::class, 'liability_account_id');
+    }
+
+    /**
+     * Get the share capital account
+     */
+    public function shareCapitalAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartAccount::class, 'share_capital_account_id');
     }
 
     /**

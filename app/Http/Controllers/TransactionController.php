@@ -46,8 +46,13 @@ class TransactionController extends Controller
         });
 
         // Calculate totals for balancing
-        $totalDebit = $transactions->where('nature', 'debit')->sum('amount');
-        $totalCredit = $transactions->where('nature', 'credit')->sum('amount');
+        // Use database sum for accuracy, but fallback to collection sum if needed
+        $totalDebit = (float) GlTransaction::where('chart_account_id', $account_id)
+            ->where('nature', 'debit')
+            ->sum('amount') ?? 0;
+        $totalCredit = (float) GlTransaction::where('chart_account_id', $account_id)
+            ->where('nature', 'credit')
+            ->sum('amount') ?? 0;
         $finalBalance = $totalDebit - $totalCredit;
 
         return view('transactions.double-entries', [

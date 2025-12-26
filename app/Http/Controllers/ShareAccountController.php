@@ -5,13 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\ShareAccount;
 use App\Models\Customer;
 use App\Models\ShareProduct;
+use App\Exports\ShareAccountImportTemplateExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ShareAccountController extends Controller
 {
@@ -49,10 +52,14 @@ class ShareAccountController extends Controller
                     return $account->shareProduct->share_name ?? 'N/A';
                 })
                 ->addColumn('share_balance_formatted', function ($account) {
-                    return number_format($account->share_balance, 2);
+                    $encodedId = Hashids::encode($account->id);
+                    $balance = number_format($account->share_balance, 2);
+                    return '<a href="' . route('shares.accounts.show', $encodedId) . '" class="text-decoration-none fw-bold text-primary" title="View account details">' . $balance . '</a>';
                 })
                 ->addColumn('nominal_value_formatted', function ($account) {
-                    return number_format($account->nominal_value, 2);
+                    $encodedId = Hashids::encode($account->id);
+                    $value = number_format($account->nominal_value, 2);
+                    return '<a href="' . route('shares.accounts.show', $encodedId) . '" class="text-decoration-none fw-bold text-primary" title="View account details">' . $value . '</a>';
                 })
                 ->addColumn('opening_date_formatted', function ($account) {
                     return $account->opening_date ? $account->opening_date->format('Y-m-d') : 'N/A';
@@ -80,7 +87,7 @@ class ShareAccountController extends Controller
 
                     return '<div class="text-center d-flex justify-content-center gap-1">' . $actions . '</div>';
                 })
-                ->rawColumns(['status_badge', 'actions'])
+                ->rawColumns(['status_badge', 'actions', 'share_balance_formatted', 'nominal_value_formatted'])
                 ->make(true);
             } catch (\Exception $e) {
                 Log::error('Share Accounts DataTable Error: ' . $e->getMessage());
@@ -405,6 +412,182 @@ class ShareAccountController extends Controller
 
             return redirect()->back()
                 ->with('error', 'Failed to delete share account. Please try again.');
+        }
+    }
+
+    /**
+     * Download import template
+     */
+    public function downloadTemplate(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'share_product_id' => 'required|exists:share_products,id',
+                'opening_date' => 'required|date',
+            ]);
+
+            if ($validator->fails()) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json(['error' => $validator->errors()->first()], 422);
+                }
+                return redirect()->back()
+                    ->withErrors($validator)
+                    ->withInput();
+            }
+
+            $shareProduct = ShareProduct::findOrFail($request->share_product_id);
+            $fileName = 'share_account_import_template_' . date('Y-m-d') . '.xlsx';
+
+            return Excel::download(
+                new ShareAccountImportTemplateExport($request->share_product_id, $request->opening_date),
+                $fileName
+            );
+        } catch (\Exception $e) {
+            Log::error('Share Account Template Download Error: ' . $e->getMessage());
+            
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['error' => 'Failed to generate template: ' . $e->getMessage()], 500);
+            }
+            
+            return redirect()->back()
+                ->with('error', 'Failed to generate template: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Import share accounts from Excel
+     */
+    public function import(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'share_product_id' => 'required|exists:share_products,id',
+            'opening_date' => 'required|date',
+            'import_file' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $shareProduct = ShareProduct::findOrFail($request->share_product_id);
+            $openingDate = $request->opening_date;
+            $user = auth()->user();
+
+            // Read Excel file
+            $rows = Excel::toArray([], $request->file('import_file'));
+            $rows = $rows[0]; // Get first sheet
+
+            // Get header row and create mapping
+            $header = array_shift($rows);
+            $header = array_map(function ($h) {
+                return strtolower(trim((string) $h));
+            }, $header);
+
+            // Find column indices
+            $customerNameIndex = array_search('customer_name', $header);
+            $customerNoIndex = array_search('customer_no', $header);
+            $notesIndex = array_search('notes', $header);
+
+            if ($customerNameIndex === false || $customerNoIndex === false) {
+                return redirect()->back()
+                    ->with('error', 'Excel file must contain customer_name and customer_no columns')
+                    ->withInput();
+            }
+
+            $successCount = 0;
+            $errorCount = 0;
+            $errors = [];
+
+            foreach ($rows as $index => $row) {
+                try {
+                    // Skip empty rows
+                    if (empty(array_filter($row))) {
+                        continue;
+                    }
+
+                    // Get values by column index
+                    $customerName = trim($row[$customerNameIndex] ?? '');
+                    $customerNo = trim($row[$customerNoIndex] ?? '');
+                    $notes = trim($row[$notesIndex] ?? '');
+
+
+                    if (empty($customerNo) || empty($customerName)) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Customer name and customer number are required";
+                        continue;
+                    }
+
+                    // Find customer by customer number
+                    $customer = Customer::where('customerNo', $customerNo)->first();
+
+                    if (!$customer) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Customer with number '{$customerNo}' not found";
+                        continue;
+                    }
+
+                    // Check if account already exists
+                    $exists = ShareAccount::where('customer_id', $customer->id)
+                        ->where('share_product_id', $request->share_product_id)
+                        ->exists();
+
+                    if ($exists) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Account already exists for customer '{$customerName}' ({$customerNo})";
+                        continue;
+                    }
+
+                    // Generate account number
+                    $accountNumber = $this->generateAccountNumber();
+
+                    // Create share account
+                    ShareAccount::create([
+                        'customer_id' => $customer->id,
+                        'share_product_id' => $request->share_product_id,
+                        'account_number' => $accountNumber,
+                        'share_balance' => 0,
+                        'nominal_value' => $shareProduct->nominal_price ?? 0,
+                        'opening_date' => $openingDate,
+                        'notes' => $notes,
+                        'status' => 'active',
+                        'branch_id' => $user->branch_id ?? null,
+                        'company_id' => $user->company_id ?? null,
+                        'created_by' => $user->id,
+                        'updated_by' => $user->id,
+                    ]);
+
+                    $successCount++;
+                } catch (\Exception $e) {
+                    $errorCount++;
+                    $errors[] = "Row " . ($index + 2) . ": " . $e->getMessage();
+                }
+            }
+
+            DB::commit();
+
+            $message = "Import completed. {$successCount} account(s) created successfully.";
+            if ($errorCount > 0) {
+                $message .= " {$errorCount} error(s) occurred.";
+                if (count($errors) > 0) {
+                    Log::warning('Share Account Import Errors', ['errors' => $errors]);
+                }
+            }
+
+            return redirect()->route('shares.accounts.index')
+                ->with('success', $message)
+                ->with('import_errors', $errors ?? []);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Share Account Import Error: ' . $e->getMessage());
+
+            return redirect()->back()
+                ->with('error', 'Failed to import share accounts: ' . $e->getMessage())
+                ->withInput();
         }
     }
 

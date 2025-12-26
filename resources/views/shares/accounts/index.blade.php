@@ -13,9 +13,14 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0 text-uppercase">SHARE ACCOUNTS</h6>
-            <a href="{{ route('shares.accounts.create') }}" class="btn btn-primary">
-                <i class="bx bx-plus me-1"></i> Add Share Account
-            </a>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importModal">
+                    <i class="bx bx-import me-1"></i> Import Share Accounts
+                </button>
+                <a href="{{ route('shares.accounts.create') }}" class="btn btn-primary">
+                    <i class="bx bx-plus me-1"></i> Add Share Account
+                </a>
+            </div>
         </div>
         <hr />
 
@@ -31,6 +36,18 @@
                 @if(session('error'))
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
                         {{ session('error') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                @endif
+
+                @if(session('import_errors') && count(session('import_errors')) > 0)
+                    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                        <strong>Import Errors:</strong>
+                        <ul class="mb-0 mt-2">
+                            @foreach(session('import_errors') as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                 @endif
@@ -229,6 +246,122 @@
         window.refreshShareAccountsTable = function() {
             table.ajax.reload(null, false);
         };
+
+        // Handle template download - use event delegation for modal button
+        $(document).on('click', '#downloadTemplateBtn', function(e) {
+            e.preventDefault();
+            
+            const shareProductId = $('#import_share_product_id').val();
+            const openingDate = $('#import_opening_date').val();
+
+            if (!shareProductId) {
+                Swal.fire({
+                    title: 'Validation Error',
+                    text: 'Please select a share product first',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+                return false;
+            }
+
+            if (!openingDate) {
+                Swal.fire({
+                    title: 'Validation Error',
+                    text: 'Please select an opening date',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+                return false;
+            }
+
+            // Build URL with query parameters
+            const url = '{{ route("shares.accounts.download-template") }}' + 
+                       '?share_product_id=' + encodeURIComponent(shareProductId) + 
+                       '&opening_date=' + encodeURIComponent(openingDate);
+            
+            // Open in new window to trigger download
+            window.location.href = url;
+        });
     });
 </script>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importModalLabel">
+                    <i class="bx bx-import me-2"></i>Import Share Accounts
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ route('shares.accounts.import') }}" method="POST" enctype="multipart/form-data" id="importForm">
+                @csrf
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bx bx-info-circle me-2"></i>
+                        <strong>Instructions:</strong>
+                        <ol class="mb-0 mt-2">
+                            <li>Select Share Product and Opening Date</li>
+                            <li>Click "Download Template" to get Excel file with customers who don't have accounts</li>
+                            <li>Fill in the Excel file with customer data</li>
+                            <li>Upload the filled Excel file</li>
+                        </ol>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Share Product <span class="text-danger">*</span></label>
+                        <select name="share_product_id" id="import_share_product_id" class="form-select @error('share_product_id') is-invalid @enderror" required>
+                            <option value="">Select share product</option>
+                            @php
+                                $shareProducts = \App\Models\ShareProduct::where('is_active', true)->orderBy('share_name')->get();
+                            @endphp
+                            @foreach($shareProducts as $product)
+                                <option value="{{ $product->id }}" {{ old('share_product_id') == $product->id ? 'selected' : '' }}>
+                                    {{ $product->share_name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('share_product_id') 
+                            <div class="invalid-feedback">{{ $message }}</div> 
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Opening Date <span class="text-danger">*</span></label>
+                        <input type="date" name="opening_date" id="import_opening_date" 
+                               class="form-control @error('opening_date') is-invalid @enderror"
+                               value="{{ old('opening_date', date('Y-m-d')) }}" required>
+                        @error('opening_date') 
+                            <div class="invalid-feedback">{{ $message }}</div> 
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-outline-primary" id="downloadTemplateBtn">
+                            <i class="bx bx-download me-1"></i> Download Template
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Upload Excel File <span class="text-danger">*</span></label>
+                        <input type="file" name="import_file" id="import_file" 
+                               class="form-control @error('import_file') is-invalid @enderror"
+                               accept=".xlsx,.xls" required>
+                        @error('import_file') 
+                            <div class="invalid-feedback">{{ $message }}</div> 
+                        @enderror
+                        <small class="text-muted">Only .xlsx and .xls files are allowed</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bx bx-upload me-1"></i> Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endpush

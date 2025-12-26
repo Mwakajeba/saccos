@@ -5,12 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\ShareDeposit;
 use App\Models\ShareAccount;
 use App\Models\ShareProduct;
+use App\Models\BankAccount;
+use App\Models\GlTransaction;
+use App\Exports\ShareDepositImportTemplateExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ShareDepositController extends Controller
 {
@@ -32,6 +36,7 @@ class ShareDepositController extends Controller
                 $deposits = ShareDeposit::with([
                     'shareAccount.customer',
                     'shareAccount.shareProduct',
+                    'bankAccount',
                     'branch',
                     'company'
                 ])->select('share_deposits.*');
@@ -64,6 +69,9 @@ class ShareDepositController extends Controller
                 })
                 ->addColumn('deposit_date_formatted', function ($deposit) {
                     return $deposit->deposit_date ? $deposit->deposit_date->format('Y-m-d') : 'N/A';
+                })
+                ->addColumn('bank_account_name', function ($deposit) {
+                    return $deposit->bankAccount->name ?? 'N/A';
                 })
                 ->addColumn('status_badge', function ($deposit) {
                     $badges = [
@@ -118,7 +126,10 @@ class ShareDepositController extends Controller
             ->orderBy('account_number')
             ->get();
 
-        return view('shares.deposits.create', compact('shareAccounts'));
+        // Get bank accounts for payment method
+        $bankAccounts = BankAccount::orderBy('name')->get();
+
+        return view('shares.deposits.create', compact('shareAccounts', 'bankAccounts'));
     }
 
     /**
@@ -132,7 +143,7 @@ class ShareDepositController extends Controller
             'deposit_amount' => 'required|numeric|min:0.01',
             'number_of_shares' => 'required|numeric|min:0.0001',
             'transaction_reference' => 'nullable|string|max:255',
-            'payment_method' => 'nullable|string|max:255',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
             'cheque_number' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
         ]);
@@ -146,9 +157,17 @@ class ShareDepositController extends Controller
         try {
             DB::beginTransaction();
 
-            // Get share account and product
+            // Get share account and product (with chart accounts)
             $shareAccount = ShareAccount::with('shareProduct')->findOrFail($request->share_account_id);
             $shareProduct = $shareAccount->shareProduct;
+            
+            // Get chart accounts from share product
+            $liabilityAccountId = $shareProduct->liability_account_id;
+            $shareCapitalAccountId = $shareProduct->share_capital_account_id;
+            
+            if (!$liabilityAccountId) {
+                throw new \Exception('Share product does not have a liability account configured. Please configure chart accounts in the share product.');
+            }
 
             // Validate deposit amount against product constraints
             if ($shareProduct->minimum_purchase_amount && $request->deposit_amount < $shareProduct->minimum_purchase_amount) {
@@ -173,7 +192,11 @@ class ShareDepositController extends Controller
 
             $totalAmount = $request->deposit_amount + $chargeAmount;
 
-            // Create deposit
+            // Get bank account for GL transaction
+            $bankAccount = BankAccount::findOrFail($request->bank_account_id);
+            $user = auth()->user();
+
+            // Create deposit (using chart accounts from share product)
             $deposit = ShareDeposit::create([
                 'share_account_id' => $request->share_account_id,
                 'deposit_date' => $request->deposit_date,
@@ -182,20 +205,57 @@ class ShareDepositController extends Controller
                 'charge_amount' => $chargeAmount,
                 'total_amount' => $totalAmount,
                 'transaction_reference' => $request->transaction_reference,
-                'payment_method' => $request->payment_method,
+                'bank_account_id' => $request->bank_account_id,
+                'liability_account_id' => $liabilityAccountId,
+                'share_capital_account_id' => $shareCapitalAccountId,
                 'cheque_number' => $request->cheque_number,
                 'notes' => $request->notes,
                 'status' => 'approved', // Auto-approve for now, can be changed to 'pending' if needed
-                'branch_id' => auth()->user()->branch_id ?? null,
-                'company_id' => auth()->user()->company_id ?? null,
-                'created_by' => auth()->id(),
-                'updated_by' => auth()->id(),
+                'branch_id' => $user->branch_id ?? null,
+                'company_id' => $user->company_id ?? null,
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
+
+            // Create GL Transactions
+            $customerId = $shareAccount->customer_id;
+            $description = "Share deposit for {$shareAccount->account_number} - " . ($request->notes ?: "Deposit #{$deposit->id}");
+
+            // Debit: Bank Account
+            GlTransaction::create([
+                'chart_account_id' => $bankAccount->chart_account_id,
+                'customer_id' => $customerId,
+                'amount' => $totalAmount,
+                'nature' => 'debit',
+                'transaction_id' => $deposit->id,
+                'transaction_type' => 'share_deposit',
+                'date' => $request->deposit_date,
+                'description' => $description,
+                'branch_id' => $user->branch_id ?? null,
+                'user_id' => $user->id,
+            ]);
+
+            // Credit: Share Capital Account (if provided), otherwise Liability Account
+            // Only credit one account to maintain double-entry balance
+            $creditAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+            
+            GlTransaction::create([
+                'chart_account_id' => $creditAccountId,
+                'customer_id' => $customerId,
+                'amount' => $totalAmount,
+                'nature' => 'credit',
+                'transaction_id' => $deposit->id,
+                'transaction_type' => 'share_deposit',
+                'date' => $request->deposit_date,
+                'description' => $description,
+                'branch_id' => $user->branch_id ?? null,
+                'user_id' => $user->id,
             ]);
 
             // Update share account balance
             $shareAccount->share_balance += $request->number_of_shares;
             $shareAccount->last_transaction_date = $request->deposit_date;
-            $shareAccount->updated_by = auth()->id();
+            $shareAccount->updated_by = $user->id;
             $shareAccount->save();
 
             DB::commit();
@@ -221,6 +281,7 @@ class ShareDepositController extends Controller
         $deposit = ShareDeposit::with([
             'shareAccount.customer',
             'shareAccount.shareProduct',
+            'bankAccount',
             'branch',
             'company',
             'createdBy',
@@ -243,7 +304,10 @@ class ShareDepositController extends Controller
             ->orderBy('account_number')
             ->get();
 
-        return view('shares.deposits.edit', compact('deposit', 'shareAccounts'));
+        // Get bank accounts for payment method
+        $bankAccounts = BankAccount::orderBy('name')->get();
+
+        return view('shares.deposits.edit', compact('deposit', 'shareAccounts', 'bankAccounts'));
     }
 
     /**
@@ -259,7 +323,7 @@ class ShareDepositController extends Controller
             'deposit_amount' => 'required|numeric|min:0.01',
             'number_of_shares' => 'required|numeric|min:0.0001',
             'transaction_reference' => 'nullable|string|max:255',
-            'payment_method' => 'nullable|string|max:255',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
             'cheque_number' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
             'status' => 'required|in:pending,approved,rejected',
@@ -276,6 +340,14 @@ class ShareDepositController extends Controller
 
             $shareAccount = ShareAccount::with('shareProduct')->findOrFail($request->share_account_id);
             $shareProduct = $shareAccount->shareProduct;
+            
+            // Get chart accounts from share product
+            $liabilityAccountId = $shareProduct->liability_account_id;
+            $shareCapitalAccountId = $shareProduct->share_capital_account_id;
+            
+            if (!$liabilityAccountId) {
+                throw new \Exception('Share product does not have a liability account configured. Please configure chart accounts in the share product.');
+            }
 
             // If changing account, reverse old balance and apply new
             $oldShares = $deposit->number_of_shares;
@@ -293,7 +365,16 @@ class ShareDepositController extends Controller
 
             $totalAmount = $request->deposit_amount + $chargeAmount;
 
-            // Update deposit
+            // Get bank account for GL transaction
+            $bankAccount = BankAccount::findOrFail($request->bank_account_id);
+            $user = auth()->user();
+
+            // Delete old GL transactions
+            GlTransaction::where('transaction_id', $deposit->id)
+                ->where('transaction_type', 'share_deposit')
+                ->delete();
+
+            // Update deposit (using chart accounts from share product)
             $deposit->update([
                 'share_account_id' => $request->share_account_id,
                 'deposit_date' => $request->deposit_date,
@@ -302,11 +383,13 @@ class ShareDepositController extends Controller
                 'charge_amount' => $chargeAmount,
                 'total_amount' => $totalAmount,
                 'transaction_reference' => $request->transaction_reference,
-                'payment_method' => $request->payment_method,
+                'bank_account_id' => $request->bank_account_id,
+                'liability_account_id' => $liabilityAccountId,
+                'share_capital_account_id' => $shareCapitalAccountId,
                 'cheque_number' => $request->cheque_number,
                 'notes' => $request->notes,
                 'status' => $request->status,
-                'updated_by' => auth()->id(),
+                'updated_by' => $user->id,
             ]);
 
             // Update share account balance (only if approved)
@@ -321,8 +404,43 @@ class ShareDepositController extends Controller
                 // Apply new shares
                 $shareAccount->share_balance += $newShares;
                 $shareAccount->last_transaction_date = $request->deposit_date;
-                $shareAccount->updated_by = auth()->id();
+                $shareAccount->updated_by = $user->id;
                 $shareAccount->save();
+
+                // Create GL Transactions (only if approved)
+                $customerId = $shareAccount->customer_id;
+                $description = "Share deposit for {$shareAccount->account_number} - " . ($request->notes ?: "Deposit #{$deposit->id}");
+
+                // Debit: Bank Account
+                GlTransaction::create([
+                    'chart_account_id' => $bankAccount->chart_account_id,
+                    'customer_id' => $customerId,
+                    'amount' => $totalAmount,
+                    'nature' => 'debit',
+                    'transaction_id' => $deposit->id,
+                    'transaction_type' => 'share_deposit',
+                    'date' => $request->deposit_date,
+                    'description' => $description,
+                    'branch_id' => $user->branch_id ?? null,
+                    'user_id' => $user->id,
+                ]);
+
+                // Credit: Share Capital Account (if provided), otherwise Liability Account
+                // Only credit one account to maintain double-entry balance
+                $creditAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+                
+                GlTransaction::create([
+                    'chart_account_id' => $creditAccountId,
+                    'customer_id' => $customerId,
+                    'amount' => $totalAmount,
+                    'nature' => 'credit',
+                    'transaction_id' => $deposit->id,
+                    'transaction_type' => 'share_deposit',
+                    'date' => $request->deposit_date,
+                    'description' => $description,
+                    'branch_id' => $user->branch_id ?? null,
+                    'user_id' => $user->id,
+                ]);
             }
 
             DB::commit();
@@ -354,6 +472,11 @@ class ShareDepositController extends Controller
                 $deposit->shareAccount->share_balance -= $deposit->number_of_shares;
                 $deposit->shareAccount->save();
             }
+
+            // Delete related GL transactions
+            GlTransaction::where('transaction_id', $deposit->id)
+                ->where('transaction_type', 'share_deposit')
+                ->delete();
 
             $deposit->delete();
 
@@ -399,5 +522,262 @@ class ShareDepositController extends Controller
             'charge_type' => $account->shareProduct->charge_type,
             'charge_amount' => $account->shareProduct->charge_amount,
         ]);
+    }
+
+    /**
+     * Download import template
+     */
+    public function downloadTemplate(Request $request)
+    {
+        try {
+            $fileName = 'share_deposit_import_template_' . date('Y-m-d') . '.xlsx';
+
+            return Excel::download(
+                new ShareDepositImportTemplateExport(),
+                $fileName
+            );
+        } catch (\Exception $e) {
+            Log::error('Share Deposit Template Download Error: ' . $e->getMessage());
+            
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['error' => 'Failed to generate template: ' . $e->getMessage()], 500);
+            }
+            
+            return redirect()->back()
+                ->with('error', 'Failed to generate template: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Import share deposits from Excel
+     */
+    public function import(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'import_file' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $user = auth()->user();
+
+            // Read Excel file
+            $rows = Excel::toArray([], $request->file('import_file'));
+            $rows = $rows[0]; // Get first sheet
+
+            // Get header row and create mapping
+            $header = array_shift($rows);
+            $header = array_map(function ($h) {
+                return strtolower(trim((string) $h));
+            }, $header);
+
+            // Find column indices
+            $accountNumberIndex = array_search('account_number', $header);
+            $customerNameIndex = array_search('customer_name', $header); // For reference only, not used in processing
+            $depositDateIndex = array_search('deposit_date', $header);
+            $depositAmountIndex = array_search('deposit_amount', $header);
+            $bankAccountNameIndex = array_search('bank_account_name', $header);
+            $transactionReferenceIndex = array_search('transaction_reference', $header);
+            $chequeNumberIndex = array_search('cheque_number', $header);
+            $notesIndex = array_search('notes', $header);
+
+            if ($accountNumberIndex === false || $depositDateIndex === false || 
+                $depositAmountIndex === false || $bankAccountNameIndex === false) {
+                return redirect()->back()
+                    ->with('error', 'Excel file must contain account_number, deposit_date, deposit_amount, and bank_account_name columns')
+                    ->withInput();
+            }
+
+            $successCount = 0;
+            $errorCount = 0;
+            $errors = [];
+
+            foreach ($rows as $index => $row) {
+                try {
+                    // Skip empty rows
+                    if (empty(array_filter($row))) {
+                        continue;
+                    }
+
+                    // Get values by column index
+                    $accountNumber = trim($row[$accountNumberIndex] ?? '');
+                    $depositDate = trim($row[$depositDateIndex] ?? '');
+                    $depositAmount = trim($row[$depositAmountIndex] ?? '');
+                    $bankAccountName = trim($row[$bankAccountNameIndex] ?? '');
+                    $transactionReference = isset($row[$transactionReferenceIndex]) ? trim($row[$transactionReferenceIndex]) : '';
+                    $chequeNumber = isset($row[$chequeNumberIndex]) ? trim($row[$chequeNumberIndex]) : '';
+                    $notes = isset($row[$notesIndex]) ? trim($row[$notesIndex]) : '';
+
+                    if (empty($accountNumber) || empty($depositDate) || empty($depositAmount) || empty($bankAccountName)) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": account_number, deposit_date, deposit_amount, and bank_account_name are required";
+                        continue;
+                    }
+
+                    // Find share account by account number
+                    $shareAccount = ShareAccount::where('account_number', $accountNumber)
+                        ->with('shareProduct')
+                        ->first();
+
+                    if (!$shareAccount) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Share account with number '{$accountNumber}' not found";
+                        continue;
+                    }
+
+                    // Find bank account by name
+                    $bankAccount = BankAccount::where('name', $bankAccountName)->first();
+
+                    if (!$bankAccount) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Bank account with name '{$bankAccountName}' not found";
+                        continue;
+                    }
+
+                    $shareProduct = $shareAccount->shareProduct;
+
+                    // Validate deposit amount
+                    $depositAmount = (float) $depositAmount;
+                    if ($depositAmount <= 0) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Deposit amount must be greater than 0";
+                        continue;
+                    }
+
+                    // Validate deposit amount against product constraints
+                    if ($shareProduct->minimum_purchase_amount && $depositAmount < $shareProduct->minimum_purchase_amount) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Deposit amount must be at least " . number_format($shareProduct->minimum_purchase_amount, 2);
+                        continue;
+                    }
+
+                    if ($shareProduct->maximum_purchase_amount && $depositAmount > $shareProduct->maximum_purchase_amount) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Deposit amount must not exceed " . number_format($shareProduct->maximum_purchase_amount, 2);
+                        continue;
+                    }
+
+                    // Calculate number of shares
+                    $nominalPrice = $shareProduct->nominal_price ?? 1;
+                    $numberOfShares = $depositAmount / $nominalPrice;
+
+                    // Calculate charge amount if product has charges
+                    $chargeAmount = 0;
+                    if ($shareProduct->has_charges && $shareProduct->charge_amount) {
+                        if ($shareProduct->charge_type === 'fixed') {
+                            $chargeAmount = $shareProduct->charge_amount;
+                        } elseif ($shareProduct->charge_type === 'percentage') {
+                            $chargeAmount = ($depositAmount * $shareProduct->charge_amount) / 100;
+                        }
+                    }
+
+                    $totalAmount = $depositAmount + $chargeAmount;
+
+                    // Get chart accounts from share product
+                    $liabilityAccountId = $shareProduct->liability_account_id;
+                    $shareCapitalAccountId = $shareProduct->share_capital_account_id;
+                    
+                    if (!$liabilityAccountId) {
+                        $errorCount++;
+                        $errors[] = "Row " . ($index + 2) . ": Share product does not have a liability account configured";
+                        continue;
+                    }
+
+                    // Create deposit
+                    $deposit = ShareDeposit::create([
+                        'share_account_id' => $shareAccount->id,
+                        'deposit_date' => $depositDate,
+                        'deposit_amount' => $depositAmount,
+                        'number_of_shares' => $numberOfShares,
+                        'charge_amount' => $chargeAmount,
+                        'total_amount' => $totalAmount,
+                        'transaction_reference' => $transactionReference,
+                        'bank_account_id' => $bankAccount->id,
+                        'liability_account_id' => $liabilityAccountId,
+                        'share_capital_account_id' => $shareCapitalAccountId,
+                        'cheque_number' => $chequeNumber,
+                        'notes' => $notes,
+                        'status' => 'approved',
+                        'branch_id' => $user->branch_id ?? null,
+                        'company_id' => $user->company_id ?? null,
+                        'created_by' => $user->id,
+                        'updated_by' => $user->id,
+                    ]);
+
+                    // Create GL Transactions
+                    $customerId = $shareAccount->customer_id;
+                    $description = "Share deposit for {$shareAccount->account_number} - " . ($notes ?: "Deposit #{$deposit->id}");
+
+                    // Debit: Bank Account
+                    GlTransaction::create([
+                        'chart_account_id' => $bankAccount->chart_account_id,
+                        'customer_id' => $customerId,
+                        'amount' => $totalAmount,
+                        'nature' => 'debit',
+                        'transaction_id' => $deposit->id,
+                        'transaction_type' => 'share_deposit',
+                        'date' => $depositDate,
+                        'description' => $description,
+                        'branch_id' => $user->branch_id ?? null,
+                        'user_id' => $user->id,
+                    ]);
+
+                    // Credit: Share Capital Account (if provided), otherwise Liability Account
+                    $creditAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+                    
+                    GlTransaction::create([
+                        'chart_account_id' => $creditAccountId,
+                        'customer_id' => $customerId,
+                        'amount' => $totalAmount,
+                        'nature' => 'credit',
+                        'transaction_id' => $deposit->id,
+                        'transaction_type' => 'share_deposit',
+                        'date' => $depositDate,
+                        'description' => $description,
+                        'branch_id' => $user->branch_id ?? null,
+                        'user_id' => $user->id,
+                    ]);
+
+                    // Update share account balance
+                    $shareAccount->share_balance += $numberOfShares;
+                    $shareAccount->last_transaction_date = $depositDate;
+                    $shareAccount->updated_by = $user->id;
+                    $shareAccount->save();
+
+                    $successCount++;
+                } catch (\Exception $e) {
+                    $errorCount++;
+                    $errors[] = "Row " . ($index + 2) . ": " . $e->getMessage();
+                }
+            }
+
+            DB::commit();
+
+            $message = "Import completed. {$successCount} deposit(s) created successfully.";
+            if ($errorCount > 0) {
+                $message .= " {$errorCount} error(s) occurred.";
+                if (count($errors) > 0) {
+                    Log::warning('Share Deposit Import Errors', ['errors' => $errors]);
+                }
+            }
+
+            return redirect()->route('shares.deposits.index')
+                ->with('success', $message)
+                ->with('import_errors', $errors ?? []);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Share Deposit Import Error: ' . $e->getMessage());
+
+            return redirect()->back()
+                ->with('error', 'Failed to import share deposits: ' . $e->getMessage())
+                ->withInput();
+        }
     }
 }

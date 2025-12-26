@@ -223,7 +223,6 @@ class ShareProductController extends Controller
             'journal_reference_id' => 'required|exists:journal_references,id',
             'hrms_code' => 'nullable|string|max:255',
             'liability_account_id' => 'required|exists:chart_accounts,id',
-            'income_account_id' => 'required|exists:chart_accounts,id',
             'share_capital_account_id' => 'nullable|exists:chart_accounts,id',
         ]);
 
@@ -253,6 +252,9 @@ class ShareProductController extends Controller
         // Handle empty string dates
         $data['opening_date'] = !empty($data['opening_date']) ? $data['opening_date'] : null;
         $data['closing_date'] = !empty($data['closing_date']) ? $data['closing_date'] : null;
+        
+        // Set income_account_id to null if not provided
+        $data['income_account_id'] = $data['income_account_id'] ?? null;
 
         ShareProduct::create($data);
 
@@ -430,7 +432,6 @@ class ShareProductController extends Controller
             'journal_reference_id' => 'required|exists:journal_references,id',
             'hrms_code' => 'nullable|string|max:255',
             'liability_account_id' => 'required|exists:chart_accounts,id',
-            'income_account_id' => 'required|exists:chart_accounts,id',
             'share_capital_account_id' => 'nullable|exists:chart_accounts,id',
         ]);
 
@@ -460,6 +461,9 @@ class ShareProductController extends Controller
         // Handle empty string dates
         $data['opening_date'] = !empty($data['opening_date']) ? $data['opening_date'] : null;
         $data['closing_date'] = !empty($data['closing_date']) ? $data['closing_date'] : null;
+        
+        // Set income_account_id to null if not provided
+        $data['income_account_id'] = $data['income_account_id'] ?? null;
 
         $shareProduct->update($data);
 

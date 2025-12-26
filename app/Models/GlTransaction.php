@@ -28,6 +28,7 @@ class GlTransaction extends Model
 
     protected $casts = [
         'date' => 'datetime',
+        'amount' => 'decimal:2',
     ];
 
     // Optional: Define relationships

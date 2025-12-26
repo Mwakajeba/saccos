@@ -136,11 +136,15 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     
     // Share Accounts Routes (data route must come BEFORE resource to avoid route conflicts)
     Route::get('accounts/data', [\App\Http\Controllers\ShareAccountController::class, 'getShareAccountsData'])->name('accounts.data');
+    Route::get('accounts/download-template', [\App\Http\Controllers\ShareAccountController::class, 'downloadTemplate'])->name('accounts.download-template');
+    Route::post('accounts/import', [\App\Http\Controllers\ShareAccountController::class, 'import'])->name('accounts.import');
     Route::resource('accounts', \App\Http\Controllers\ShareAccountController::class);
     
     // Share Deposits Routes (data route must come BEFORE resource to avoid route conflicts)
     Route::get('deposits/data', [\App\Http\Controllers\ShareDepositController::class, 'getShareDepositsData'])->name('deposits.data');
     Route::get('deposits/getAccountDetails', [\App\Http\Controllers\ShareDepositController::class, 'getShareAccountDetails'])->name('deposits.getAccountDetails');
+    Route::get('deposits/download-template', [\App\Http\Controllers\ShareDepositController::class, 'downloadTemplate'])->name('deposits.download-template');
+    Route::post('deposits/import', [\App\Http\Controllers\ShareDepositController::class, 'import'])->name('deposits.import');
     Route::resource('deposits', \App\Http\Controllers\ShareDepositController::class)->names([
         'index' => 'deposits.index',
         'create' => 'deposits.create',

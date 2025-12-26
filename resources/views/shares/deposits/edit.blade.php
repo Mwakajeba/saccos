@@ -110,28 +110,31 @@
                                 </div>
                             </div>
 
-                            <!-- Payment Method -->
+                            <!-- Bank Account -->
                             <div class="row mb-3">
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Payment Method</label>
-                                    <select name="payment_method" id="payment_method"
-                                            class="form-select @error('payment_method') is-invalid @enderror">
-                                        <option value="">Select payment method</option>
-                                        <option value="cash" {{ old('payment_method', $deposit->payment_method) == 'cash' ? 'selected' : '' }}>Cash</option>
-                                        <option value="bank_transfer" {{ old('payment_method', $deposit->payment_method) == 'bank_transfer' ? 'selected' : '' }}>Bank Transfer</option>
-                                        <option value="cheque" {{ old('payment_method', $deposit->payment_method) == 'cheque' ? 'selected' : '' }}>Cheque</option>
-                                        <option value="mobile_money" {{ old('payment_method', $deposit->payment_method) == 'mobile_money' ? 'selected' : '' }}>Mobile Money</option>
+                                    <label class="form-label">Bank Account <span class="text-danger">*</span></label>
+                                    <select name="bank_account_id" id="bank_account_id"
+                                            class="form-select select2-single @error('bank_account_id') is-invalid @enderror" required>
+                                        <option value="">Select bank account</option>
+                                        @foreach($bankAccounts as $bankAccount)
+                                            <option value="{{ $bankAccount->id }}" 
+                                                {{ old('bank_account_id', $deposit->bank_account_id) == $bankAccount->id ? 'selected' : '' }}>
+                                                {{ $bankAccount->name }} ({{ $bankAccount->account_number }})
+                                            </option>
+                                        @endforeach
                                     </select>
-                                    @error('payment_method') 
+                                    @error('bank_account_id') 
                                         <div class="invalid-feedback">{{ $message }}</div> 
                                     @enderror
                                 </div>
 
-                                <div class="col-md-6 mb-3" id="chequeNumberField" style="display: {{ old('payment_method', $deposit->payment_method) == 'cheque' ? 'block' : 'none' }};">
+                                <div class="col-md-6 mb-3">
                                     <label class="form-label">Cheque Number</label>
                                     <input type="text" name="cheque_number" 
                                            class="form-control @error('cheque_number') is-invalid @enderror"
-                                           value="{{ old('cheque_number', $deposit->cheque_number) }}">
+                                           value="{{ old('cheque_number', $deposit->cheque_number) }}"
+                                           placeholder="Optional cheque number">
                                     @error('cheque_number') 
                                         <div class="invalid-feedback">{{ $message }}</div> 
                                     @enderror
@@ -244,13 +247,12 @@
             theme: 'bootstrap-5'
         });
 
-        // Handle payment method change
-        $('#payment_method').on('change', function() {
-            if ($(this).val() === 'cheque') {
-                $('#chequeNumberField').show();
-            } else {
-                $('#chequeNumberField').hide();
-            }
+        // Initialize Select2 for bank account
+        $('#bank_account_id').select2({
+            placeholder: 'Select bank account',
+            allowClear: true,
+            width: '100%',
+            theme: 'bootstrap-5'
         });
     });
 </script>
