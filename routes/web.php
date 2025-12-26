@@ -168,9 +168,18 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
         'destroy' => 'withdrawals.destroy',
     ]);
     
-    Route::get('/transfers', function () {
-        return view('shares.transfers.index');
-    })->name('transfers.index');
+    // Share Transfers Routes (data route must come BEFORE resource to avoid route conflicts)
+    Route::get('transfers/data', [\App\Http\Controllers\ShareTransferController::class, 'getShareTransfersData'])->name('transfers.data');
+    Route::get('transfers/getAccountDetails', [\App\Http\Controllers\ShareTransferController::class, 'getAccountDetails'])->name('transfers.getAccountDetails');
+    Route::resource('transfers', \App\Http\Controllers\ShareTransferController::class)->names([
+        'index' => 'transfers.index',
+        'create' => 'transfers.create',
+        'store' => 'transfers.store',
+        'show' => 'transfers.show',
+        'edit' => 'transfers.edit',
+        'update' => 'transfers.update',
+        'destroy' => 'transfers.destroy',
+    ]);
 });
 
 // Laravel Logs Route

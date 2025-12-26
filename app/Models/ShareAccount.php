@@ -29,7 +29,7 @@ class ShareAccount extends Model
     ];
 
     protected $casts = [
-        'share_balance' => 'decimal:2',
+        'share_balance' => 'decimal:4',
         'nominal_value' => 'decimal:2',
         'opening_date' => 'date',
         'last_transaction_date' => 'date',
