@@ -29,6 +29,7 @@
         @endif
 
         <form id="contributionProductForm" action="{{ route('contributions.products.store') }}" method="POST">
+        <form id="contributionProductForm" action="{{ route('contributions.products.store') }}" method="POST">
             @csrf
             
             <div class="row">
@@ -495,7 +496,8 @@
                 }
             })
             .then(data => {
-                if (data.redirect || data.success) {
+                if (data.redirect) {
+                    // Only redirect if explicitly requested
                     Swal.fire({
                         icon: 'success',
                         title: 'Success!',
@@ -505,15 +507,23 @@
                     }).then(() => {
                         window.location.href = '{{ route("contributions.products.index") }}';
                     });
-                } else {
+                } else if (data.success) {
+                    // For AJAX requests, just show success message without redirect
                     Swal.fire({
                         icon: 'success',
                         title: 'Success!',
                         text: data.message || 'Contribution product created successfully!',
                         timer: 2000,
                         showConfirmButton: false
-                    }).then(() => {
-                        window.location.href = '{{ route("contributions.products.index") }}';
+                    });
+                } else {
+                    // Fallback for other success cases
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: data.message || 'Contribution product created successfully!',
+                        timer: 2000,
+                        showConfirmButton: false
                     });
                 }
             })

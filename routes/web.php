@@ -136,82 +136,19 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     
     // Share Accounts Routes (data route must come BEFORE resource to avoid route conflicts)
     Route::get('accounts/data', [\App\Http\Controllers\ShareAccountController::class, 'getShareAccountsData'])->name('accounts.data');
-    Route::get('accounts/download-template', [\App\Http\Controllers\ShareAccountController::class, 'downloadTemplate'])->name('accounts.download-template');
-    Route::post('accounts/import', [\App\Http\Controllers\ShareAccountController::class, 'import'])->name('accounts.import');
-    Route::get('accounts/export', [\App\Http\Controllers\ShareAccountController::class, 'export'])->name('accounts.export');
-    Route::patch('accounts/{encodedId}/change-status', [\App\Http\Controllers\ShareAccountController::class, 'changeStatus'])->name('accounts.change-status');
-    Route::get('accounts/{encodedId}/certificate', [\App\Http\Controllers\ShareAccountController::class, 'printCertificate'])->name('accounts.certificate');
     Route::resource('accounts', \App\Http\Controllers\ShareAccountController::class);
     
-    // Share Deposits Routes (data route must come BEFORE resource to avoid route conflicts)
-    Route::get('deposits/data', [\App\Http\Controllers\ShareDepositController::class, 'getShareDepositsData'])->name('deposits.data');
-    Route::get('deposits/getAccountDetails', [\App\Http\Controllers\ShareDepositController::class, 'getShareAccountDetails'])->name('deposits.getAccountDetails');
-    Route::get('deposits/download-template', [\App\Http\Controllers\ShareDepositController::class, 'downloadTemplate'])->name('deposits.download-template');
-    Route::post('deposits/import', [\App\Http\Controllers\ShareDepositController::class, 'import'])->name('deposits.import');
-    Route::get('deposits/download-opening-balance-template', [\App\Http\Controllers\ShareDepositController::class, 'downloadOpeningBalanceTemplate'])->name('deposits.download-opening-balance-template');
-    Route::post('deposits/import-opening-balance', [\App\Http\Controllers\ShareDepositController::class, 'importOpeningBalance'])->name('deposits.import-opening-balance');
-    Route::get('deposits/export', [\App\Http\Controllers\ShareDepositController::class, 'export'])->name('deposits.export');
-    Route::patch('deposits/{encodedId}/change-status', [\App\Http\Controllers\ShareDepositController::class, 'changeStatus'])->name('deposits.change-status');
-    Route::resource('deposits', \App\Http\Controllers\ShareDepositController::class)->names([
-        'index' => 'deposits.index',
-        'create' => 'deposits.create',
-        'store' => 'deposits.store',
-        'show' => 'deposits.show',
-        'edit' => 'deposits.edit',
-        'update' => 'deposits.update',
-        'destroy' => 'deposits.destroy',
-    ]);
+    Route::get('/deposits', function () {
+        return view('shares.deposits.index');
+    })->name('deposits.index');
     
-    // Share Withdrawals Routes (data route must come BEFORE resource to avoid route conflicts)
-    Route::get('withdrawals/data', [\App\Http\Controllers\ShareWithdrawalController::class, 'getShareWithdrawalsData'])->name('withdrawals.data');
-    Route::get('withdrawals/getAccountDetails', [\App\Http\Controllers\ShareWithdrawalController::class, 'getShareAccountDetails'])->name('withdrawals.getAccountDetails');
-    Route::resource('withdrawals', \App\Http\Controllers\ShareWithdrawalController::class)->names([
-        'index' => 'withdrawals.index',
-        'create' => 'withdrawals.create',
-        'store' => 'withdrawals.store',
-        'show' => 'withdrawals.show',
-        'edit' => 'withdrawals.edit',
-        'update' => 'withdrawals.update',
-        'destroy' => 'withdrawals.destroy',
-    ]);
+    Route::get('/withdrawals', function () {
+        return view('shares.withdrawals.index');
+    })->name('withdrawals.index');
     
-    // Share Transfers Routes (data route must come BEFORE resource to avoid route conflicts)
-    Route::get('transfers/data', [\App\Http\Controllers\ShareTransferController::class, 'getShareTransfersData'])->name('transfers.data');
-    Route::get('transfers/getAccountDetails', [\App\Http\Controllers\ShareTransferController::class, 'getAccountDetails'])->name('transfers.getAccountDetails');
-    Route::patch('transfers/{encodedId}/change-status', [\App\Http\Controllers\ShareTransferController::class, 'changeStatus'])->name('transfers.change-status');
-    Route::resource('transfers', \App\Http\Controllers\ShareTransferController::class)->names([
-        'index' => 'transfers.index',
-        'create' => 'transfers.create',
-        'store' => 'transfers.store',
-        'show' => 'transfers.show',
-        'edit' => 'transfers.edit',
-        'update' => 'transfers.update',
-        'destroy' => 'transfers.destroy',
-    ]);
-});
-
-// Dividend Management Routes
-Route::middleware(['auth'])->prefix('dividends')->name('dividends.')->group(function () {
-    // Profit Allocations
-    Route::get('profit-allocations', [\App\Http\Controllers\DividendController::class, 'profitAllocations'])->name('profit-allocations');
-    Route::get('profit-allocations/data', [\App\Http\Controllers\DividendController::class, 'getProfitAllocationsData'])->name('profit-allocations.data');
-    Route::get('profit-allocations/create', [\App\Http\Controllers\DividendController::class, 'createProfitAllocation'])->name('profit-allocations.create');
-    Route::post('profit-allocations', [\App\Http\Controllers\DividendController::class, 'storeProfitAllocation'])->name('profit-allocations.store');
-    Route::post('profit-allocations/calculate-profit', [\App\Http\Controllers\DividendController::class, 'calculateProfit'])->name('profit-allocations.calculate-profit');
-    Route::get('profit-allocations/{encodedId}/edit', [\App\Http\Controllers\DividendController::class, 'editProfitAllocation'])->name('profit-allocations.edit');
-    Route::put('profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'updateProfitAllocation'])->name('profit-allocations.update');
-    Route::delete('profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'destroyProfitAllocation'])->name('profit-allocations.destroy');
-    Route::patch('profit-allocations/{encodedId}/change-status', [\App\Http\Controllers\DividendController::class, 'changeProfitAllocationStatus'])->name('profit-allocations.change-status');
-    Route::get('profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'showProfitAllocation'])->name('profit-allocations.show');
-    
-    // Dividends
-    Route::get('dividends', [\App\Http\Controllers\DividendController::class, 'dividends'])->name('dividends');
-    Route::get('dividends/data', [\App\Http\Controllers\DividendController::class, 'getDividendsData'])->name('dividends.data');
-    Route::get('dividends/create', [\App\Http\Controllers\DividendController::class, 'createDividend'])->name('dividends.create');
-    Route::post('dividends', [\App\Http\Controllers\DividendController::class, 'storeDividend'])->name('dividends.store');
-    Route::get('dividends/{encodedId}', [\App\Http\Controllers\DividendController::class, 'showDividend'])->name('dividends.show');
-    Route::post('dividends/{encodedId}/calculate', [\App\Http\Controllers\DividendController::class, 'calculateDividends'])->name('dividends.calculate');
-    Route::post('dividend-payments/{encodedId}/process', [\App\Http\Controllers\DividendController::class, 'processPayment'])->name('dividend-payments.process');
+    Route::get('/transfers', function () {
+        return view('shares.transfers.index');
+    })->name('transfers.index');
 });
 
 // Laravel Logs Route

@@ -650,6 +650,22 @@
             @error('liability_account_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
+        <!-- Income account -->
+        <div class="col-md-4 mb-3">
+            <label class="form-label">Income account <span class="text-danger">*</span></label>
+            <select name="income_account_id" 
+                    class="form-select select2-single @error('income_account_id') is-invalid @enderror" required>
+                <option value="">Select account</option>
+                @foreach($chartAccounts as $account)
+                    <option value="{{ $account->id }}" 
+                        {{ old('income_account_id', $shareProduct->income_account_id ?? '') == $account->id ? 'selected' : '' }}>
+                        {{ $account->account_code }} - {{ $account->account_name }}
+                    </option>
+                @endforeach
+            </select>
+            @error('income_account_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        </div>
+
         <!-- Share capital account -->
         <div class="col-md-4 mb-3">
             <label class="form-label">Share capital account</label>
