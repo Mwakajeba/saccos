@@ -8,6 +8,7 @@ use App\Models\Fee;
 use App\Models\JournalReference;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -26,62 +27,80 @@ class ShareProductController extends Controller
      */
     public function getShareProductsData(Request $request)
     {
-        if ($request->ajax()) {
-            $shareProducts = ShareProduct::with([
-                'journalReference',
-                'liabilityAccount',
-                'incomeAccount',
-                'shareCapitalAccount',
-                'charge'
-            ])->select('share_products.*');
+        try {
+            if ($request->ajax()) {
+                $shareProducts = ShareProduct::with([
+                    'journalReference',
+                    'liabilityAccount',
+                    'incomeAccount',
+                    'shareCapitalAccount',
+                    'charge'
+                ])->select('share_products.*')
+                ->orderBy('share_products.share_name');
 
-            return DataTables::eloquent($shareProducts)
-                ->addColumn('required_share_formatted', function ($product) {
-                    return number_format($product->required_share, 2);
-                })
-                ->addColumn('nominal_price_formatted', function ($product) {
-                    return number_format($product->nominal_price, 2);
-                })
-                ->addColumn('minimum_active_period_display', function ($product) {
-                    return $product->minimum_active_period . ' ' . $product->minimum_active_period_type;
-                })
-                ->addColumn('lockin_period_display', function ($product) {
-                    return $product->lockin_period_frequency . ' ' . $product->lockin_period_frequency_type;
-                })
-                ->addColumn('status_badge', function ($product) {
-                    if ($product->is_active) {
-                        return '<span class="badge bg-success">Active</span>';
-                    } else {
-                        return '<span class="badge bg-danger">Inactive</span>';
-                    }
-                })
-                ->addColumn('actions', function ($product) {
-                    $actions = '';
-                    $encodedId = Hashids::encode($product->id);
+                return DataTables::eloquent($shareProducts)
+                    ->addColumn('required_share_formatted', function ($product) {
+                        return number_format($product->required_share, 2);
+                    })
+                    ->addColumn('nominal_price_formatted', function ($product) {
+                        return number_format($product->nominal_price, 2);
+                    })
+                    ->addColumn('minimum_active_period_display', function ($product) {
+                        if ($product->minimum_active_period && $product->minimum_active_period_type) {
+                            return $product->minimum_active_period . ' ' . $product->minimum_active_period_type;
+                        }
+                        return 'N/A';
+                    })
+                    ->addColumn('lockin_period_display', function ($product) {
+                        if ($product->lockin_period_frequency && $product->lockin_period_frequency_type) {
+                            return $product->lockin_period_frequency . ' ' . $product->lockin_period_frequency_type;
+                        }
+                        return 'N/A';
+                    })
+                    ->addColumn('status_badge', function ($product) {
+                        if ($product->is_active) {
+                            return '<span class="badge bg-success">Active</span>';
+                        } else {
+                            return '<span class="badge bg-danger">Inactive</span>';
+                        }
+                    })
+                    ->addColumn('actions', function ($product) {
+                        $actions = '';
+                        $encodedId = Hashids::encode($product->id);
 
-                    // View action
-                    $actions .= '<a href="' . route('shares.products.show', $encodedId) . '" class="btn btn-sm btn-info me-1" title="View"><i class="bx bx-show"></i></a>';
+                        // View action
+                        $actions .= '<a href="' . route('shares.products.show', $encodedId) . '" class="btn btn-sm btn-info me-1" title="View"><i class="bx bx-show"></i></a>';
 
-                    // Edit action
-                    $actions .= '<a href="' . route('shares.products.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
+                        // Edit action
+                        $actions .= '<a href="' . route('shares.products.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
 
-                    // Toggle status action (Activate/Deactivate)
-                    if ($product->is_active) {
-                        $actions .= '<button class="btn btn-sm btn-outline-warning me-1 toggle-status-btn" data-id="' . $encodedId . '" data-name="' . e($product->share_name) . '" data-status="active" title="Deactivate"><i class="bx bx-pause"></i></button>';
-                    } else {
-                        $actions .= '<button class="btn btn-sm btn-outline-success me-1 toggle-status-btn" data-id="' . $encodedId . '" data-name="' . e($product->share_name) . '" data-status="inactive" title="Activate"><i class="bx bx-play"></i></button>';
-                    }
+                        // Toggle status action (Activate/Deactivate)
+                        if ($product->is_active) {
+                            $actions .= '<button class="btn btn-sm btn-outline-warning me-1 toggle-status-btn" data-id="' . $encodedId . '" data-name="' . e($product->share_name) . '" data-status="active" title="Deactivate"><i class="bx bx-pause"></i></button>';
+                        } else {
+                            $actions .= '<button class="btn btn-sm btn-outline-success me-1 toggle-status-btn" data-id="' . $encodedId . '" data-name="' . e($product->share_name) . '" data-status="inactive" title="Activate"><i class="bx bx-play"></i></button>';
+                        }
 
-                    // Delete action
-                    $actions .= '<button class="btn btn-sm btn-danger delete-btn" data-id="' . $encodedId . '" data-name="' . e($product->share_name) . '" title="Delete"><i class="bx bx-trash"></i></button>';
+                        // Delete action
+                        $actions .= '<button class="btn btn-sm btn-danger delete-btn" data-id="' . $encodedId . '" data-name="' . e($product->share_name) . '" title="Delete"><i class="bx bx-trash"></i></button>';
 
-                    return '<div class="text-center d-flex justify-content-center gap-1">' . $actions . '</div>';
-                })
-                ->rawColumns(['status_badge', 'actions'])
-                ->make(true);
+                        return '<div class="text-center d-flex justify-content-center gap-1">' . $actions . '</div>';
+                    })
+                    ->rawColumns(['status_badge', 'actions'])
+                    ->make(true);
+            }
+
+            return response()->json(['error' => 'Invalid request'], 400);
+        } catch (\Exception $e) {
+            Log::error('Share Products DataTable Error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            if ($request->ajax()) {
+                return response()->json(['error' => 'Failed to load data: ' . $e->getMessage()], 500);
+            }
+            
+            return response()->json(['error' => 'Failed to load data'], 500);
         }
-
-        return response()->json(['error' => 'Invalid request'], 400);
     }
 
     /**

@@ -183,6 +183,21 @@
                                         <div class="invalid-feedback">{{ $message }}</div> 
                                     @enderror
                                 </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Status <span class="text-danger">*</span></label>
+                                    <select name="status" id="status" 
+                                            class="form-select @error('status') is-invalid @enderror" required>
+                                        <option value="">Select status</option>
+                                        <option value="pending" {{ old('status', 'approved') == 'pending' ? 'selected' : '' }}>Pending</option>
+                                        <option value="approved" {{ old('status', 'approved') == 'approved' ? 'selected' : '' }}>Approved</option>
+                                        <option value="rejected" {{ old('status', 'approved') == 'rejected' ? 'selected' : '' }}>Rejected</option>
+                                    </select>
+                                    @error('status') 
+                                        <div class="invalid-feedback">{{ $message }}</div> 
+                                    @enderror
+                                    <small class="text-muted">Select the status for this deposit</small>
+                                </div>
                             </div>
 
                             <!-- Notes -->

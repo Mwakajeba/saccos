@@ -5,16 +5,20 @@ namespace App\Http\Controllers;
 use App\Models\ShareAccount;
 use App\Models\Customer;
 use App\Models\ShareProduct;
+use App\Models\Company;
 use App\Exports\ShareAccountImportTemplateExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
 use Maatwebsite\Excel\Facades\Excel;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 
 class ShareAccountController extends Controller
 {
@@ -23,7 +27,12 @@ class ShareAccountController extends Controller
      */
     public function index()
     {
-        return view('shares.accounts.index');
+        // Get active share products for the filter dropdown
+        $shareProducts = ShareProduct::where('is_active', true)
+            ->orderBy('share_name')
+            ->get(['id', 'share_name']);
+        
+        return view('shares.accounts.index', compact('shareProducts'));
     }
 
     /**
@@ -39,6 +48,23 @@ class ShareAccountController extends Controller
                     'branch',
                     'company'
                 ])->select('share_accounts.*');
+
+                // Apply filters
+                if ($request->filled('share_product_id')) {
+                    $shareAccounts->where('share_product_id', $request->share_product_id);
+                }
+
+                if ($request->filled('status')) {
+                    $shareAccounts->where('status', $request->status);
+                }
+
+                if ($request->filled('opening_date_from')) {
+                    $shareAccounts->whereDate('opening_date', '>=', $request->opening_date_from);
+                }
+
+                if ($request->filled('opening_date_to')) {
+                    $shareAccounts->whereDate('opening_date', '<=', $request->opening_date_to);
+                }
 
                 return DataTables::eloquent($shareAccounts)
                 ->addIndexColumn()
@@ -81,6 +107,9 @@ class ShareAccountController extends Controller
 
                     // Edit action
                     $actions .= '<a href="' . route('shares.accounts.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
+
+                    // Change status action
+                    $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" data-name="' . e($account->account_number) . '" data-status="' . e($account->status) . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
 
                     // Delete action
                     $actions .= '<button class="btn btn-sm btn-danger delete-btn" data-id="' . $encodedId . '" data-name="' . e($account->account_number) . '" title="Delete"><i class="bx bx-trash"></i></button>';
@@ -601,6 +630,97 @@ class ShareAccountController extends Controller
         } while (ShareAccount::where('account_number', $accountNumber)->exists());
 
         return $accountNumber;
+    }
+
+    /**
+     * Change the status of a share account
+     */
+    public function changeStatus(Request $request, $encodedId)
+    {
+        $decoded = Hashids::decode($encodedId);
+        if (empty($decoded)) {
+            return response()->json(['error' => 'Share account not found.'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:active,inactive,closed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()->first()], 400);
+        }
+
+        try {
+            $account = ShareAccount::findOrFail($decoded[0]);
+            $account->status = $request->status;
+            $account->updated_by = Auth::id();
+            $account->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Account status updated successfully.',
+                'status' => $account->status
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Share Account Status Change Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to update account status: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Export share accounts to PDF
+     */
+    public function export(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            $company = $user->company;
+            
+            // Get filtered accounts
+            $shareAccounts = ShareAccount::with([
+                'customer',
+                'shareProduct',
+                'branch',
+                'company'
+            ]);
+
+            // Apply filters
+            if ($request->filled('share_product_id')) {
+                $shareAccounts->where('share_product_id', $request->share_product_id);
+            }
+
+            if ($request->filled('status')) {
+                $shareAccounts->where('status', $request->status);
+            }
+
+            if ($request->filled('opening_date_from')) {
+                $shareAccounts->whereDate('opening_date', '>=', $request->opening_date_from);
+            }
+
+            if ($request->filled('opening_date_to')) {
+                $shareAccounts->whereDate('opening_date', '<=', $request->opening_date_to);
+            }
+
+            $shareAccounts = $shareAccounts->orderBy('account_number')->get();
+            
+            $generatedAt = Carbon::now();
+            $shareProduct = $request->filled('share_product_id') ? ShareProduct::find($request->share_product_id) : null;
+            
+            $pdf = Pdf::loadView('shares.accounts.export', compact(
+                'shareAccounts',
+                'company',
+                'generatedAt',
+                'shareProduct',
+                'request'
+            ))->setPaper('a4', 'landscape');
+            
+            $filename = 'share_accounts_' . date('Y-m-d_His') . '.pdf';
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            Log::error('Share Accounts Export Error: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Failed to export share accounts: ' . $e->getMessage());
+        }
     }
 }
 

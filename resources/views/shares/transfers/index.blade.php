@@ -159,6 +159,113 @@
             }
         });
 
+        // Handle change status button clicks
+        $(document).on('click', '#shareTransfersTable .change-status-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const transferId = $(this).data('id');
+            const transferName = $(this).data('name');
+            const currentStatus = $(this).data('status');
+            
+            // Status options
+            const statusOptions = {
+                'pending': { label: 'Pending', color: '#ffc107' },
+                'approved': { label: 'Approved', color: '#28a745' },
+                'rejected': { label: 'Rejected', color: '#dc3545' }
+            };
+            
+            // Build options HTML
+            let optionsHtml = '';
+            Object.keys(statusOptions).forEach(status => {
+                const selected = status === currentStatus ? 'selected' : '';
+                optionsHtml += `<option value="${status}" ${selected}>${statusOptions[status].label}</option>`;
+            });
+            
+            Swal.fire({
+                title: 'Change Transfer Status',
+                html: `
+                    <p>Transfer: <strong>${transferName}</strong></p>
+                    <p>Current Status: <span class="badge" style="background-color: ${statusOptions[currentStatus].color}">${statusOptions[currentStatus].label}</span></p>
+                    <label for="newStatus" class="form-label mt-3">Select New Status:</label>
+                    <select id="newStatus" class="form-select">
+                        ${optionsHtml}
+                    </select>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Update Status',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#17a2b8',
+                didOpen: () => {
+                    $('#newStatus').select2({
+                        dropdownParent: Swal.getContainer(),
+                        width: '100%'
+                    });
+                },
+                preConfirm: () => {
+                    return $('#newStatus').val();
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    const newStatus = result.value;
+                    
+                    if (newStatus === currentStatus) {
+                        Swal.fire({
+                            title: 'No Change',
+                            text: 'The selected status is the same as the current status.',
+                            icon: 'info',
+                            confirmButtonText: 'OK'
+                        });
+                        return;
+                    }
+                    
+                    // Show loading
+                    Swal.fire({
+                        title: 'Updating...',
+                        text: 'Please wait while we update the transfer status.',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    // Make AJAX request
+                    $.ajax({
+                        url: '{{ route("shares.transfers.change-status", ":id") }}'.replace(':id', transferId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            _method: 'PATCH',
+                            status: newStatus
+                        },
+                        success: function(response) {
+                            Swal.fire({
+                                title: 'Success!',
+                                text: 'Transfer status updated successfully.',
+                                icon: 'success',
+                                confirmButtonText: 'OK'
+                            }).then(() => {
+                                table.ajax.reload(null, false);
+                            });
+                        },
+                        error: function(xhr) {
+                            let errorMessage = 'Failed to update transfer status.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errorMessage = xhr.responseJSON.message;
+                            }
+                            
+                            Swal.fire({
+                                title: 'Error!',
+                                text: errorMessage,
+                                icon: 'error',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
+                }
+            });
+        });
+
         // Handle delete button clicks using event delegation
         $(document).on('click', '#shareTransfersTable .delete-btn', function(e) {
             e.preventDefault();

@@ -14,6 +14,9 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0 text-uppercase">SHARE ACCOUNTS</h6>
             <div class="d-flex gap-2">
+                <button type="button" class="btn btn-info" id="exportBtn">
+                    <i class="bx bx-export me-1"></i> Export
+                </button>
                 <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importModal">
                     <i class="bx bx-import me-1"></i> Import Share Accounts
                 </button>
@@ -51,6 +54,48 @@
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                 @endif
+
+                <!-- Filters Section -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label for="filter_share_product" class="form-label">Share Product</label>
+                                <select id="filter_share_product" class="form-select">
+                                    <option value="">All Products</option>
+                                    @foreach($shareProducts ?? [] as $product)
+                                        <option value="{{ $product->id }}">{{ $product->share_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="filter_status" class="form-label">Status</label>
+                                <select id="filter_status" class="form-select">
+                                    <option value="">All Status</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="closed">Closed</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="filter_opening_date_from" class="form-label">Opening Date From</label>
+                                <input type="date" id="filter_opening_date_from" class="form-control">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="filter_opening_date_to" class="form-label">Opening Date To</label>
+                                <input type="date" id="filter_opening_date_to" class="form-control">
+                            </div>
+                            <div class="col-md-12">
+                                <button type="button" id="applyFilters" class="btn btn-primary me-2">
+                                    <i class="bx bx-filter me-1"></i> Apply Filters
+                                </button>
+                                <button type="button" id="clearFilters" class="btn btn-secondary">
+                                    <i class="bx bx-x me-1"></i> Clear Filters
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped nowrap" id="shareAccountsTable">
@@ -120,6 +165,12 @@
             ajax: {
                 url: '{{ route("shares.accounts.data") }}',
                 type: 'GET',
+                data: function(d) {
+                    d.share_product_id = $('#filter_share_product').val();
+                    d.status = $('#filter_status').val();
+                    d.opening_date_from = $('#filter_opening_date_from').val();
+                    d.opening_date_to = $('#filter_opening_date_to').val();
+                },
                 error: function(xhr, error, code) {
                     console.error('DataTables Ajax Error:', error, code);
                     Swal.fire({
@@ -174,6 +225,146 @@
                 // Reinitialize tooltips after each draw
                 $('[data-bs-toggle="tooltip"]').tooltip();
             }
+        });
+
+        // Handle filter application
+        $('#applyFilters').on('click', function() {
+            table.ajax.reload();
+        });
+
+        // Handle filter clearing
+        $('#clearFilters').on('click', function() {
+            $('#filter_share_product').val('');
+            $('#filter_status').val('');
+            $('#filter_opening_date_from').val('');
+            $('#filter_opening_date_to').val('');
+            table.ajax.reload();
+        });
+
+        // Handle export button
+        $('#exportBtn').on('click', function() {
+            const shareProductId = $('#filter_share_product').val();
+            const status = $('#filter_status').val();
+            const openingDateFrom = $('#filter_opening_date_from').val();
+            const openingDateTo = $('#filter_opening_date_to').val();
+            
+            // Build export URL with current filters
+            let url = '{{ route("shares.accounts.export") }}?';
+            const params = [];
+            if (shareProductId) params.push('share_product_id=' + encodeURIComponent(shareProductId));
+            if (status) params.push('status=' + encodeURIComponent(status));
+            if (openingDateFrom) params.push('opening_date_from=' + encodeURIComponent(openingDateFrom));
+            if (openingDateTo) params.push('opening_date_to=' + encodeURIComponent(openingDateTo));
+            
+            url += params.join('&');
+            window.open(url, '_blank');
+        });
+
+        // Handle change status button clicks
+        $('#shareAccountsTable').on('click', '.change-status-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const accountId = $(this).data('id');
+            const accountNumber = $(this).data('name');
+            const currentStatus = $(this).data('status');
+            
+            // Status options
+            const statusOptions = {
+                'active': { label: 'Active', color: '#28a745' },
+                'inactive': { label: 'Inactive', color: '#ffc107' },
+                'closed': { label: 'Closed', color: '#dc3545' }
+            };
+            
+            // Build options HTML
+            let optionsHtml = '';
+            Object.keys(statusOptions).forEach(status => {
+                const selected = status === currentStatus ? 'selected' : '';
+                optionsHtml += `<option value="${status}" ${selected}>${statusOptions[status].label}</option>`;
+            });
+            
+            Swal.fire({
+                title: 'Change Account Status',
+                html: `
+                    <p>Account: <strong>${accountNumber}</strong></p>
+                    <p>Current Status: <span class="badge" style="background-color: ${statusOptions[currentStatus].color}">${statusOptions[currentStatus].label}</span></p>
+                    <label for="newStatus" class="form-label mt-3">Select New Status:</label>
+                    <select id="newStatus" class="form-select">
+                        ${optionsHtml}
+                    </select>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Update Status',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#17a2b8',
+                didOpen: () => {
+                    $('#newStatus').select2({
+                        dropdownParent: Swal.getContainer(),
+                        width: '100%'
+                    });
+                },
+                preConfirm: () => {
+                    return $('#newStatus').val();
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    const newStatus = result.value;
+                    
+                    if (newStatus === currentStatus) {
+                        Swal.fire({
+                            title: 'No Change',
+                            text: 'The selected status is the same as the current status.',
+                            icon: 'info',
+                            confirmButtonText: 'OK'
+                        });
+                        return;
+                    }
+                    
+                    // Show loading
+                    Swal.fire({
+                        title: 'Updating...',
+                        text: 'Please wait while we update the account status.',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    // Make AJAX request
+                    $.ajax({
+                        url: '{{ route("shares.accounts.change-status", ":id") }}'.replace(':id', accountId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            _method: 'PATCH',
+                            status: newStatus
+                        },
+                        success: function(response) {
+                            Swal.fire({
+                                title: 'Success!',
+                                text: 'Account status updated successfully.',
+                                icon: 'success',
+                                confirmButtonText: 'OK'
+                            }).then(() => {
+                                table.ajax.reload(null, false);
+                            });
+                        },
+                        error: function(xhr) {
+                            let errorMessage = 'Failed to update account status.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errorMessage = xhr.responseJSON.message;
+                            }
+                            
+                            Swal.fire({
+                                title: 'Error!',
+                                text: errorMessage,
+                                icon: 'error',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
+                }
+            });
         });
 
         // Handle delete button clicks

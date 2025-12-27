@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -93,6 +94,9 @@ class ShareTransferController extends Controller
                     // Edit action
                     $actions .= '<a href="' . route('shares.transfers.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
 
+                    // Change status action
+                    $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" data-name="Transfer #' . $transfer->id . '" data-status="' . e($transfer->status) . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
+
                     // Delete action
                     $actions .= '<button class="btn btn-sm btn-danger delete-btn" data-id="' . $encodedId . '" data-name="Transfer #' . $transfer->id . '" title="Delete"><i class="bx bx-trash"></i></button>';
 
@@ -165,6 +169,7 @@ class ShareTransferController extends Controller
             'bank_account_id' => 'nullable|exists:bank_accounts,id',
             'journal_reference_id' => 'nullable|exists:journal_references,id',
             'notes' => 'nullable|string',
+            'status' => 'required|in:pending,approved,rejected',
         ]);
 
         if ($validator->fails()) {
@@ -234,7 +239,7 @@ class ShareTransferController extends Controller
                 $bankAccountId = $request->bank_account_id;
             }
 
-            $user = auth()->user();
+            $user = Auth::user();
 
             // Create transfer
             $transfer = ShareTransfer::create([
@@ -249,93 +254,96 @@ class ShareTransferController extends Controller
                 'journal_reference_id' => $journalReferenceId,
                 'fee_income_account_id' => $feeIncomeAccountId,
                 'notes' => $request->notes,
-                'status' => 'approved', // Auto-approve for now
+                'status' => $request->status,
                 'branch_id' => $user->branch_id ?? null,
                 'company_id' => $user->company_id ?? null,
                 'created_by' => $user->id,
                 'updated_by' => $user->id,
             ]);
 
-            // Create GL Transactions
-            $fromCustomerId = $fromAccount->customer_id;
-            $toCustomerId = $toAccount->customer_id;
-            $description = "Share transfer from {$fromAccount->account_number} to {$toAccount->account_number} - " . ($request->notes ?: "Transfer #{$transfer->id}");
+            // Only create GL transactions and update balances if status is approved
+            if ($request->status === 'approved') {
+                // Create GL Transactions
+                $fromCustomerId = $fromAccount->customer_id;
+                $toCustomerId = $toAccount->customer_id;
+                $description = "Share transfer from {$fromAccount->account_number} to {$toAccount->account_number} - " . ($request->notes ?: "Transfer #{$transfer->id}");
 
-            // Determine which account to use (share capital if available, otherwise liability)
-            $debitAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
-            $creditAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+                // Determine which account to use (share capital if available, otherwise liability)
+                $debitAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+                $creditAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
 
-            // Debit: Destination account's Share Capital/Liability Account (shares coming in)
-            GlTransaction::create([
-                'chart_account_id' => $debitAccountId,
-                'customer_id' => $toCustomerId,
-                'amount' => $transferAmount,
-                'nature' => 'debit',
-                'transaction_id' => $transfer->id,
-                'transaction_type' => 'share_transfer',
-                'date' => $request->transfer_date,
-                'description' => $description . ' - To Account',
-                'branch_id' => $user->branch_id ?? null,
-                'user_id' => $user->id,
-            ]);
-
-            // Credit: Source account's Share Capital/Liability Account (shares going out)
-            GlTransaction::create([
-                'chart_account_id' => $creditAccountId,
-                'customer_id' => $fromCustomerId,
-                'amount' => $transferAmount,
-                'nature' => 'credit',
-                'transaction_id' => $transfer->id,
-                'transaction_type' => 'share_transfer',
-                'date' => $request->transfer_date,
-                'description' => $description . ' - From Account',
-                'branch_id' => $user->branch_id ?? null,
-                'user_id' => $user->id,
-            ]);
-
-            // Fee GL Transactions (if fee exists and fee income account is configured)
-            if ($transferFee > 0 && $feeIncomeAccountId && $bankAccountId) {
-                $bankAccount = BankAccount::findOrFail($bankAccountId);
-
-                // Debit: Bank Account (fee paid)
+                // Debit: Destination account's Share Capital/Liability Account (shares coming in)
                 GlTransaction::create([
-                    'chart_account_id' => $bankAccount->chart_account_id,
-                    'customer_id' => $fromCustomerId,
-                    'amount' => $transferFee,
+                    'chart_account_id' => $debitAccountId,
+                    'customer_id' => $toCustomerId,
+                    'amount' => $transferAmount,
                     'nature' => 'debit',
                     'transaction_id' => $transfer->id,
                     'transaction_type' => 'share_transfer',
                     'date' => $request->transfer_date,
-                    'description' => $description . ' - Fee',
+                    'description' => $description . ' - To Account',
                     'branch_id' => $user->branch_id ?? null,
                     'user_id' => $user->id,
                 ]);
 
-                // Credit: Fee Income Account
+                // Credit: Source account's Share Capital/Liability Account (shares going out)
                 GlTransaction::create([
-                    'chart_account_id' => $feeIncomeAccountId,
+                    'chart_account_id' => $creditAccountId,
                     'customer_id' => $fromCustomerId,
-                    'amount' => $transferFee,
+                    'amount' => $transferAmount,
                     'nature' => 'credit',
                     'transaction_id' => $transfer->id,
                     'transaction_type' => 'share_transfer',
                     'date' => $request->transfer_date,
-                    'description' => $description . ' - Fee Income',
+                    'description' => $description . ' - From Account',
                     'branch_id' => $user->branch_id ?? null,
                     'user_id' => $user->id,
                 ]);
+
+                // Fee GL Transactions (if fee exists and fee income account is configured)
+                if ($transferFee > 0 && $feeIncomeAccountId && $bankAccountId) {
+                    $bankAccount = BankAccount::findOrFail($bankAccountId);
+
+                    // Debit: Bank Account (fee paid)
+                    GlTransaction::create([
+                        'chart_account_id' => $bankAccount->chart_account_id,
+                        'customer_id' => $fromCustomerId,
+                        'amount' => $transferFee,
+                        'nature' => 'debit',
+                        'transaction_id' => $transfer->id,
+                        'transaction_type' => 'share_transfer',
+                        'date' => $request->transfer_date,
+                        'description' => $description . ' - Fee',
+                        'branch_id' => $user->branch_id ?? null,
+                        'user_id' => $user->id,
+                    ]);
+
+                    // Credit: Fee Income Account
+                    GlTransaction::create([
+                        'chart_account_id' => $feeIncomeAccountId,
+                        'customer_id' => $fromCustomerId,
+                        'amount' => $transferFee,
+                        'nature' => 'credit',
+                        'transaction_id' => $transfer->id,
+                        'transaction_type' => 'share_transfer',
+                        'date' => $request->transfer_date,
+                        'description' => $description . ' - Fee Income',
+                        'branch_id' => $user->branch_id ?? null,
+                        'user_id' => $user->id,
+                    ]);
+                }
+
+                // Update share account balances
+                $fromAccount->share_balance -= $request->number_of_shares;
+                $fromAccount->last_transaction_date = $request->transfer_date;
+                $fromAccount->updated_by = $user->id;
+                $fromAccount->save();
+
+                $toAccount->share_balance += $request->number_of_shares;
+                $toAccount->last_transaction_date = $request->transfer_date;
+                $toAccount->updated_by = $user->id;
+                $toAccount->save();
             }
-
-            // Update share account balances
-            $fromAccount->share_balance -= $request->number_of_shares;
-            $fromAccount->last_transaction_date = $request->transfer_date;
-            $fromAccount->updated_by = $user->id;
-            $fromAccount->save();
-
-            $toAccount->share_balance += $request->number_of_shares;
-            $toAccount->last_transaction_date = $request->transfer_date;
-            $toAccount->updated_by = $user->id;
-            $toAccount->save();
 
             DB::commit();
 
@@ -487,7 +495,7 @@ class ShareTransferController extends Controller
                 ->where('transaction_type', 'share_transfer')
                 ->delete();
 
-            $user = auth()->user();
+            $user = Auth::user();
 
             // Update transfer
             $transfer->update([
@@ -682,5 +690,174 @@ class ShareTransferController extends Controller
             'transfer_fee_type' => $account->shareProduct->transfer_fee_type,
             'allow_share_transfers' => $account->shareProduct->allow_share_transfers ?? false,
         ]);
+    }
+
+    /**
+     * Change the status of a share transfer
+     */
+    public function changeStatus(Request $request, $encodedId)
+    {
+        $decoded = Hashids::decode($encodedId);
+        if (empty($decoded)) {
+            return response()->json(['error' => 'Share transfer not found.'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:pending,approved,rejected',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()->first()], 400);
+        }
+
+        try {
+            DB::beginTransaction();
+            
+            $transfer = ShareTransfer::with(['fromAccount.shareProduct', 'toAccount.shareProduct', 'bankAccount'])->findOrFail($decoded[0]);
+            $oldStatus = $transfer->status;
+            $newStatus = $request->status;
+            
+            // If changing from approved to something else, reverse GL transactions and balance
+            if ($oldStatus === 'approved' && $newStatus !== 'approved') {
+                // Reverse share account balances
+                if ($transfer->fromAccount) {
+                    $transfer->fromAccount->share_balance += $transfer->number_of_shares;
+                    $transfer->fromAccount->save();
+                }
+                if ($transfer->toAccount) {
+                    $transfer->toAccount->share_balance -= $transfer->number_of_shares;
+                    $transfer->toAccount->save();
+                }
+                
+                // Delete GL transactions
+                GlTransaction::where('transaction_id', $transfer->id)
+                    ->where('transaction_type', 'share_transfer')
+                    ->delete();
+            }
+            
+            // If changing to approved, create GL transactions and update balance
+            if ($oldStatus !== 'approved' && $newStatus === 'approved') {
+                $fromAccount = $transfer->fromAccount;
+                $toAccount = $transfer->toAccount;
+                
+                if (!$fromAccount || !$toAccount) {
+                    throw new \Exception('Source or destination account not found for this transfer.');
+                }
+                
+                $fromProduct = $fromAccount->shareProduct;
+                if (!$fromProduct) {
+                    throw new \Exception('Share product not found for source account.');
+                }
+                
+                $liabilityAccountId = $fromProduct->liability_account_id;
+                $shareCapitalAccountId = $fromProduct->share_capital_account_id;
+                $feeIncomeAccountId = $fromProduct->fee_income_account_id;
+                
+                if (!$liabilityAccountId) {
+                    throw new \Exception('Share product does not have a liability account configured.');
+                }
+                
+                $fromCustomerId = $fromAccount->customer_id;
+                $toCustomerId = $toAccount->customer_id;
+                $description = "Share transfer from {$fromAccount->account_number} to {$toAccount->account_number} - " . ($transfer->notes ?: "Transfer #{$transfer->id}");
+                $user = Auth::user();
+                
+                // Determine which account to use (share capital if available, otherwise liability)
+                $debitAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+                $creditAccountId = $shareCapitalAccountId ?? $liabilityAccountId;
+
+                // Debit: Destination account's Share Capital/Liability Account (shares coming in)
+                GlTransaction::create([
+                    'chart_account_id' => $debitAccountId,
+                    'customer_id' => $toCustomerId,
+                    'amount' => $transfer->transfer_amount,
+                    'nature' => 'debit',
+                    'transaction_id' => $transfer->id,
+                    'transaction_type' => 'share_transfer',
+                    'date' => $transfer->transfer_date,
+                    'description' => $description . ' - To Account',
+                    'branch_id' => $user->branch_id ?? null,
+                    'user_id' => $user->id,
+                ]);
+
+                // Credit: Source account's Share Capital/Liability Account (shares going out)
+                GlTransaction::create([
+                    'chart_account_id' => $creditAccountId,
+                    'customer_id' => $fromCustomerId,
+                    'amount' => $transfer->transfer_amount,
+                    'nature' => 'credit',
+                    'transaction_id' => $transfer->id,
+                    'transaction_type' => 'share_transfer',
+                    'date' => $transfer->transfer_date,
+                    'description' => $description . ' - From Account',
+                    'branch_id' => $user->branch_id ?? null,
+                    'user_id' => $user->id,
+                ]);
+
+                // Fee GL Transactions (if fee exists and fee income account is configured)
+                if ($transfer->transfer_fee > 0 && $feeIncomeAccountId && $transfer->bank_account_id) {
+                    $bankAccount = $transfer->bankAccount;
+                    if (!$bankAccount) {
+                        throw new \Exception('Bank account not found for this transfer.');
+                    }
+
+                    // Debit: Bank Account (fee paid)
+                    GlTransaction::create([
+                        'chart_account_id' => $bankAccount->chart_account_id,
+                        'customer_id' => $fromCustomerId,
+                        'amount' => $transfer->transfer_fee,
+                        'nature' => 'debit',
+                        'transaction_id' => $transfer->id,
+                        'transaction_type' => 'share_transfer',
+                        'date' => $transfer->transfer_date,
+                        'description' => $description . ' - Fee',
+                        'branch_id' => $user->branch_id ?? null,
+                        'user_id' => $user->id,
+                    ]);
+
+                    // Credit: Fee Income Account
+                    GlTransaction::create([
+                        'chart_account_id' => $feeIncomeAccountId,
+                        'customer_id' => $fromCustomerId,
+                        'amount' => $transfer->transfer_fee,
+                        'nature' => 'credit',
+                        'transaction_id' => $transfer->id,
+                        'transaction_type' => 'share_transfer',
+                        'date' => $transfer->transfer_date,
+                        'description' => $description . ' - Fee Income',
+                        'branch_id' => $user->branch_id ?? null,
+                        'user_id' => $user->id,
+                    ]);
+                }
+                
+                // Update share account balances
+                $fromAccount->share_balance -= $transfer->number_of_shares;
+                $fromAccount->last_transaction_date = $transfer->transfer_date;
+                $fromAccount->updated_by = $user->id;
+                $fromAccount->save();
+
+                $toAccount->share_balance += $transfer->number_of_shares;
+                $toAccount->last_transaction_date = $transfer->transfer_date;
+                $toAccount->updated_by = $user->id;
+                $toAccount->save();
+            }
+            
+            // Update transfer status
+            $transfer->status = $newStatus;
+            $transfer->updated_by = Auth::id();
+            $transfer->save();
+            
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transfer status updated successfully.',
+                'status' => $transfer->status
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Share Transfer Status Change Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to update transfer status: ' . $e->getMessage()], 500);
+        }
     }
 }

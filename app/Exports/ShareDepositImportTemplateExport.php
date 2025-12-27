@@ -15,10 +15,12 @@ use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 
 class ShareDepositImportTemplateExport implements FromCollection, WithHeadings, WithStyles, WithEvents, ShouldAutoSize
 {
+    protected $shareProductId;
     protected $bankAccountNames;
 
-    public function __construct()
+    public function __construct($shareProductId = null)
     {
+        $this->shareProductId = $shareProductId;
         // Get bank account names for dropdown
         $this->bankAccountNames = BankAccount::orderBy('name')->pluck('name')->toArray();
     }
@@ -45,6 +47,11 @@ class ShareDepositImportTemplateExport implements FromCollection, WithHeadings, 
         $shareAccountsQuery = ShareAccount::with(['customer', 'shareProduct'])
             ->where('status', 'active')
             ->orderBy('account_number');
+        
+        // Filter by share product if provided
+        if ($this->shareProductId) {
+            $shareAccountsQuery->where('share_product_id', $this->shareProductId);
+        }
             
         if ($branchId) {
             $shareAccountsQuery->where('branch_id', $branchId);

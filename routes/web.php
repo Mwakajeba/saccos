@@ -138,6 +138,8 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::get('accounts/data', [\App\Http\Controllers\ShareAccountController::class, 'getShareAccountsData'])->name('accounts.data');
     Route::get('accounts/download-template', [\App\Http\Controllers\ShareAccountController::class, 'downloadTemplate'])->name('accounts.download-template');
     Route::post('accounts/import', [\App\Http\Controllers\ShareAccountController::class, 'import'])->name('accounts.import');
+    Route::get('accounts/export', [\App\Http\Controllers\ShareAccountController::class, 'export'])->name('accounts.export');
+    Route::patch('accounts/{encodedId}/change-status', [\App\Http\Controllers\ShareAccountController::class, 'changeStatus'])->name('accounts.change-status');
     Route::resource('accounts', \App\Http\Controllers\ShareAccountController::class);
     
     // Share Deposits Routes (data route must come BEFORE resource to avoid route conflicts)
@@ -145,6 +147,10 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::get('deposits/getAccountDetails', [\App\Http\Controllers\ShareDepositController::class, 'getShareAccountDetails'])->name('deposits.getAccountDetails');
     Route::get('deposits/download-template', [\App\Http\Controllers\ShareDepositController::class, 'downloadTemplate'])->name('deposits.download-template');
     Route::post('deposits/import', [\App\Http\Controllers\ShareDepositController::class, 'import'])->name('deposits.import');
+    Route::get('deposits/download-opening-balance-template', [\App\Http\Controllers\ShareDepositController::class, 'downloadOpeningBalanceTemplate'])->name('deposits.download-opening-balance-template');
+    Route::post('deposits/import-opening-balance', [\App\Http\Controllers\ShareDepositController::class, 'importOpeningBalance'])->name('deposits.import-opening-balance');
+    Route::get('deposits/export', [\App\Http\Controllers\ShareDepositController::class, 'export'])->name('deposits.export');
+    Route::patch('deposits/{encodedId}/change-status', [\App\Http\Controllers\ShareDepositController::class, 'changeStatus'])->name('deposits.change-status');
     Route::resource('deposits', \App\Http\Controllers\ShareDepositController::class)->names([
         'index' => 'deposits.index',
         'create' => 'deposits.create',
@@ -171,6 +177,7 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     // Share Transfers Routes (data route must come BEFORE resource to avoid route conflicts)
     Route::get('transfers/data', [\App\Http\Controllers\ShareTransferController::class, 'getShareTransfersData'])->name('transfers.data');
     Route::get('transfers/getAccountDetails', [\App\Http\Controllers\ShareTransferController::class, 'getAccountDetails'])->name('transfers.getAccountDetails');
+    Route::patch('transfers/{encodedId}/change-status', [\App\Http\Controllers\ShareTransferController::class, 'changeStatus'])->name('transfers.change-status');
     Route::resource('transfers', \App\Http\Controllers\ShareTransferController::class)->names([
         'index' => 'transfers.index',
         'create' => 'transfers.create',
