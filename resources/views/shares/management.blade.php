@@ -97,6 +97,27 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Dividend Management -->
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-danger position-relative">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-money fs-1 text-danger"></i>
+                                        </div>
+                                        <h5 class="card-title">Dividend Management</h5>
+                                        <p class="card-text">Manage profit allocation and dividend payments.</p>
+                                        <div class="d-flex gap-2 justify-content-center">
+                                            <a href="{{ route('dividends.profit-allocations') }}" class="btn btn-danger position-relative">
+                                                <i class="bx bx-bar-chart me-1"></i> Profit Allocation
+                                            </a>
+                                            <a href="{{ route('dividends.dividends') }}" class="btn btn-outline-danger position-relative">
+                                                <i class="bx bx-dollar me-1"></i> Dividends
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

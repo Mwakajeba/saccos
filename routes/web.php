@@ -190,6 +190,30 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     ]);
 });
 
+// Dividend Management Routes
+Route::middleware(['auth'])->prefix('dividends')->name('dividends.')->group(function () {
+    // Profit Allocations
+    Route::get('profit-allocations', [\App\Http\Controllers\DividendController::class, 'profitAllocations'])->name('profit-allocations');
+    Route::get('profit-allocations/data', [\App\Http\Controllers\DividendController::class, 'getProfitAllocationsData'])->name('profit-allocations.data');
+    Route::get('profit-allocations/create', [\App\Http\Controllers\DividendController::class, 'createProfitAllocation'])->name('profit-allocations.create');
+    Route::post('profit-allocations', [\App\Http\Controllers\DividendController::class, 'storeProfitAllocation'])->name('profit-allocations.store');
+    Route::post('profit-allocations/calculate-profit', [\App\Http\Controllers\DividendController::class, 'calculateProfit'])->name('profit-allocations.calculate-profit');
+    Route::get('profit-allocations/{encodedId}/edit', [\App\Http\Controllers\DividendController::class, 'editProfitAllocation'])->name('profit-allocations.edit');
+    Route::put('profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'updateProfitAllocation'])->name('profit-allocations.update');
+    Route::delete('profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'destroyProfitAllocation'])->name('profit-allocations.destroy');
+    Route::patch('profit-allocations/{encodedId}/change-status', [\App\Http\Controllers\DividendController::class, 'changeProfitAllocationStatus'])->name('profit-allocations.change-status');
+    Route::get('profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'showProfitAllocation'])->name('profit-allocations.show');
+    
+    // Dividends
+    Route::get('dividends', [\App\Http\Controllers\DividendController::class, 'dividends'])->name('dividends');
+    Route::get('dividends/data', [\App\Http\Controllers\DividendController::class, 'getDividendsData'])->name('dividends.data');
+    Route::get('dividends/create', [\App\Http\Controllers\DividendController::class, 'createDividend'])->name('dividends.create');
+    Route::post('dividends', [\App\Http\Controllers\DividendController::class, 'storeDividend'])->name('dividends.store');
+    Route::get('dividends/{encodedId}', [\App\Http\Controllers\DividendController::class, 'showDividend'])->name('dividends.show');
+    Route::post('dividends/{encodedId}/calculate', [\App\Http\Controllers\DividendController::class, 'calculateDividends'])->name('dividends.calculate');
+    Route::post('dividend-payments/{encodedId}/process', [\App\Http\Controllers\DividendController::class, 'processPayment'])->name('dividend-payments.process');
+});
+
 // Laravel Logs Route
 Route::get('/log', [LaravelLogsController::class, 'index'])->name('laravel-logs.index')->middleware('auth');
 Route::post('/log/clear', [LaravelLogsController::class, 'clearLogs'])->name('laravel-logs.clear')->middleware('auth');
