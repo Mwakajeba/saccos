@@ -16,6 +16,7 @@ use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\CashCollateralTypeController;
 use App\Http\Controllers\SuperAdminController;
 use App\Http\Controllers\AccountClassGroupController;
+use App\Http\Controllers\AccountingController;
 use App\Http\Controllers\ChartAccountController;
 use App\Http\Controllers\Accounting\SupplierController;
 use App\Http\Controllers\Accounting\PaymentVoucherController;
@@ -57,12 +58,17 @@ use App\Http\Controllers\Reports\BotGeographicalDistributionController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\LaravelLogsController;
 use App\Http\Controllers\ContributionController;
+use App\Http\Controllers\ContributionAccountController;
 // Add other main app routes here
 Route::get('/dashboard/loan-product-disbursement', [DashboardController::class, 'loanProductDisbursement'])->middleware('auth');
 Route::get('/dashboard/delinquency-loan-buckets', [DashboardController::class, 'delinquencyLoanBuckets'])->middleware('auth');
 Route::get('/dashboard/monthly-collections', [DashboardController::class, 'monthlyCollections'])->middleware('auth');
 // API route for bank accounts
 Route::get('/api/bank-accounts', [\App\Http\Controllers\Api\BankAccountController::class, 'index']);
+
+// Contribution API routes
+Route::get('/api/customers/{customerId}/contribution-products', [ContributionController::class, 'getCustomerProducts'])->name('api.customers.contribution-products')->middleware('auth');
+Route::get('/api/contribution-accounts/balance', [ContributionController::class, 'getAccountBalance'])->name('api.contribution-accounts.balance')->middleware('auth');
 
 // Customer Mobile API Routes
 Route::post('/api/customer/login', [\App\Http\Controllers\Api\CustomerAuthController::class, 'login']);
@@ -479,6 +485,9 @@ Route::prefix('super-admin')->name('super-admin.')->middleware(['auth', 'role:su
 ////////////////////////////////////////////// ACCOUNTING MANAGEMENT ///////////////////////////////////////////////
 
 Route::prefix('accounting')->name('accounting.')->middleware('auth')->group(function () {
+    // Accounting Dashboard
+    Route::get('/', [AccountingController::class, 'index'])->name('index');
+    
     // Account Class Groups
     Route::get('/account-class-groups', [AccountClassGroupController::class, 'index'])->name('account-class-groups.index');
 
@@ -851,6 +860,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('customers/{encodedCustomerId}/documents/{pivotId}/view', [CustomerController::class, 'viewDocument'])->name('customers.documents.view');
     Route::get('customers/{encodedCustomerId}/documents/{pivotId}/download', [CustomerController::class, 'downloadDocument'])->name('customers.documents.download');
 
+    // Next of Kin routes
+    Route::post('customers/{encodedCustomerId}/next-of-kin', [CustomerController::class, 'storeNextOfKin'])->name('customers.next-of-kin.store');
+    Route::put('customers/{encodedCustomerId}/next-of-kin/{encodedNextOfKinId}', [CustomerController::class, 'updateNextOfKin'])->name('customers.next-of-kin.update');
+    Route::delete('customers/{encodedCustomerId}/next-of-kin/{encodedNextOfKinId}', [CustomerController::class, 'deleteNextOfKin'])->name('customers.next-of-kin.delete');
+
     // Parameterized routes (must come after specific routes)
     Route::post('customers/{customerId}/send-message', [CustomerController::class, 'sendMessage'])->name('customers.send-message');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
@@ -865,12 +879,35 @@ Route::middleware(['auth'])->group(function () {
 
 Route::get('/contributions', [ContributionController::class, 'index'])->name('contributions.index')->middleware('auth');
 Route::get('/contributions/products', [ContributionController::class, 'products'])->name('contributions.products.index')->middleware('auth');
+Route::get('/contributions/products/data', [ContributionController::class, 'getContributionProductsData'])->name('contributions.products.data')->middleware('auth');
+Route::get('/contributions/products/{encodedId}', [ContributionController::class, 'productsShow'])->name('contributions.products.show')->middleware('auth');
+Route::get('/contributions/products/{encodedId}/transactions/data', [ContributionController::class, 'getProductTransactionsData'])->name('contributions.products.transactions.data')->middleware('auth');
 Route::get('/contributions/products/create', [ContributionController::class, 'productsCreate'])->name('contributions.products.create')->middleware('auth');
 Route::post('/contributions/products', [ContributionController::class, 'productsStore'])->name('contributions.products.store')->middleware('auth');
-Route::get('/contributions/accounts', [ContributionController::class, 'accounts'])->name('contributions.accounts.index')->middleware('auth');
+Route::get('/contributions/products/{encodedId}/edit', [ContributionController::class, 'productsEdit'])->name('contributions.products.edit')->middleware('auth');
+Route::put('/contributions/products/{encodedId}', [ContributionController::class, 'productsUpdate'])->name('contributions.products.update')->middleware('auth');
+Route::delete('/contributions/products/{encodedId}', [ContributionController::class, 'productsDestroy'])->name('contributions.products.destroy')->middleware('auth');
+Route::get('/contributions/accounts', [ContributionAccountController::class, 'index'])->name('contributions.accounts.index')->middleware('auth');
+Route::get('/contributions/accounts/data', [ContributionAccountController::class, 'getContributionAccountsData'])->name('contributions.accounts.data')->middleware('auth');
+Route::get('/contributions/accounts/create', [ContributionAccountController::class, 'create'])->name('contributions.accounts.create')->middleware('auth');
+Route::post('/contributions/accounts', [ContributionAccountController::class, 'store'])->name('contributions.accounts.store')->middleware('auth');
+Route::get('/contributions/accounts/{encodedId}', [ContributionAccountController::class, 'show'])->name('contributions.accounts.show')->middleware('auth');
+Route::get('/contributions/accounts/{encodedId}/transactions/data', [ContributionAccountController::class, 'getAccountTransactionsData'])->name('contributions.accounts.transactions.data')->middleware('auth');
+Route::get('/contributions/accounts/{encodedId}/statement/export', [ContributionAccountController::class, 'exportStatement'])->name('contributions.accounts.statement.export')->middleware('auth');
+Route::post('/contributions/accounts/{encodedId}/toggle-status', [ContributionAccountController::class, 'toggleStatus'])->name('contributions.accounts.toggle-status')->middleware('auth');
+Route::delete('/contributions/accounts/{encodedId}', [ContributionAccountController::class, 'destroy'])->name('contributions.accounts.destroy')->middleware('auth');
 Route::get('/contributions/deposits', [ContributionController::class, 'deposits'])->name('contributions.deposits.index')->middleware('auth');
+Route::get('/contributions/deposits/data', [ContributionController::class, 'getDepositsData'])->name('contributions.deposits.data')->middleware('auth');
+Route::get('/contributions/deposits/create', [ContributionController::class, 'depositsCreate'])->name('contributions.deposits.create')->middleware('auth');
+Route::post('/contributions/deposits', [ContributionController::class, 'depositsStore'])->name('contributions.deposits.store')->middleware('auth');
 Route::get('/contributions/withdrawals', [ContributionController::class, 'withdrawals'])->name('contributions.withdrawals.index')->middleware('auth');
+Route::get('/contributions/withdrawals/data', [ContributionController::class, 'getWithdrawalsData'])->name('contributions.withdrawals.data')->middleware('auth');
+Route::get('/contributions/withdrawals/create', [ContributionController::class, 'withdrawalsCreate'])->name('contributions.withdrawals.create')->middleware('auth');
+Route::post('/contributions/withdrawals', [ContributionController::class, 'withdrawalsStore'])->name('contributions.withdrawals.store')->middleware('auth');
 Route::get('/contributions/transfers', [ContributionController::class, 'transfers'])->name('contributions.transfers.index')->middleware('auth');
+Route::get('/contributions/transfers/data', [ContributionController::class, 'getTransfersData'])->name('contributions.transfers.data')->middleware('auth');
+Route::get('/contributions/transfers/create', [ContributionController::class, 'transfersCreate'])->name('contributions.transfers.create')->middleware('auth');
+Route::post('/contributions/transfers', [ContributionController::class, 'transfersStore'])->name('contributions.transfers.store')->middleware('auth');
 Route::get('/contributions/transfers/pending', [ContributionController::class, 'pendingTransfers'])->name('contributions.transfers.pending')->middleware('auth');
 Route::get('/contributions/reports/balance', [ContributionController::class, 'balanceReport'])->name('contributions.reports.balance')->middleware('auth');
 Route::get('/contributions/reports/transactions', [ContributionController::class, 'transactionsReport'])->name('contributions.reports.transactions')->middleware('auth');

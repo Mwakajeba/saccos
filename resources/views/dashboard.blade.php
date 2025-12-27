@@ -1065,6 +1065,108 @@ use Vinkla\Hashids\Facades\Hashids;
         </div>
         @endcan
 
+        <!-- Contributions and Shares Section -->
+        <div class="row">
+            <!-- Contributions Section -->
+            <div class="col-md-6">
+                <div class="card radius-10">
+                    <div class="card-header bg-transparent">
+                        <h5 class="mb-0"><i class="bx bx-donate-heart me-2 text-info"></i>Contributions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th class="text-end">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($contributions as $contribution)
+                                    <tr>
+                                        <td>
+                                            <strong>{{ $contribution['product_name'] }}</strong>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="badge bg-info">
+                                                TZS {{ number_format($contribution['balance'], 2) }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    @empty
+                                    <tr>
+                                        <td colspan="2" class="text-center text-muted">No contributions available</td>
+                                    </tr>
+                                    @endforelse
+                                    @if($contributions->isNotEmpty())
+                                    <tr class="table-secondary fw-bold">
+                                        <td>Total Contributions</td>
+                                        <td class="text-end">
+                                            <span class="badge bg-primary">
+                                                TZS {{ number_format($contributions->sum('balance'), 2) }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    @endif
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shares Section -->
+            <div class="col-md-6">
+                <div class="card radius-10">
+                    <div class="card-header bg-transparent">
+                        <h5 class="mb-0"><i class="bx bx-pie-chart-alt-2 me-2 text-success"></i>Shares</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th class="text-end">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($shares as $share)
+                                    <tr>
+                                        <td>
+                                            <strong>{{ $share['share_name'] }}</strong>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="badge bg-success">
+                                                TZS {{ number_format($share['balance'], 2) }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    @empty
+                                    <tr>
+                                        <td colspan="2" class="text-center text-muted">No shares available</td>
+                                    </tr>
+                                    @endforelse
+                                    @if($shares->isNotEmpty())
+                                    <tr class="table-secondary fw-bold">
+                                        <td>Total Shares</td>
+                                        <td class="text-end">
+                                            <span class="badge bg-primary">
+                                                TZS {{ number_format($shares->sum('balance'), 2) }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    @endif
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!--end row-->
+
         <!-- Send Bulk SMS Button
         <div class="d-flex justify-content-end mb-3">
             <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#bulkSmsModal">

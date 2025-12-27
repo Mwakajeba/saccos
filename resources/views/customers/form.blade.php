@@ -16,7 +16,7 @@ $isEdit = isset($customer);
 @endif
 
 <form action="{{ $isEdit ? route('customers.update', $customer) : route('customers.store') }}"
-      method="POST" enctype="multipart/form-data">
+      method="POST" enctype="multipart/form-data" id="customerForm">
     @csrf
     @if($isEdit) @method('PUT') @endif
 
@@ -53,16 +53,24 @@ $isEdit = isset($customer);
         <!-- Phone 1 -->
         <div class="col-md-6 mb-3">
             <label class="form-label">Phone Number <span class="text-danger">*</span></label>
-            <input type="text" name="phone1" class="form-control @error('phone1') is-invalid @enderror"
-                value="{{ old('phone1', $customer->phone1 ?? '') }}" placeholder="Enter phone number">
+            <div class="input-group">
+                <span class="input-group-text">+255</span>
+                <input type="text" name="phone1" id="phone1" class="form-control @error('phone1') is-invalid @enderror"
+                    value="{{ old('phone1', $customer->phone1 ?? '') }}" placeholder="712345678" maxlength="9" pattern="[0-9]{9}">
+            </div>
+            <small class="form-text text-muted">Enter 9 digits (e.g., 712345678)</small>
             @error('phone1') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
         <!-- Phone 2 -->
         <div class="col-md-6 mb-3">
             <label class="form-label">Alternative Phone Number</label>
-            <input type="text" name="phone2" class="form-control @error('phone2') is-invalid @enderror"
-                value="{{ old('phone2', $customer->phone2 ?? '') }}" placeholder="Enter alternative phone">
+            <div class="input-group">
+                <span class="input-group-text">+255</span>
+                <input type="text" name="phone2" id="phone2" class="form-control @error('phone2') is-invalid @enderror"
+                    value="{{ old('phone2', $customer->phone2 ?? '') }}" placeholder="712345678" maxlength="9" pattern="[0-9]{9}">
+            </div>
+            <small class="form-text text-muted">Enter 9 digits (e.g., 712345678)</small>
             @error('phone2') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
@@ -140,9 +148,20 @@ $isEdit = isset($customer);
         <!-- DOB -->
         <div class="col-md-6 mb-3">
             <label class="form-label">Date of Birth <span class="text-danger">*</span></label>
-            <input type="date" name="dob" class="form-control @error('dob') is-invalid @enderror"
-                value="{{ old('dob', isset($customer) && $customer->dob ? \Carbon\Carbon::parse($customer->dob)->format('Y-m-d') : '') }}">
+            <input type="date" name="dob" id="dob" class="form-control @error('dob') is-invalid @enderror"
+                value="{{ old('dob', isset($customer) && $customer->dob ? \Carbon\Carbon::parse($customer->dob)->format('Y-m-d') : '') }}"
+                max="{{ \Carbon\Carbon::now()->subYears(18)->format('Y-m-d') }}">
+            <small class="form-text text-muted">Must be 18 years or older</small>
             @error('dob') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        </div>
+
+        <!-- Category -->
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Category <span class="text-danger">*</span></label>
+            <select name="category" class="form-select @error('category') is-invalid @enderror" required>
+                <option value="Member" {{ old('category', $customer->category ?? 'Member') == 'Member' ? 'selected' : '' }}>Member</option>
+            </select>
+            @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
         <!-- Relation -->
@@ -191,62 +210,76 @@ $isEdit = isset($customer);
         </div>
         @endif
 
-        <!-- Cash Collateral -->
-        <div class="col-md-6 mb-3">
-            <div class="form-check">
-                <input type="checkbox" class="form-check-input" value="1" name="has_cash_collateral"
-                    id="has_cash_collateral" {{ old('has_cash_collateral', $customer->has_cash_collateral ?? false) ? 'checked' : '' }}>
-                <label class="form-check-label" for="has_cash_collateral">Has Cash Collateral</label>
-            </div>
-        </div>
+        <hr class="my-4">
 
-        <!-- Collateral Type -->
-        <div class="col-md-6 mb-3" id="collateral-type-container" style="display: none;">
-            <label class="form-label">Collateral Type</label>
-            <select name="collateral_type_id" class="form-select">
-                <option value="">Select Collateral Type</option>
-                @foreach($collateralTypes as $type)
-                    <option value="{{ $type->id }}"
-                        {{ old('collateral_type_id', isset($customer) ? ($customer->collaterals->first()->type_id ?? $customer->collateral_type_id ?? '') : '') == $type->id ? 'selected' : '' }}>
-                        {{ $type->name }}
-                    </option>
-                @endforeach
-            </select>
-        </div>
+        <!-- Share Account Section -->
+        <div class="col-md-12 mb-4">
+            <h6 class="mb-3 text-primary">
+                <i class="bx bx-bar-chart-square me-2"></i>Share Account
+            </h6>
+            <div class="card border-primary">
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Shares Option -->
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" value="1" name="has_shares"
+                                    id="has_shares" {{ old('has_shares', false) ? 'checked' : '' }}>
+                                <label class="form-check-label" for="has_shares">Create Share Account</label>
+                            </div>
+                        </div>
 
-        <!-- Loan Officers -->
-        <div class="col-md-12 mb-3">
-            <label class="form-label">Assign Loan Officer(s)</label>
-            @if($loanOfficers->count() > 0)
-            <div class="row">
-                @foreach($loanOfficers as $officer)
-                <div class="col-md-4 mb-2">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="loan_officer_ids[]"
-                            value="{{ $officer->id }}"
-                            {{ in_array($officer->id, old('loan_officer_ids', $customer->loan_officer_ids ?? [])) ? 'checked' : '' }}>
-                        <label class="form-check-label">{{ $officer->name }}</label>
+                        <!-- Share Product -->
+                        <div class="col-md-6 mb-3" id="share-product-container" style="display: none;">
+                            <label class="form-label">Share Product <span class="text-danger">*</span></label>
+                            <select name="share_product_id" id="share_product_id" class="form-select @error('share_product_id') is-invalid @enderror">
+                                <option value="">Select Share Product</option>
+                                @foreach($shareProducts ?? [] as $product)
+                                    <option value="{{ $product->id }}" {{ old('share_product_id') == $product->id ? 'selected' : '' }}>
+                                        {{ $product->share_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('share_product_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
                     </div>
                 </div>
-                @endforeach
             </div>
-            @else
-            <div class="alert alert-info">
-                <i class="bx bx-info-circle me-2"></i>
-                No loan officers found. Please create loan officer roles first.
-            </div>
-            @endif
         </div>
 
-        <!-- Category -->
-        <div class="col-md-6 mb-3">
-            <label class="form-label">Category <span class="text-danger">*</span></label>
-            <select name="category" class="form-select @error('category') is-invalid @enderror" required>
-                <option value="">Select Category</option>
-                <option value="Guarantor" {{ old('category', $customer->category ?? '') == 'Guarantor' ? 'selected' : '' }}>Guarantor</option>
-                <option value="Borrower" {{ old('category', $customer->category ?? '') == 'Borrower' ? 'selected' : '' }}>Borrower</option>
-            </select>
-            @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        <!-- Contributions Account Section -->
+        <div class="col-md-12 mb-4">
+            <h6 class="mb-3 text-primary">
+                <i class="bx bx-donate-heart me-2"></i>Contributions Account
+            </h6>
+            <div class="card border-primary">
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Contributions Option -->
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" value="1" name="has_contributions"
+                                    id="has_contributions" {{ old('has_contributions', false) ? 'checked' : '' }}>
+                                <label class="form-check-label" for="has_contributions">Create Contribution Account</label>
+                            </div>
+                        </div>
+
+                        <!-- Contribution Product -->
+                        <div class="col-md-6 mb-3" id="contribution-product-container" style="display: none;">
+                            <label class="form-label">Contribution Product <span class="text-danger">*</span></label>
+                            <select name="contribution_product_id" id="contribution_product_id" class="form-select @error('contribution_product_id') is-invalid @enderror">
+                                <option value="">Select Contribution Product</option>
+                                @foreach($contributionProducts ?? [] as $product)
+                                    <option value="{{ $product->id }}" {{ old('contribution_product_id') == $product->id ? 'selected' : '' }}>
+                                        {{ $product->product_name }} ({{ $product->category }})
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('contribution_product_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Group -->
@@ -282,22 +315,58 @@ $isEdit = isset($customer);
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const checkbox = document.querySelector('#has_cash_collateral');
-        const collateralContainer = document.querySelector('#collateral-type-container');
+        const sharesCheckbox = document.querySelector('#has_shares');
+        const shareProductContainer = document.querySelector('#share-product-container');
+        const contributionsCheckbox = document.querySelector('#has_contributions');
+        const contributionProductContainer = document.querySelector('#contribution-product-container');
         const regionSelect = document.querySelector('#region');
         const districtSelect = document.querySelector('#district');
 
-        // Show/hide collateral type
-        function toggleCollateralField() {
-            if (checkbox.checked) {
-                collateralContainer.style.display = 'block';
-            } else {
-                collateralContainer.style.display = 'none';
+        // Show/hide share product
+        function toggleShareProductField() {
+            if (sharesCheckbox && shareProductContainer) {
+                if (sharesCheckbox.checked) {
+                    shareProductContainer.style.display = 'block';
+                    const select = shareProductContainer.querySelector('select');
+                    if (select) select.required = true;
+                } else {
+                    shareProductContainer.style.display = 'none';
+                    const select = shareProductContainer.querySelector('select');
+                    if (select) {
+                        select.required = false;
+                        select.value = '';
+                    }
+                }
             }
         }
 
-        checkbox.addEventListener('change', toggleCollateralField);
-        toggleCollateralField(); // On load
+        // Show/hide contribution product
+        function toggleContributionProductField() {
+            if (contributionsCheckbox && contributionProductContainer) {
+                if (contributionsCheckbox.checked) {
+                    contributionProductContainer.style.display = 'block';
+                    const select = contributionProductContainer.querySelector('select');
+                    if (select) select.required = true;
+                } else {
+                    contributionProductContainer.style.display = 'none';
+                    const select = contributionProductContainer.querySelector('select');
+                    if (select) {
+                        select.required = false;
+                        select.value = '';
+                    }
+                }
+            }
+        }
+
+        if (sharesCheckbox) {
+            sharesCheckbox.addEventListener('change', toggleShareProductField);
+            toggleShareProductField(); // On load
+        }
+
+        if (contributionsCheckbox) {
+            contributionsCheckbox.addEventListener('change', toggleContributionProductField);
+            toggleContributionProductField(); // On load
+        }
 
         // Load districts on region change
         regionSelect.addEventListener('change', function() {
@@ -420,4 +489,51 @@ $isEdit = isset($customer);
             }
         });
     });
+
+    // Format phone inputs to add +255 prefix
+    document.addEventListener('DOMContentLoaded', function() {
+        const phone1Input = document.getElementById('phone1');
+        const phone2Input = document.getElementById('phone2');
+        const form = document.getElementById('customerForm');
+
+        if (phone1Input) {
+            phone1Input.addEventListener('input', function(e) {
+                // Only allow digits
+                this.value = this.value.replace(/[^0-9]/g, '');
+            });
+        }
+
+        if (phone2Input) {
+            phone2Input.addEventListener('input', function(e) {
+                // Only allow digits
+                this.value = this.value.replace(/[^0-9]/g, '');
+            });
+        }
+
+        // Form submission - add +255 prefix to phone numbers
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                if (phone1Input && phone1Input.value && phone1Input.value.length === 9) {
+                    // Create a hidden input with +255 prefix
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'phone1';
+                    hiddenInput.value = '+255' + phone1Input.value;
+                    form.appendChild(hiddenInput);
+                    phone1Input.disabled = true; // Disable original input
+                }
+
+                if (phone2Input && phone2Input.value && phone2Input.value.length === 9) {
+                    // Create a hidden input with +255 prefix
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'phone2';
+                    hiddenInput.value = '+255' + phone2Input.value;
+                    form.appendChild(hiddenInput);
+                    phone2Input.disabled = true; // Disable original input
+                }
+            });
+        }
+    });
 </script>
+

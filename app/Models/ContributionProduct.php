@@ -106,4 +106,14 @@ class ContributionProduct extends Model
     {
         return $this->belongsTo(Branch::class);
     }
+
+    public function charge(): BelongsTo
+    {
+        return $this->belongsTo(Fee::class, 'charge_id');
+    }
+
+    public function contributionAccounts()
+    {
+        return $this->hasMany(ContributionAccount::class);
+    }
 }

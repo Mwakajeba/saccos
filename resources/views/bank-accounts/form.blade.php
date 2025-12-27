@@ -1,4 +1,4 @@
-<form action="{{ isset($bankAccount) ? route('accounting.bank-accounts.update', \Vinkla\Hashids\Facades\Hashids::encode($bankAccount->id)) : route('accounting.bank-accounts.store') }}" method="POST">
+<form action="{{ isset($bankAccount) ? route('accounting.bank-accounts.update', \Vinkla\Hashids\Facades\Hashids::encode($bankAccount->id)) : route('accounting.bank-accounts.store') }}" method="POST" id="bankAccountForm" data-has-custom-handler="true">
     @csrf
     @if(isset($bankAccount)) @method('PUT') @endif
 
@@ -49,7 +49,7 @@
             <i class="bx bx-x me-1"></i> Cancel
         </a>
         @endcan
-        <button type="submit" class="btn btn-{{ isset($bankAccount) ? 'primary' : 'success' }}">
+        <button type="submit" class="btn btn-{{ isset($bankAccount) ? 'primary' : 'success' }}" id="submitBtn">
             <i class="bx bx-{{ isset($bankAccount) ? 'check' : 'plus' }} me-1"></i>
             {{ isset($bankAccount) ? 'Update Bank Account' : 'Create Bank Account' }}
         </button>

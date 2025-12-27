@@ -12,6 +12,10 @@ use App\Models\Journal;
 use App\Models\Payment;
 use App\Models\Penalty;
 use App\Models\Receipt;
+use App\Models\ContributionProduct;
+use App\Models\ContributionAccount;
+use App\Models\ShareProduct;
+use App\Models\ShareAccount;
 use App\Services\LoanPenaltyService;
 
 class DashboardController extends Controller
@@ -336,6 +340,95 @@ class DashboardController extends Controller
         $penaltyBalance = LoanPenaltyService::getTotalPenaltyBalance($selectedBranchId);
         info('penaltyBalance'.$penaltyBalance);
 
+        // Get Contributions data - products with their total balances
+        $contributions = ContributionProduct::where('company_id', $company->id)
+        ->when($selectedBranchId, function($query) use ($selectedBranchId) {
+            return $query->where('branch_id', $selectedBranchId);
+        }, function($query) use ($userBranchIds) {
+            if (!empty($userBranchIds)) {
+                return $query->whereIn('branch_id', $userBranchIds);
+            }
+            return $query;
+        })
+        ->where('is_active', true)
+        ->get()
+        ->map(function($product) use ($selectedBranchId, $userBranchIds) {
+            // Get balance from accounts
+            $accountBalance = ContributionAccount::where('contribution_product_id', $product->id)
+                ->when($selectedBranchId, function($query) use ($selectedBranchId) {
+                    return $query->where('branch_id', $selectedBranchId);
+                }, function($query) use ($userBranchIds) {
+                    if (!empty($userBranchIds)) {
+                        return $query->whereIn('branch_id', $userBranchIds);
+                    }
+                    return $query;
+                })
+                ->sum('balance');
+            
+            // Get balance from GL transactions (including journals) for the liability account
+            if ($product->liability_account_id) {
+                $glCredits = \App\Models\GlTransaction::whereIn('transaction_type', ['contribution_deposit', 'journal'])
+                    ->where('nature', 'credit')
+                    ->where('chart_account_id', $product->liability_account_id)
+                    ->when($selectedBranchId, function($query) use ($selectedBranchId) {
+                        return $query->where('branch_id', $selectedBranchId);
+                    }, function($query) use ($userBranchIds) {
+                        if (!empty($userBranchIds)) {
+                            return $query->whereIn('branch_id', $userBranchIds);
+                        }
+                        return $query;
+                    })
+                    ->sum('amount');
+                
+                $glDebits = \App\Models\GlTransaction::whereIn('transaction_type', ['contribution_withdrawal', 'contribution_transfer', 'journal'])
+                    ->where('nature', 'debit')
+                    ->where('chart_account_id', $product->liability_account_id)
+                    ->when($selectedBranchId, function($query) use ($selectedBranchId) {
+                        return $query->where('branch_id', $selectedBranchId);
+                    }, function($query) use ($userBranchIds) {
+                        if (!empty($userBranchIds)) {
+                            return $query->whereIn('branch_id', $userBranchIds);
+                        }
+                        return $query;
+                    })
+                    ->sum('amount');
+                
+                $glBalance = $glCredits - $glDebits;
+                // Use GL balance if available, otherwise fall back to account balance
+                $totalBalance = $glBalance;
+            } else {
+                $totalBalance = $accountBalance;
+            }
+            
+            return [
+                'id' => $product->id,
+                'product_name' => $product->product_name,
+                'balance' => $totalBalance ?? 0,
+            ];
+        });
+
+        // Get Shares data - products with their total balances
+        // Note: ShareProduct doesn't have branch_id, so we filter by accounts' branch_id
+        $shareProducts = ShareProduct::where('is_active', true)->get();
+        
+        $shares = $shareProducts->map(function($product) use ($selectedBranchId, $userBranchIds) {
+            $accountsQuery = ShareAccount::where('share_product_id', $product->id);
+            
+            if ($selectedBranchId) {
+                $accountsQuery->where('branch_id', $selectedBranchId);
+            } elseif (!empty($userBranchIds)) {
+                $accountsQuery->whereIn('branch_id', $userBranchIds);
+            }
+            
+            $totalBalance = $accountsQuery->sum('share_balance');
+            
+            return [
+                'id' => $product->id,
+                'share_name' => $product->share_name,
+                'balance' => $totalBalance ?? 0,
+            ];
+        })->values();
+
         // Get previous year comparative data
         $previousYearData = $this->getPreviousYearData($selectedBranchId, $userBranchIds);
 
@@ -359,7 +452,9 @@ class DashboardController extends Controller
             'paidInterest',
             'outstandingInterestDetailed',
             'branches',
-            'selectedBranchId'
+            'selectedBranchId',
+            'contributions',
+            'shares'
         ));
     }
     

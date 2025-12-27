@@ -99,7 +99,7 @@
                                 <tbody>
                                     @foreach($bankAccounts as $index => $bankAccount)
                                         <tr>
-                                            <td>{{ $index + 1 }}</td>
+                                            <td>{{ ($bankAccounts->currentPage() - 1) * $bankAccounts->perPage() + $index + 1 }}</td>
                                             <td>{{ $bankAccount->name }}</td>
                                             <td>{{ $bankAccount->account_number }}</td>
                                             <td>{{ $bankAccount->chartAccount->account_name ?? 'N/A' }}</td>
@@ -186,6 +186,15 @@
                 const form = $(this);
                 const name = form.find('button[type="submit"]').data('name');
 
+                // Ensure CSRF token is present
+                let csrfToken = form.find('input[name="_token"]').val();
+                if (!csrfToken) {
+                    csrfToken = $('meta[name="csrf-token"]').attr('content');
+                    if (csrfToken) {
+                        form.append('<input type="hidden" name="_token" value="' + csrfToken + '">');
+                    }
+                }
+
                 Swal.fire({
                     title: 'Are you sure?',
                     text: `Do you want to delete "${name}"?`,
@@ -196,6 +205,11 @@
                     confirmButtonText: 'Yes, delete it!'
                 }).then((result) => {
                     if (result.isConfirmed) {
+                        // Ensure CSRF token is included before submission
+                        if (!form.find('input[name="_token"]').length) {
+                            const token = $('meta[name="csrf-token"]').attr('content');
+                            form.append('<input type="hidden" name="_token" value="' + token + '">');
+                        }
                         form[0].submit();
                     }
                 });

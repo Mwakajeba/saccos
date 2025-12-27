@@ -1,5 +1,9 @@
 @extends('layouts.main')
 
+@php
+    use Vinkla\Hashids\Facades\Hashids;
+@endphp
+
 @section('title', 'Customer Profile')
 
 @section('content')
@@ -13,6 +17,10 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0 text-uppercase">Customer Profile</h6>
                 <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal"
+                        data-bs-target="#addNextOfKinModal">
+                        <i class="bx bx-user-plus me-1"></i> Add Next of Kin
+                    </button>
                     <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
                         data-bs-target="#uploadDocumentsModal">
                         <i class="bx bx-upload me-1"></i> Upload Documents
@@ -308,129 +316,277 @@
 
                 <!-- Profile Details -->
                 <div class="col-xl-8">
+                    <!-- Next of Kin Card -->
                     <div class="card">
                         <div class="card-body">
-                            <h5 class="card-title mb-4">Cash Deposits Records</h5>
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <h5 class="card-title mb-0">Next of Kin</h5>
+                                <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal"
+                                    data-bs-target="#addNextOfKinModal">
+                                    <i class="bx bx-user-plus me-1"></i> Add Next of Kin
+                                </button>
+                            </div>
                             <hr class="my-4">
 
                             <div class="table-responsive">
-                                <table class="table table-bordered dt-responsive nowrap table-striped" id="collateralTable">
+                                <table class="table table-bordered dt-responsive nowrap table-striped">
                                     <thead>
                                         <tr>
-                                            <th>Type</th>
-                                            <th>Value</th>
-                                            <th>Date</th>
+                                            <th>S/N</th>
+                                            <th>Name</th>
+                                            <th>Relationship</th>
+                                            <th>Phone</th>
+                                            <th>Email</th>
+                                            <th>Address</th>
+                                            <th class="text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="nextOfKinTableBody">
+                                        @forelse($customer->nextOfKin as $kin)
+                                            <tr data-kin-id="{{ Hashids::encode($kin->id) }}">
+                                                <td>{{ $loop->iteration }}</td>
+                                                <td>{{ $kin->name }}</td>
+                                                <td>{{ $kin->relationship }}</td>
+                                                <td>{{ $kin->phone ?? 'N/A' }}</td>
+                                                <td>{{ $kin->email ?? 'N/A' }}</td>
+                                                <td>{{ $kin->address ?? 'N/A' }}</td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-sm btn-warning edit-kin-btn" 
+                                                        data-kin-id="{{ Hashids::encode($kin->id) }}"
+                                                        data-kin-name="{{ $kin->name }}"
+                                                        data-kin-relationship="{{ $kin->relationship }}"
+                                                        data-kin-phone="{{ $kin->phone }}"
+                                                        data-kin-email="{{ $kin->email }}"
+                                                        data-kin-address="{{ $kin->address }}"
+                                                        data-kin-id-type="{{ $kin->id_type }}"
+                                                        data-kin-id-number="{{ $kin->id_number }}"
+                                                        data-kin-dob="{{ $kin->date_of_birth ? $kin->date_of_birth->format('Y-m-d') : '' }}"
+                                                        data-kin-gender="{{ $kin->gender }}"
+                                                        data-kin-notes="{{ $kin->notes }}"
+                                                        title="Edit">
+                                                        <i class="bx bx-edit"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-danger delete-kin-btn" 
+                                                        data-kin-id="{{ Hashids::encode($kin->id) }}"
+                                                        data-kin-name="{{ $kin->name }}"
+                                                        title="Delete">
+                                                        <i class="bx bx-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="7" class="text-center text-muted py-4">
+                                                    <i class="bx bx-user fs-1 d-block mb-2"></i>
+                                                    No next of kin records found for this customer.
+                                                </td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Shares Accounts Card -->
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h5 class="card-title mb-4">Shares Accounts</h5>
+                            <hr class="my-4">
+
+                            <div class="table-responsive">
+                                <table class="table table-bordered dt-responsive nowrap table-striped" id="sharesTable">
+                                    <thead>
+                                        <tr>
+                                            <th>S/N</th>
+                                            <th>Account Number</th>
+                                            <th>Share Product</th>
+                                            <th>Share Balance</th>
+                                            <th>Opening Date</th>
+                                            <th>Status</th>
                                             <th class="text-center">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach($customer->collaterals as $collateral)
+                                        @forelse($customer->shareAccounts as $shareAccount)
                                             <tr>
-                                                <td>{{ $collateral->type->name ?? 'N/A' }}</td> {{-- Access type name --}}
-                                                <td>{{ number_format($collateral->amount, 2) }}</td> {{-- Assuming 'amount'
-                                                field --}}
-                                                <td>{{ $collateral->created_at->format('M d, Y') }}</td>
+                                                <td>{{ $loop->iteration }}</td>
+                                                <td>{{ $shareAccount->account_number }}</td>
+                                                <td>{{ $shareAccount->shareProduct->share_name ?? 'N/A' }}</td>
+                                                <td>{{ number_format($shareAccount->share_balance ?? 0, 2) }}</td>
+                                                <td>{{ $shareAccount->opening_date ? $shareAccount->opening_date->format('M d, Y') : 'N/A' }}</td>
+                                                <td>
+                                                    @if($shareAccount->status === 'active')
+                                                        <span class="badge bg-success">Active</span>
+                                                    @elseif($shareAccount->status === 'inactive')
+                                                        <span class="badge bg-warning">Inactive</span>
+                                                    @elseif($shareAccount->status === 'closed')
+                                                        <span class="badge bg-danger">Closed</span>
+                                                    @else
+                                                        <span class="badge bg-secondary">Unknown</span>
+                                                    @endif
+                                                </td>
                                                 <td class="text-center">
-                                                    @can('view cash collaterals')
-                                                        <a href="{{ route('cash_collaterals.show', Hashids::encode($collateral->id)) }}"
-                                                            class="btn btn-sm btn-warning">
-                                                            View
+                                                    <a href="{{ route('shares.accounts.show', Hashids::encode($shareAccount->id)) }}"
+                                                        class="btn btn-sm btn-info" title="View">
+                                                        <i class="bx bx-show"></i> View
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="7" class="text-center text-muted py-4">
+                                                    <i class="bx bx-package fs-1 d-block mb-2"></i>
+                                                    No share accounts found for this customer.
+                                                </td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contributions Accounts Card -->
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h5 class="card-title mb-4">Contributions Accounts</h5>
+                            <hr class="my-4">
+
+                            <div class="table-responsive">
+                                <table class="table table-bordered dt-responsive nowrap table-striped" id="contributionsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>S/N</th>
+                                            <th>Account Number</th>
+                                            <th>Contribution Product</th>
+                                            <th>Balance</th>
+                                            <th>Opening Date</th>
+                                            <th class="text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($customer->contributionAccounts as $contributionAccount)
+                                            <tr>
+                                                <td>{{ $loop->iteration }}</td>
+                                                <td>{{ $contributionAccount->account_number }}</td>
+                                                <td>{{ $contributionAccount->contributionProduct->product_name ?? 'N/A' }}</td>
+                                                <td>{{ number_format($contributionAccount->balance ?? 0, 2) }}</td>
+                                                <td>{{ $contributionAccount->opening_date ? $contributionAccount->opening_date->format('M d, Y') : 'N/A' }}</td>
+                                                <td class="text-center">
+                                                    <a href="{{ route('contributions.accounts.show', Hashids::encode($contributionAccount->id)) }}"
+                                                        class="btn btn-sm btn-info" title="View">
+                                                        <i class="bx bx-show"></i> View
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="6" class="text-center text-muted py-4">
+                                                    <i class="bx bx-donate-heart fs-1 d-block mb-2"></i>
+                                                    No contribution accounts found for this customer.
+                                                </td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Loans Records Card -->
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h5 class="card-title mb-4">Loans Records</h5>
+                            <hr class="my-4">
+                            <div class="table-responsive">
+                                <table class="table table-bordered dt-responsive nowrap table-striped" id="loansTable">
+                                    <thead>
+                                        <tr>
+                                            <th>S/N</th>
+                                            <th>Amount</th>
+                                            <th>Total Amount</th>
+                                            <th>Paid Amount</th>
+                                            <th>Balance</th>
+                                            <th>Status</th>
+                                            <th>Disbursed On</th>
+                                            <th class="text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($customer->loans as $loan)
+                                            <tr>
+                                                <td>{{ $loop->iteration }}</td>
+                                                <td>{{ number_format($loan->amount, 2) }}</td>
+                                                <td>{{ number_format($loan->amount_total, 2) }}</td>
+                                                <td>
+                                                    {{ number_format(\App\Models\Repayment::where('loan_id', $loan->id)->sum(\DB::raw('principal + interest')), 2) }}
+                                                </td>
+                                                <td>
+                                                    {{ number_format($loan->amount_total - \App\Models\Repayment::where('loan_id', $loan->id)->sum(\DB::raw('principal + interest')), 2) }}
+                                                </td>
+                                                <td>
+                                                    @if($loan->status === 'active')
+                                                        <span class="badge bg-success">Active</span>
+                                                    @elseif($loan->status === 'pending')
+                                                        <span class="badge bg-warning">Pending</span>
+                                                    @elseif($loan->status === 'closed')
+                                                        <span class="badge bg-secondary">Closed</span>
+                                                    @elseif($loan->status === 'defaulted')
+                                                        <span class="badge bg-danger">Defaulted</span>
+                                                    @elseif($loan->status === 'applied')
+                                                        <span class="badge bg-warning">Applied</span>
+                                                    @elseif($loan->status === 'checked')
+                                                        <span class="badge bg-info">Checked</span>
+                                                    @elseif($loan->status === 'approved')
+                                                        <span class="badge bg-primary">Approved</span>
+                                                    @elseif($loan->status === 'authorized')
+                                                        <span class="badge bg-success">Authorized</span>
+                                                    @elseif($loan->status === 'rejected')
+                                                        <span class="badge bg-danger">Rejected</span>
+                                                    @elseif($loan->status === 'completed')
+                                                        <span class="badge bg-success">Completed</span>
+                                                    @else
+                                                        <span class="badge bg-info">{{ ucfirst($loan->status) }}</span>
+                                                    @endif
+                                                </td>
+                                                <td>{{ $loan->disbursed_on ? \Carbon\Carbon::parse($loan->disbursed_on)->format('M d, Y') : 'N/A' }}</td>
+                                                <td class="text-center">
+                                                    @can('view loan details')
+                                                        <a href="{{ route('loans.show', Hashids::encode($loan->id)) }}"
+                                                            class="btn btn-sm btn-info" title="View">
+                                                            <i class="bx bx-show"></i> View
                                                         </a>
                                                     @endcan
 
-                                                    @can('deposit cash collateral')
-                                                        <a href="{{ route('cash_collaterals.deposit', Hashids::encode($collateral->id)) }}"
-                                                            class="btn btn-sm btn-primary">
-                                                            Deposit
-                                                        </a>
-                                                    @endcan
-
-                                                    @can('withdraw cash collateral')
-                                                        <a href="{{ route('cash_collaterals.withdraw', Hashids::encode($collateral->id)) }}"
-                                                            class="btn btn-sm btn-success">
-                                                            Withdraw
-                                                        </a>
+                                                    @can('edit loan')
+                                                        @if($loan->status == 'pending' || in_array($loan->status, ['applied', 'rejected']))
+                                                            @php
+                                                                $encodedId = Hashids::encode($loan->id);
+                                                                $editRoute = in_array($loan->status, ['applied', 'rejected'])
+                                                                    ? route('loans.application.edit', $encodedId)
+                                                                    : route('loans.edit', $encodedId);
+                                                            @endphp
+                                                            <a href="{{ $editRoute }}" class="btn btn-sm btn-warning" title="Edit">
+                                                                <i class="bx bx-edit"></i> Edit
+                                                            </a>
+                                                        @endif
                                                     @endcan
                                                 </td>
                                             </tr>
-                                        @endforeach
+                                        @empty
+                                            <tr>
+                                                <td colspan="8" class="text-center text-muted py-4">
+                                                    <i class="bx bx-money fs-1 d-block mb-2"></i>
+                                                    No loans found for this customer.
+                                                </td>
+                                            </tr>
+                                        @endforelse
                                     </tbody>
                                 </table>
-
                             </div>
                         </div>
-
-                        <!-- Roles and Permissions Card -->
-                        <div class="card">
-                            <div class="card-body">
-                                <h5 class="card-title mb-4">Loans Records</h5>
-                                <hr class="my-4">
-                                <div class="table-responsive">
-                                    <table class="table table-bordered dt-responsive nowrap table-striped" id="loansTable">
-                                        <thead>
-                                            <tr>
-                                                <th>S/N</th>
-                                                <th>Amount</th>
-                                                <th>Total Amount</th>
-                                                <th>Paid Amount</th>
-                                                <th>Balance</th>
-                                                <th>Status</th>
-                                                <th>Disbursed On</th>
-                                                <th class="text-center">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach($customer->loans as $loan)
-                                                <tr>
-                                                    <td>{{ $loop->iteration }}</td>
-                                                    <td>{{ number_format($loan->amount, 2) }}</td>
-                                                    <td>{{ number_format($loan->amount_total, 2) }}</td>
-                                                    <td>
-                                                        {{ number_format(\App\Models\Repayment::where('loan_id', $loan->id)->sum(\DB::raw('principal + interest')), 2) }}
-                                                    </td>
-                                                    <td>
-                                                        {{ number_format($loan->amount_total - \App\Models\Repayment::where('loan_id', $loan->id)->sum(\DB::raw('principal + interest')), 2) }}
-                                                    </td>
-                                                    <td>
-                                                        @if($loan->status === 'active')
-                                                            <span class="badge bg-success">{{ ucfirst($loan->status) }}</span>
-                                                        @elseif($loan->status === 'pending')
-                                                            <span class="badge bg-warning">{{ ucfirst($loan->status) }}</span>
-                                                        @elseif($loan->status === 'closed')
-                                                            <span class="badge bg-secondary">{{ ucfirst($loan->status) }}</span>
-                                                        @elseif($loan->status === 'defaulted')
-                                                            <span class="badge bg-danger">{{ ucfirst($loan->status) }}</span>
-                                                        @else
-                                                            <span class="badge bg-info">{{ ucfirst($loan->status) }}</span>
-                                                        @endif
-                                                    </td>
-                                                    <td>{{ $loan->disbursed_on }}</td>
-                                                    <td class="text-center">
-                                                        @can('view loan details')
-                                                            <a href="{{ route('loans.show', Hashids::encode($loan->id)) }}"
-                                                                class="btn btn-sm btn-info">View</a>
-                                                        @endcan
-
-                                                        @can('edit loan')
-                                                            @if($loan->status == 'pending')
-                                                                @php
-                                                                    $encodedId = Hashids::encode($loan->id);
-                                                                    $editRoute = in_array($loan->status, ['applied', 'rejected'])
-                                                                        ? route('loans.application.edit', $encodedId)
-                                                                        : route('loans.edit', $encodedId);
-                                                                @endphp
-                                                                <a href="{{ $editRoute }}" class="btn btn-sm btn-primary">Edit</a>
-                                                            @endif
-                                                        @endcan
-                                                    </td>
-                                                </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
-
-                                </div>
-                            </div>
-                        </div>
+                    </div>
                     </div>
 
                     <!-- Modern Document Management Card -->
@@ -663,6 +819,106 @@
             <!-- TEST BUTTON FOR LOADING STATE AND SWEETALERT -->
 
             <!-- TEST MODAL -->
+
+            <!-- Add/Edit Next of Kin Modal -->
+            <div class="modal fade" id="addNextOfKinModal" tabindex="-1" aria-labelledby="addNextOfKinModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="addNextOfKinModalLabel">Add Next of Kin</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="nextOfKinForm">
+                            @csrf
+                            <div class="modal-body">
+                                <input type="hidden" id="nextOfKinId" name="next_of_kin_id">
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="kinName" name="name" required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Relationship <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="kinRelationship" name="relationship" required>
+                                            <option value="">Select Relationship</option>
+                                            <option value="Spouse">Spouse</option>
+                                            <option value="Parent">Parent</option>
+                                            <option value="Sibling">Sibling</option>
+                                            <option value="Child">Child</option>
+                                            <option value="Guardian">Guardian</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Phone</label>
+                                        <input type="text" class="form-control" id="kinPhone" name="phone">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Email</label>
+                                        <input type="email" class="form-control" id="kinEmail" name="email">
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Address</label>
+                                    <textarea class="form-control" id="kinAddress" name="address" rows="2"></textarea>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">ID Type</label>
+                                        <select class="form-select" id="kinIdType" name="id_type">
+                                            <option value="">Select ID Type</option>
+                                            <option value="National ID">National ID</option>
+                                            <option value="Passport">Passport</option>
+                                            <option value="Driving License">Driving License</option>
+                                            <option value="Voter ID">Voter ID</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">ID Number</label>
+                                        <input type="text" class="form-control" id="kinIdNumber" name="id_number">
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Date of Birth</label>
+                                        <input type="date" class="form-control" id="kinDob" name="date_of_birth">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Gender</label>
+                                        <select class="form-select" id="kinGender" name="gender">
+                                            <option value="">Select Gender</option>
+                                            <option value="M">Male</option>
+                                            <option value="F">Female</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Notes</label>
+                                    <textarea class="form-control" id="kinNotes" name="notes" rows="2"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    <i class="bx bx-x me-1"></i> Cancel
+                                </button>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bx bx-save me-1"></i> Save
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <!-- End Add/Edit Next of Kin Modal -->
 
 @endsection
 
@@ -1411,6 +1667,122 @@
                             updateCharacterCount();
                         });
                     }
+                });
+            </script>
+
+            <script>
+                // Next of Kin Management
+                $(document).ready(function() {
+                    const customerId = "{{ Hashids::encode($customer->id) }}";
+                    const addModal = new bootstrap.Modal(document.getElementById('addNextOfKinModal'));
+                    let isEditMode = false;
+                    let editingKinId = null;
+
+                    // Reset form when modal is closed
+                    $('#addNextOfKinModal').on('hidden.bs.modal', function() {
+                        $('#nextOfKinForm')[0].reset();
+                        $('#nextOfKinId').val('');
+                        $('#addNextOfKinModalLabel').text('Add Next of Kin');
+                        isEditMode = false;
+                        editingKinId = null;
+                    });
+
+                    // Handle edit button click
+                    $(document).on('click', '.edit-kin-btn', function() {
+                        isEditMode = true;
+                        editingKinId = $(this).data('kin-id');
+                        $('#nextOfKinId').val(editingKinId);
+                        $('#addNextOfKinModalLabel').text('Edit Next of Kin');
+                        
+                        $('#kinName').val($(this).data('kin-name'));
+                        $('#kinRelationship').val($(this).data('kin-relationship'));
+                        $('#kinPhone').val($(this).data('kin-phone'));
+                        $('#kinEmail').val($(this).data('kin-email'));
+                        $('#kinAddress').val($(this).data('kin-address'));
+                        $('#kinIdType').val($(this).data('kin-id-type'));
+                        $('#kinIdNumber').val($(this).data('kin-id-number'));
+                        $('#kinDob').val($(this).data('kin-dob'));
+                        $('#kinGender').val($(this).data('kin-gender'));
+                        $('#kinNotes').val($(this).data('kin-notes'));
+                        
+                        addModal.show();
+                    });
+
+                    // Handle delete button click
+                    $(document).on('click', '.delete-kin-btn', function() {
+                        const kinId = $(this).data('kin-id');
+                        const kinName = $(this).data('kin-name');
+                        
+                        Swal.fire({
+                            title: 'Are you sure?',
+                            text: `Do you want to delete "${kinName}" from next of kin?`,
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonColor: '#d33',
+                            cancelButtonColor: '#3085d6',
+                            confirmButtonText: 'Yes, delete it!'
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                $.ajax({
+                                    url: `/customers/${customerId}/next-of-kin/${kinId}`,
+                                    method: 'DELETE',
+                                    headers: {
+                                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                                    },
+                                    success: function(response) {
+                                        Swal.fire('Deleted!', response.message, 'success');
+                                        location.reload();
+                                    },
+                                    error: function(xhr) {
+                                        Swal.fire('Error!', xhr.responseJSON?.error || 'Failed to delete next of kin', 'error');
+                                    }
+                                });
+                            }
+                        });
+                    });
+
+                    // Handle form submission
+                    $('#nextOfKinForm').on('submit', function(e) {
+                        e.preventDefault();
+                        
+                        const formData = new FormData(this);
+                        let url, method;
+                        
+                        if (isEditMode && editingKinId) {
+                            url = `/customers/${customerId}/next-of-kin/${editingKinId}`;
+                            method = 'PUT';
+                            formData.append('_method', 'PUT');
+                        } else {
+                            url = `/customers/${customerId}/next-of-kin`;
+                            method = 'POST';
+                        }
+                        
+                        $.ajax({
+                            url: url,
+                            method: method,
+                            data: formData,
+                            processData: false,
+                            contentType: false,
+                            headers: {
+                                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                            },
+                            success: function(response) {
+                                Swal.fire('Success!', response.message, 'success');
+                                addModal.hide();
+                                location.reload();
+                            },
+                            error: function(xhr) {
+                                let errorMessage = 'Failed to save next of kin';
+                                if (xhr.responseJSON && xhr.responseJSON.errors) {
+                                    const errors = Object.values(xhr.responseJSON.errors).flat();
+                                    errorMessage = errors.join('<br>');
+                                } else if (xhr.responseJSON && xhr.responseJSON.error) {
+                                    errorMessage = xhr.responseJSON.error;
+                                }
+                                Swal.fire('Error!', errorMessage, 'error');
+                            }
+                        });
+                    });
                 });
             </script>
         @endpush

@@ -1,6 +1,10 @@
 @extends('layouts.main')
 
-@section('title', 'Create Contribution Product')
+@php
+    use Vinkla\Hashids\Facades\Hashids;
+@endphp
+
+@section('title', 'Edit Contribution Product')
 
 @section('content')
 <div class="page-wrapper">
@@ -9,10 +13,10 @@
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
             ['label' => 'Contributions', 'url' => route('contributions.index'), 'icon' => 'bx bx-donate-heart'],
             ['label' => 'Contribution Products', 'url' => route('contributions.products.index'), 'icon' => 'bx bx-package'],
-            ['label' => 'Create Product', 'url' => '#', 'icon' => 'bx bx-plus']
+            ['label' => 'Edit Product', 'url' => '#', 'icon' => 'bx bx-edit']
         ]" />
         
-        <h6 class="mb-0 text-uppercase">CREATE CONTRIBUTION PRODUCT</h6>
+        <h6 class="mb-0 text-uppercase">EDIT CONTRIBUTION PRODUCT</h6>
         <hr />
 
         @if($errors->any())
@@ -28,8 +32,9 @@
         </div>
         @endif
 
-        <form id="contributionProductForm" action="{{ route('contributions.products.store') }}" method="POST" data-has-custom-handler="true">
+        <form id="contributionProductForm" action="{{ route('contributions.products.update', Hashids::encode($product->id)) }}" method="POST" data-has-custom-handler="true">
             @csrf
+            @method('PUT')
             
             <div class="row">
                 <!-- Basic Information -->
@@ -43,14 +48,14 @@
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Product Name <span class="text-danger">*</span></label>
                                     <input type="text" name="product_name" class="form-control @error('product_name') is-invalid @enderror"
-                                        value="{{ old('product_name') }}" required>
+                                        value="{{ old('product_name', $product->product_name) }}" required>
                                     @error('product_name') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Interest (%) <span class="text-danger">*</span></label>
                                     <input type="number" step="0.01" name="interest" class="form-control @error('interest') is-invalid @enderror"
-                                        value="{{ old('interest') }}" required>
+                                        value="{{ old('interest', $product->interest) }}" required>
                                     @error('interest') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
@@ -58,8 +63,8 @@
                                     <label class="form-label">Category <span class="text-danger">*</span></label>
                                     <select name="category" class="form-select @error('category') is-invalid @enderror" required>
                                         <option value="">Select Category</option>
-                                        <option value="Voluntary" {{ old('category') == 'Voluntary' ? 'selected' : '' }}>Voluntary</option>
-                                        <option value="Mandatory" {{ old('category') == 'Mandatory' ? 'selected' : '' }}>Mandatory</option>
+                                        <option value="Voluntary" {{ old('category', $product->category) == 'Voluntary' ? 'selected' : '' }}>Voluntary</option>
+                                        <option value="Mandatory" {{ old('category', $product->category) == 'Mandatory' ? 'selected' : '' }}>Mandatory</option>
                                     </select>
                                     @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
@@ -68,15 +73,15 @@
                                     <label class="form-label">Auto Create <span class="text-danger">*</span></label>
                                     <select name="auto_create" class="form-select @error('auto_create') is-invalid @enderror" required>
                                         <option value="">Select</option>
-                                        <option value="Yes" {{ old('auto_create') == 'Yes' ? 'selected' : '' }}>Yes</option>
-                                        <option value="No" {{ old('auto_create') == 'No' ? 'selected' : '' }}>No</option>
+                                        <option value="Yes" {{ old('auto_create', $product->auto_create) == 'Yes' ? 'selected' : '' }}>Yes</option>
+                                        <option value="No" {{ old('auto_create', $product->auto_create) == 'No' ? 'selected' : '' }}>No</option>
                                     </select>
                                     @error('auto_create') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
                                 <div class="col-md-12 mb-3">
                                     <label class="form-label">Description</label>
-                                    <textarea name="description" class="form-control @error('description') is-invalid @enderror" rows="3">{{ old('description') }}</textarea>
+                                    <textarea name="description" class="form-control @error('description') is-invalid @enderror" rows="3">{{ old('description', $product->description) }}</textarea>
                                     @error('description') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
                             </div>
@@ -96,8 +101,8 @@
                                     <label class="form-label">Compound Period <span class="text-danger">*</span></label>
                                     <select name="compound_period" class="form-select @error('compound_period') is-invalid @enderror" required>
                                         <option value="">Select</option>
-                                        <option value="Daily" {{ old('compound_period') == 'Daily' ? 'selected' : '' }}>Daily</option>
-                                        <option value="Monthly" {{ old('compound_period') == 'Monthly' ? 'selected' : '' }}>Monthly</option>
+                                        <option value="Daily" {{ old('compound_period', $product->compound_period) == 'Daily' ? 'selected' : '' }}>Daily</option>
+                                        <option value="Monthly" {{ old('compound_period', $product->compound_period) == 'Monthly' ? 'selected' : '' }}>Monthly</option>
                                     </select>
                                     @error('compound_period') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
@@ -106,9 +111,9 @@
                                     <label class="form-label">Interest Posting Period</label>
                                     <select name="interest_posting_period" class="form-select @error('interest_posting_period') is-invalid @enderror">
                                         <option value="">Select</option>
-                                        <option value="Monthly" {{ old('interest_posting_period') == 'Monthly' ? 'selected' : '' }}>Monthly</option>
-                                        <option value="Quarterly" {{ old('interest_posting_period') == 'Quarterly' ? 'selected' : '' }}>Quarterly</option>
-                                        <option value="Annually" {{ old('interest_posting_period') == 'Annually' ? 'selected' : '' }}>Annually</option>
+                                        <option value="Monthly" {{ old('interest_posting_period', $product->interest_posting_period) == 'Monthly' ? 'selected' : '' }}>Monthly</option>
+                                        <option value="Quarterly" {{ old('interest_posting_period', $product->interest_posting_period) == 'Quarterly' ? 'selected' : '' }}>Quarterly</option>
+                                        <option value="Annually" {{ old('interest_posting_period', $product->interest_posting_period) == 'Annually' ? 'selected' : '' }}>Annually</option>
                                     </select>
                                     @error('interest_posting_period') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
@@ -117,9 +122,9 @@
                                     <label class="form-label">Interest Calculation Type <span class="text-danger">*</span></label>
                                     <select name="interest_calculation_type" class="form-select @error('interest_calculation_type') is-invalid @enderror" required>
                                         <option value="">Select</option>
-                                        <option value="Daily" {{ old('interest_calculation_type') == 'Daily' ? 'selected' : '' }}>Daily</option>
-                                        <option value="Monthly" {{ old('interest_calculation_type') == 'Monthly' ? 'selected' : '' }}>Monthly</option>
-                                        <option value="Annually" {{ old('interest_calculation_type') == 'Annually' ? 'selected' : '' }}>Annually</option>
+                                        <option value="Daily" {{ old('interest_calculation_type', $product->interest_calculation_type) == 'Daily' ? 'selected' : '' }}>Daily</option>
+                                        <option value="Monthly" {{ old('interest_calculation_type', $product->interest_calculation_type) == 'Monthly' ? 'selected' : '' }}>Monthly</option>
+                                        <option value="Annually" {{ old('interest_calculation_type', $product->interest_calculation_type) == 'Annually' ? 'selected' : '' }}>Annually</option>
                                     </select>
                                     @error('interest_calculation_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
@@ -139,7 +144,7 @@
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Lockin Period Frequency <span class="text-danger">*</span></label>
                                     <input type="number" name="lockin_period_frequency" class="form-control @error('lockin_period_frequency') is-invalid @enderror"
-                                        value="{{ old('lockin_period_frequency') }}" required>
+                                        value="{{ old('lockin_period_frequency', $product->lockin_period_frequency) }}" required>
                                     @error('lockin_period_frequency') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
@@ -147,8 +152,8 @@
                                     <label class="form-label">Lockin Period Frequency Type <span class="text-danger">*</span></label>
                                     <select name="lockin_period_frequency_type" class="form-select @error('lockin_period_frequency_type') is-invalid @enderror" required>
                                         <option value="">Select</option>
-                                        <option value="Days" {{ old('lockin_period_frequency_type') == 'Days' ? 'selected' : '' }}>Days</option>
-                                        <option value="Months" {{ old('lockin_period_frequency_type') == 'Months' ? 'selected' : '' }}>Months</option>
+                                        <option value="Days" {{ old('lockin_period_frequency_type', $product->lockin_period_frequency_type) == 'Days' ? 'selected' : '' }}>Days</option>
+                                        <option value="Months" {{ old('lockin_period_frequency_type', $product->lockin_period_frequency_type) == 'Months' ? 'selected' : '' }}>Months</option>
                                     </select>
                                     @error('lockin_period_frequency_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
@@ -168,21 +173,21 @@
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Automatic Opening Balance <span class="text-danger">*</span></label>
                                     <input type="number" step="0.01" name="automatic_opening_balance" class="form-control @error('automatic_opening_balance') is-invalid @enderror"
-                                        value="{{ old('automatic_opening_balance', 0) }}" required>
+                                        value="{{ old('automatic_opening_balance', $product->automatic_opening_balance) }}" required>
                                     @error('automatic_opening_balance') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Minimum Balance for Interest Calculations <span class="text-danger">*</span></label>
                                     <input type="number" step="0.01" name="minimum_balance_for_interest_calculations" class="form-control @error('minimum_balance_for_interest_calculations') is-invalid @enderror"
-                                        value="{{ old('minimum_balance_for_interest_calculations', 0) }}" required>
+                                        value="{{ old('minimum_balance_for_interest_calculations', $product->minimum_balance_for_interest_calculations) }}" required>
                                     @error('minimum_balance_for_interest_calculations') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" name="can_withdraw" id="can_withdraw" 
-                                            {{ old('can_withdraw') ? 'checked' : '' }}>
+                                            {{ old('can_withdraw', $product->can_withdraw) ? 'checked' : '' }}>
                                         <label class="form-check-label" for="can_withdraw">
                                             Can Withdraw
                                         </label>
@@ -204,20 +209,20 @@
                                 <div class="col-md-12 mb-3">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" name="has_charge" id="has_charge" 
-                                            {{ old('has_charge') ? 'checked' : '' }} onchange="toggleChargeFields()">
+                                            {{ old('has_charge', $product->has_charge) ? 'checked' : '' }} onchange="toggleChargeFields()">
                                         <label class="form-check-label" for="has_charge">
                                             Has Charge
                                         </label>
                                     </div>
                                 </div>
 
-                                <div id="chargeFields" style="display: none;">
+                                <div id="chargeFields" style="display: {{ old('has_charge', $product->has_charge) ? 'block' : 'none' }};">
                                     <div class="col-md-4 mb-3">
                                         <label class="form-label">Charge</label>
                                         <select name="charge_id" class="form-select @error('charge_id') is-invalid @enderror">
                                             <option value="">Select Charge</option>
                                             @foreach(\App\Models\Fee::where('status', 'active')->get() as $fee)
-                                            <option value="{{ $fee->id }}" {{ old('charge_id') == $fee->id ? 'selected' : '' }}>
+                                            <option value="{{ $fee->id }}" {{ old('charge_id', $product->charge_id) == $fee->id ? 'selected' : '' }}>
                                                 {{ $fee->name }}
                                             </option>
                                             @endforeach
@@ -229,8 +234,8 @@
                                         <label class="form-label">Charge Type</label>
                                         <select name="charge_type" class="form-select @error('charge_type') is-invalid @enderror">
                                             <option value="">Select</option>
-                                            <option value="Fixed" {{ old('charge_type') == 'Fixed' ? 'selected' : '' }}>Fixed</option>
-                                            <option value="Percentage" {{ old('charge_type') == 'Percentage' ? 'selected' : '' }}>Percentage</option>
+                                            <option value="Fixed" {{ old('charge_type', $product->charge_type) == 'Fixed' ? 'selected' : '' }}>Fixed</option>
+                                            <option value="Percentage" {{ old('charge_type', $product->charge_type) == 'Percentage' ? 'selected' : '' }}>Percentage</option>
                                         </select>
                                         @error('charge_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                     </div>
@@ -238,7 +243,7 @@
                                     <div class="col-md-4 mb-3">
                                         <label class="form-label">Charge Amount</label>
                                         <input type="number" step="0.01" name="charge_amount" class="form-control @error('charge_amount') is-invalid @enderror"
-                                            value="{{ old('charge_amount') }}">
+                                            value="{{ old('charge_amount', $product->charge_amount) }}">
                                         @error('charge_amount') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                     </div>
                                 </div>
@@ -260,7 +265,7 @@
                                     <select name="bank_account_id" class="form-select @error('bank_account_id') is-invalid @enderror" required>
                                         <option value="">Select Bank Account</option>
                                         @foreach($chartAccounts as $account)
-                                        <option value="{{ $account->id }}" {{ old('bank_account_id') == $account->id ? 'selected' : '' }}>
+                                        <option value="{{ $account->id }}" {{ old('bank_account_id', $product->bank_account_id) == $account->id ? 'selected' : '' }}>
                                             {{ $account->account_name }} ({{ $account->account_code }})
                                         </option>
                                         @endforeach
@@ -273,7 +278,7 @@
                                     <select name="journal_reference_id" class="form-select @error('journal_reference_id') is-invalid @enderror" required>
                                         <option value="">Select Journal Reference</option>
                                         @foreach($journalReferences as $journalRef)
-                                        <option value="{{ $journalRef->id }}" {{ old('journal_reference_id') == $journalRef->id ? 'selected' : '' }}>
+                                        <option value="{{ $journalRef->id }}" {{ old('journal_reference_id', $product->journal_reference_id) == $journalRef->id ? 'selected' : '' }}>
                                             {{ $journalRef->name }} ({{ $journalRef->reference }})
                                         </option>
                                         @endforeach
@@ -286,7 +291,7 @@
                                     <select name="riba_journal_id" class="form-select @error('riba_journal_id') is-invalid @enderror" required>
                                         <option value="">Select Riba Journal</option>
                                         @foreach($journalReferences as $journalRef)
-                                        <option value="{{ $journalRef->id }}" {{ old('riba_journal_id') == $journalRef->id ? 'selected' : '' }}>
+                                        <option value="{{ $journalRef->id }}" {{ old('riba_journal_id', $product->riba_journal_id) == $journalRef->id ? 'selected' : '' }}>
                                             {{ $journalRef->name }} ({{ $journalRef->reference }})
                                         </option>
                                         @endforeach
@@ -299,7 +304,7 @@
                                     <select name="pay_loan_journal_id" class="form-select @error('pay_loan_journal_id') is-invalid @enderror" required>
                                         <option value="">Select Pay Loan Journal</option>
                                         @foreach($journalReferences as $journalRef)
-                                        <option value="{{ $journalRef->id }}" {{ old('pay_loan_journal_id') == $journalRef->id ? 'selected' : '' }}>
+                                        <option value="{{ $journalRef->id }}" {{ old('pay_loan_journal_id', $product->pay_loan_journal_id) == $journalRef->id ? 'selected' : '' }}>
                                             {{ $journalRef->name }} ({{ $journalRef->reference }})
                                         </option>
                                         @endforeach
@@ -324,7 +329,7 @@
                                     <select name="liability_account_id" class="form-select @error('liability_account_id') is-invalid @enderror" required>
                                         <option value="">Select Liability Account</option>
                                         @foreach($chartAccounts as $account)
-                                        <option value="{{ $account->id }}" {{ old('liability_account_id') == $account->id ? 'selected' : '' }}>
+                                        <option value="{{ $account->id }}" {{ old('liability_account_id', $product->liability_account_id) == $account->id ? 'selected' : '' }}>
                                             {{ $account->account_name }} ({{ $account->account_code }})
                                         </option>
                                         @endforeach
@@ -337,7 +342,7 @@
                                     <select name="expense_account_id" class="form-select @error('expense_account_id') is-invalid @enderror" required>
                                         <option value="">Select Expense Account</option>
                                         @foreach($chartAccounts as $account)
-                                        <option value="{{ $account->id }}" {{ old('expense_account_id') == $account->id ? 'selected' : '' }}>
+                                        <option value="{{ $account->id }}" {{ old('expense_account_id', $product->expense_account_id) == $account->id ? 'selected' : '' }}>
                                             {{ $account->account_name }} ({{ $account->account_code }})
                                         </option>
                                         @endforeach
@@ -350,7 +355,7 @@
                                     <select name="riba_payable_account_id" class="form-select @error('riba_payable_account_id') is-invalid @enderror" required>
                                         <option value="">Select Riba Payable Account</option>
                                         @foreach($chartAccounts as $account)
-                                        <option value="{{ $account->id }}" {{ old('riba_payable_account_id') == $account->id ? 'selected' : '' }}>
+                                        <option value="{{ $account->id }}" {{ old('riba_payable_account_id', $product->riba_payable_account_id) == $account->id ? 'selected' : '' }}>
                                             {{ $account->account_name }} ({{ $account->account_code }})
                                         </option>
                                         @endforeach
@@ -363,7 +368,7 @@
                                     <select name="withholding_account_id" class="form-select @error('withholding_account_id') is-invalid @enderror" required>
                                         <option value="">Select Withholding Account</option>
                                         @foreach($chartAccounts as $account)
-                                        <option value="{{ $account->id }}" {{ old('withholding_account_id') == $account->id ? 'selected' : '' }}>
+                                        <option value="{{ $account->id }}" {{ old('withholding_account_id', $product->withholding_account_id) == $account->id ? 'selected' : '' }}>
                                             {{ $account->account_name }} ({{ $account->account_code }})
                                         </option>
                                         @endforeach
@@ -374,7 +379,7 @@
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Withholding Percentage</label>
                                     <input type="number" step="0.01" name="withholding_percentage" class="form-control @error('withholding_percentage') is-invalid @enderror"
-                                        value="{{ old('withholding_percentage') }}">
+                                        value="{{ old('withholding_percentage', $product->withholding_percentage) }}">
                                     @error('withholding_percentage') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
@@ -383,7 +388,7 @@
                                     <select name="riba_payable_journal_id" class="form-select @error('riba_payable_journal_id') is-invalid @enderror" required>
                                         <option value="">Select Riba Payable Journal</option>
                                         @foreach($journalReferences as $journalRef)
-                                        <option value="{{ $journalRef->id }}" {{ old('riba_payable_journal_id') == $journalRef->id ? 'selected' : '' }}>
+                                        <option value="{{ $journalRef->id }}" {{ old('riba_payable_journal_id', $product->riba_payable_journal_id) == $journalRef->id ? 'selected' : '' }}>
                                             {{ $journalRef->name }} ({{ $journalRef->reference }})
                                         </option>
                                         @endforeach
@@ -402,7 +407,7 @@
                             <i class="bx bx-x me-1"></i> Cancel
                         </a>
                         <button type="submit" class="btn btn-primary">
-                            <i class="bx bx-save me-1"></i> Save Product
+                            <i class="bx bx-save me-1"></i> Update Product
                         </button>
                     </div>
                 </div>
@@ -442,27 +447,14 @@
         
         // Handle form submission via AJAX
         const form = document.getElementById('contributionProductForm');
-        const submitBtn = document.getElementById('submitBtn');
-        const cancelBtn = document.getElementById('cancelBtn');
-        const btnText = submitBtn.querySelector('.btn-text');
-        const originalText = btnText.textContent;
         
         form.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            // Disable buttons
-            submitBtn.disabled = true;
-            cancelBtn.style.pointerEvents = 'none';
-            cancelBtn.style.opacity = '0.6';
-            
-            // Show loading state
-            btnText.textContent = 'Saving...';
-            submitBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> <span class="btn-text">Saving...</span>';
-            
             // Show SweetAlert loading
             Swal.fire({
                 title: 'Processing...',
-                html: 'Please wait while we save the contribution product.',
+                html: 'Please wait while we update the contribution product.',
                 allowOutsideClick: false,
                 allowEscapeKey: false,
                 didOpen: () => {
@@ -495,45 +487,17 @@
                 }
             })
             .then(data => {
-                if (data.redirect) {
-                    // Only redirect if explicitly requested
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Success!',
-                        text: data.message || 'Contribution product created successfully!',
-                        timer: 2000,
-                        showConfirmButton: false
-                    }).then(() => {
-                        window.location.href = '{{ route("contributions.products.index") }}';
-                    });
-                } else if (data.success) {
-                    // For AJAX requests, just show success message without redirect
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Success!',
-                        text: data.message || 'Contribution product created successfully!',
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                } else {
-                    // Fallback for other success cases
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Success!',
-                        text: data.message || 'Contribution product created successfully!',
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                }
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success!',
+                    text: data.message || 'Contribution product updated successfully!',
+                    timer: 2000,
+                    showConfirmButton: false
+                }).then(() => {
+                    window.location.href = '{{ route("contributions.products.index") }}';
+                });
             })
             .catch(error => {
-                // Re-enable buttons
-                submitBtn.disabled = false;
-                cancelBtn.style.pointerEvents = 'auto';
-                cancelBtn.style.opacity = '1';
-                btnText.textContent = originalText;
-                submitBtn.innerHTML = '<i class="bx bx-save me-1"></i> <span class="btn-text">' + originalText + '</span>';
-                
                 // Reset global form handler state if it exists
                 if (form._resetSubmitState) {
                     form._resetSubmitState();
@@ -562,7 +526,7 @@
                     Swal.fire({
                         icon: 'error',
                         title: 'Error',
-                        text: error.message || 'An error occurred while saving the product. Please try again.',
+                        text: error.message || 'An error occurred while updating the product. Please try again.',
                         confirmButtonText: 'OK'
                     });
                 }

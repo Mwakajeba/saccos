@@ -60,3 +60,74 @@
         <p class="mb-0">Copyright © 2021. All right reserved.</p>
     </footer>
 @endsection
+
+@push('scripts')
+<script>
+    $(document).ready(function() {
+        // Initialize Select2 for chart account
+        $('#chart_account_id').select2({
+            placeholder: 'Choose Chart Account',
+            allowClear: true,
+            width: '100%',
+            theme: 'bootstrap-5'
+        });
+
+        // Form submission handler
+        $('#bankAccountForm').on('submit', function(e) {
+            const form = $(this)[0];
+            const $form = $(this);
+            const submitBtn = $('#submitBtn');
+            const originalHTML = submitBtn.html();
+
+            // Prevent multiple submissions
+            if (form.dataset.submitting === 'true') {
+                e.preventDefault();
+                return false;
+            }
+
+            // Sync Select2 values before submission
+            if ($('#chart_account_id').length && $('#chart_account_id').data('select2')) {
+                $('#chart_account_id').trigger('change');
+            }
+
+            // Ensure CSRF token is present
+            let csrfToken = $form.find('input[name="_token"]').val();
+            if (!csrfToken) {
+                csrfToken = $('meta[name="csrf-token"]').attr('content');
+                if (csrfToken) {
+                    // Remove any existing duplicate token
+                    $form.find('input[name="_token"]').remove();
+                    // Add the token
+                    $form.prepend('<input type="hidden" name="_token" value="' + csrfToken + '">');
+                }
+            }
+
+            // Ensure method field is present for PUT requests
+            if ($form.find('input[name="_method"]').length === 0 && $form.attr('method').toUpperCase() === 'POST') {
+                // Check if this is an update form
+                const action = $form.attr('action');
+                if (action && action.includes('/edit') || action.includes('update')) {
+                    $form.append('<input type="hidden" name="_method" value="PUT">');
+                }
+            }
+
+            // Mark form as submitting and show loading state
+            form.dataset.submitting = 'true';
+            submitBtn.prop('disabled', true);
+            submitBtn.html('<i class="bx bx-loader-alt bx-spin me-1"></i> Processing...');
+
+            // Allow form to submit normally - don't prevent default
+            // The form will submit with all the data including CSRF token
+
+            // Reset state on timeout (in case submission fails silently)
+            setTimeout(function() {
+                if (form.dataset.submitting === 'true') {
+                    form.dataset.submitting = 'false';
+                    submitBtn.prop('disabled', false);
+                    submitBtn.html(originalHTML);
+                }
+            }, 30000);
+        });
+    });
+</script>
+@endpush

@@ -143,7 +143,7 @@ class BankAccountController extends Controller
 
         $bankAccount->update($request->all());
 
-        return redirect()->route('accounting.bank-accounts')
+        return redirect()->route('bank-accounts')
             ->with('success', 'Bank account updated successfully!');
     }
 
@@ -163,12 +163,12 @@ class BankAccountController extends Controller
         // Prevent delete if used in GL Transactions
         $hasGlTransactions = $bankAccount->glTransactions()->exists();
         if ($hasGlTransactions) {
-            return redirect()->route('accounting.bank-accounts')->withErrors(['This bank account cannot be deleted because its chart account is used in GL Transactions.']);
+            return redirect()->route('bank-accounts')->withErrors(['This bank account cannot be deleted because its chart account is used in GL Transactions.']);
         }
 
         try {
             $bankAccount->delete();
-            return redirect()->route('accounting.bank-accounts')->with('success', 'Bank account deleted successfully!');
+            return redirect()->route('bank-accounts')->with('success', 'Bank account deleted successfully!');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to delete bank account. Please try again.');
         }

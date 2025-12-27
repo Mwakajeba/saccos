@@ -57,6 +57,44 @@ class CustomerController extends Controller
         return $phoneNumber;
     }
 
+    /**
+     * Format phone number to ensure +255 prefix
+     * - Input should be 9 digits (from form input)
+     * - Returns +255 followed by the 9 digits
+     */
+    private function formatPhoneNumberWithPrefix($phoneNumber)
+    {
+        if (empty($phoneNumber)) {
+            return $phoneNumber;
+        }
+
+        // Remove any spaces, dashes, or special characters
+        $phoneNumber = preg_replace("/[^0-9]/", "", $phoneNumber);
+
+        // If it's 9 digits, add +255 prefix
+        if (strlen($phoneNumber) === 9) {
+            return "+255" . $phoneNumber;
+        }
+
+        // If it already starts with +255, return as is
+        if (substr($phoneNumber, 0, 4) === "+255") {
+            return $phoneNumber;
+        }
+
+        // If it starts with 255, add +
+        if (substr($phoneNumber, 0, 3) === "255" && strlen($phoneNumber) === 12) {
+            return "+" . $phoneNumber;
+        }
+
+        // If it starts with 0, remove 0 and add +255
+        if (substr($phoneNumber, 0, 1) === "0" && strlen($phoneNumber) === 10) {
+            return "+255" . substr($phoneNumber, 1);
+        }
+
+        // Return as is (shouldn't happen with proper validation)
+        return $phoneNumber;
+    }
+
     // Display all customers
     public function index()
     {
@@ -143,18 +181,31 @@ class CustomerController extends Controller
     // Show form to create a new customer
     public function create()
     {
-        $branchId = auth()->user()->branch_id;
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
         $loanOfficers = User::where('branch_id', $branchId)->get();
         $filetypes = Filetype::orderBy('name')->get();
-        $collateralTypes = CashCollateralType::where('is_active', 1)->get(); // active types only
         $branches = Branch::all();
         $companies = Company::all();
         $registrars = User::all();
         $regions = Region::all();
         $groups = \App\Models\Group::where('branch_id', $branchId)->where('id', '!=', 1)->get();
 
+        // Get share products (share products don't have branch_id/company_id)
+        $shareProducts = \App\Models\ShareProduct::where('is_active', true)
+            ->orderBy('share_name')
+            ->get();
+        
+        // Get contribution products for the current branch/company
+        $contributionProducts = \App\Models\ContributionProduct::where('is_active', true)
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->orderBy('product_name')
+            ->get();
+
         $customer = null;
-        return view('customers.create', compact('branches', 'companies', 'registrars', 'regions', 'loanOfficers', 'collateralTypes', 'filetypes', 'groups', 'customer'));
+        return view('customers.create', compact('branches', 'companies', 'registrars', 'regions', 'loanOfficers', 'filetypes', 'groups', 'customer', 'shareProducts', 'contributionProducts'));
     }
 
     // Store a new customer
@@ -164,9 +215,9 @@ class CustomerController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
-            'phone1' => 'required|string|max:20',
-            'phone2' => 'nullable|string|max:20',
-            'dob' => 'required|date',
+            'phone1' => ['required', 'string', 'regex:/^\+255[0-9]{9}$/'],
+            'phone2' => ['nullable', 'string', 'regex:/^\+255[0-9]{9}$/'],
+            'dob' => ['required', 'date', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
             'sex' => 'required|in:M,F',
             'region_id' => 'required|exists:regions,id',
             'district_id' => 'required|exists:districts,id',
@@ -180,8 +231,10 @@ class CustomerController extends Controller
             'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
             'loan_officer_ids' => 'nullable|array',
             'loan_officer_ids.*' => 'exists:users,id',
-            'has_cash_collateral' => 'nullable|boolean',
-            'collateral_type_id' => 'nullable|exists:cash_collateral_types,id',
+            'has_shares' => 'nullable|boolean',
+            'share_product_id' => 'nullable|required_if:has_shares,1|exists:share_products,id',
+            'has_contributions' => 'nullable|boolean',
+            'contribution_product_id' => 'nullable|required_if:has_contributions,1|exists:contribution_products,id',
 
             // Dynamic filetypes + documents
             'filetypes' => 'nullable|array',
@@ -192,12 +245,22 @@ class CustomerController extends Controller
 
         $validated = $request->validate($rules);
 
+        // Validate shares and contributions
+        if ($request->has('has_shares') && !$request->share_product_id) {
+            return back()->withErrors(['share_product_id' => 'Please select a share product when creating share account.'])->withInput();
+        }
+
+        if ($request->has('has_contributions') && !$request->contribution_product_id) {
+            return back()->withErrors(['contribution_product_id' => 'Please select a contribution product when creating contribution account.'])->withInput();
+        }
+
         // Prepare customer data
-        $data = $request->except(['customerNo', 'loan_officer_ids', 'collateral_type_id', 'filetypes', 'documents', 'group_id']);
-        // Format phone numbers
-        $data["phone1"] = $this->formatPhoneNumber($data["phone1"]);
+        $data = $request->except(['customerNo', 'loan_officer_ids', 'filetypes', 'documents', 'group_id', 'has_shares', 'share_product_id', 'has_contributions', 'contribution_product_id']);
+        
+        // Format phone numbers - ensure +255 prefix
+        $data["phone1"] = $this->formatPhoneNumberWithPrefix($data["phone1"]);
         if (!empty($data["phone2"])) {
-            $data["phone2"] = $this->formatPhoneNumber($data["phone2"]);
+            $data["phone2"] = $this->formatPhoneNumberWithPrefix($data["phone2"]);
         }
         $data['category'] = $request->category;
         $password = '1234567890';
@@ -209,7 +272,6 @@ class CustomerController extends Controller
         $data['company_id'] = auth()->user()->company_id;
         $data['registrar'] = auth()->id();
         $data['dateRegistered'] = $date;
-        $data['has_cash_collateral'] = $request->has('has_cash_collateral');
 
         // Upload photo
         if ($request->hasFile('photo')) {
@@ -262,14 +324,40 @@ class CustomerController extends Controller
                 }
             }
 
-            // Add cash collateral
-            if ($request->has('has_cash_collateral') && $request->input('collateral_type_id')) {
-                \App\Models\CashCollateral::create([
+            // Create share account if selected
+            if ($request->has('has_shares') && $request->share_product_id) {
+                $shareProduct = \App\Models\ShareProduct::find($request->share_product_id);
+                $accountNumber = $this->generateShareAccountNumber();
+                
+                \App\Models\ShareAccount::create([
                     'customer_id' => $customer->id,
-                    'type_id' => $request->input('collateral_type_id'),
-                    'amount' => 0,
+                    'share_product_id' => $request->share_product_id,
+                    'account_number' => $accountNumber,
+                    'share_balance' => 0,
+                    'nominal_value' => $shareProduct->nominal_price ?? 0,
+                    'opening_date' => now()->toDateString(),
+                    'status' => 'active',
                     'branch_id' => auth()->user()->branch_id,
                     'company_id' => auth()->user()->company_id,
+                    'created_by' => auth()->id(),
+                    'updated_by' => auth()->id(),
+                ]);
+            }
+
+            // Create contribution account if selected
+            if ($request->has('has_contributions') && $request->contribution_product_id) {
+                $accountNumber = $this->generateContributionAccountNumber();
+                
+                \App\Models\ContributionAccount::create([
+                    'customer_id' => $customer->id,
+                    'contribution_product_id' => $request->contribution_product_id,
+                    'account_number' => $accountNumber,
+                    'balance' => 0,
+                    'opening_date' => now()->toDateString(),
+                    'branch_id' => auth()->user()->branch_id,
+                    'company_id' => auth()->user()->company_id,
+                    'created_by' => auth()->id(),
+                    'updated_by' => auth()->id(),
                 ]);
             }
 
@@ -312,7 +400,7 @@ class CustomerController extends Controller
             abort(404);
         }
 
-        $customer = Customer::with('collaterals.type', 'loans', 'loanOfficers', 'filetypes')->findOrFail($id);
+        $customer = Customer::with('collaterals.type', 'loans', 'loanOfficers', 'filetypes', 'shareAccounts.shareProduct', 'contributionAccounts.contributionProduct', 'nextOfKin')->findOrFail($id);
 
         return view('customers.show', compact('customer'));
     }
@@ -325,17 +413,31 @@ class CustomerController extends Controller
             abort(404);
         }
         $customer = Customer::findOrFail($id);
-        $branchId = auth()->user()->branch_id;
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
         $loanOfficers = User::where('branch_id', $branchId)->get();
-        $collateralTypes = \App\Models\CashCollateralType::where('is_active', 1)->get();
         $branches = \App\Models\Branch::all();
         $companies = \App\Models\Company::all();
         $registrars = \App\Models\User::all();
         $regions = \App\Models\Region::all();
         $filetypes = \App\Models\Filetype::orderBy('name')->get();
         $groups = \App\Models\Group::where('branch_id', $branchId)->get();
+
+        // Get share products (share products don't have branch_id/company_id)
+        $shareProducts = \App\Models\ShareProduct::where('is_active', true)
+            ->orderBy('share_name')
+            ->get();
+        
+        // Get contribution products for the current branch/company
+        $contributionProducts = \App\Models\ContributionProduct::where('is_active', true)
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->orderBy('product_name')
+            ->get();
+
         $customer->load('loanOfficers', 'filetypes');
-        return view('customers.edit', compact('branches', 'companies', 'registrars', 'regions', 'loanOfficers', 'collateralTypes', 'customer', 'filetypes', 'groups'));
+        return view('customers.edit', compact('branches', 'companies', 'registrars', 'regions', 'loanOfficers', 'customer', 'filetypes', 'groups', 'shareProducts', 'contributionProducts'));
     }
 
     // Update customer data
@@ -546,8 +648,23 @@ class CustomerController extends Controller
     // Show bulk upload form
     public function bulkUpload()
     {
-        $collateralTypes = CashCollateralType::where('is_active', 1)->get();
-        return view('customers.bulk-upload', compact('collateralTypes'));
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+        
+        // Get share products (share products don't have branch_id/company_id)
+        $shareProducts = \App\Models\ShareProduct::where('is_active', true)
+            ->orderBy('share_name')
+            ->get();
+        
+        // Get contribution products for the current branch/company
+        $contributionProducts = \App\Models\ContributionProduct::where('is_active', true)
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->orderBy('product_name')
+            ->get();
+        
+        return view('customers.bulk-upload', compact('shareProducts', 'contributionProducts'));
     }
 
     // Process bulk upload
@@ -555,12 +672,18 @@ class CustomerController extends Controller
     {
         $request->validate([
             'csv_file' => 'required|file|mimes:csv,txt|max:5120', // 5MB max
-            'has_cash_collateral' => 'nullable|boolean',
-            'collateral_type_id' => 'nullable|exists:cash_collateral_types,id',
+            'has_shares' => 'nullable|boolean',
+            'share_product_id' => 'nullable|required_if:has_shares,1|exists:share_products,id',
+            'has_contributions' => 'nullable|boolean',
+            'contribution_product_id' => 'nullable|required_if:has_contributions,1|exists:contribution_products,id',
         ]);
 
-        if ($request->has('has_cash_collateral') && !$request->collateral_type_id) {
-            return back()->withErrors(['collateral_type_id' => 'Please select a collateral type when applying cash collateral.']);
+        if ($request->has('has_shares') && !$request->share_product_id) {
+            return back()->withErrors(['share_product_id' => 'Please select a share product when applying shares.']);
+        }
+
+        if ($request->has('has_contributions') && !$request->contribution_product_id) {
+            return back()->withErrors(['contribution_product_id' => 'Please select a contribution product when applying contributions.']);
         }
 
         try {
@@ -629,22 +752,48 @@ class CustomerController extends Controller
                         'company_id' => auth()->user()->company_id,
                         'registrar' => auth()->id(),
                         'dateRegistered' => now()->toDateString(),
-                        'has_cash_collateral' => $request->has('has_cash_collateral'),
                         'category' => 'Borrower', // Always assign Borrower in bulk upload
                     ];
 
                     $customer = Customer::create($customerData);
 
-                    // Add cash collateral if selected
-                    if ($request->has('has_cash_collateral') && $request->collateral_type_id) {
-                        \App\Models\CashCollateral::create([
+                    // Create share account if selected
+                    if ($request->has('has_shares') && $request->share_product_id) {
+                        $shareProduct = \App\Models\ShareProduct::find($request->share_product_id);
+                        $accountNumber = $this->generateShareAccountNumber();
+                        
+                        \App\Models\ShareAccount::create([
                             'customer_id' => $customer->id,
-                            'type_id' => $request->collateral_type_id,
-                            'amount' => 0,
+                            'share_product_id' => $request->share_product_id,
+                            'account_number' => $accountNumber,
+                            'share_balance' => 0,
+                            'nominal_value' => $shareProduct->nominal_price ?? 0,
+                            'opening_date' => now()->toDateString(),
+                            'status' => 'active',
                             'branch_id' => auth()->user()->branch_id,
                             'company_id' => auth()->user()->company_id,
+                            'created_by' => auth()->id(),
+                            'updated_by' => auth()->id(),
                         ]);
                     }
+
+                    // Create contribution account if selected
+                    if ($request->has('has_contributions') && $request->contribution_product_id) {
+                        $accountNumber = $this->generateContributionAccountNumber();
+                        
+                        \App\Models\ContributionAccount::create([
+                            'customer_id' => $customer->id,
+                            'contribution_product_id' => $request->contribution_product_id,
+                            'account_number' => $accountNumber,
+                            'balance' => 0,
+                            'opening_date' => now()->toDateString(),
+                            'branch_id' => auth()->user()->branch_id,
+                            'company_id' => auth()->user()->company_id,
+                            'created_by' => auth()->id(),
+                            'updated_by' => auth()->id(),
+                        ]);
+                    }
+
                     //assign all member to the individual group - check if customer is already in a group first
                     $existingMembership = DB::table('group_members')->where('customer_id', $customer->id)->first();
                     if (!$existingMembership) {
@@ -673,8 +822,11 @@ class CustomerController extends Controller
             DB::commit();
 
             $message = "Successfully uploaded {$successCount} customers.";
-            if ($request->has('has_cash_collateral')) {
-                $message .= " Cash collateral applied to all customers.";
+            if ($request->has('has_shares')) {
+                $message .= " Share accounts created for all customers.";
+            }
+            if ($request->has('has_contributions')) {
+                $message .= " Contribution accounts created for all customers.";
             }
 
             return redirect()->route('customers.index')->with('success', $message);
@@ -1054,4 +1206,134 @@ class CustomerController extends Controller
         }, $filename);
     }
 
+    /**
+     * Generate a unique share account number
+     */
+    private function generateShareAccountNumber()
+    {
+        do {
+            $accountNumber = 'SA' . strtoupper(\Illuminate\Support\Str::random(8));
+        } while (\App\Models\ShareAccount::where('account_number', $accountNumber)->exists());
+
+        return $accountNumber;
+    }
+
+    /**
+     * Generate a unique 16-character contribution account number
+     */
+    private function generateContributionAccountNumber()
+    {
+        do {
+            $accountNumber = 'CA' . strtoupper(\Illuminate\Support\Str::random(14));
+        } while (\App\Models\ContributionAccount::where('account_number', $accountNumber)->exists());
+
+        return $accountNumber;
+    }
+
+    /**
+     * Store a next of kin for a customer
+     */
+    public function storeNextOfKin(Request $request, $encodedCustomerId)
+    {
+        $customerId = Hashids::decode($encodedCustomerId)[0] ?? null;
+        
+        if (!$customerId) {
+            return response()->json(['error' => 'Customer not found'], 404);
+        }
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'relationship' => 'required|string|max:255',
+            'phone' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'address' => 'nullable|string|max:500',
+            'id_type' => 'nullable|string|max:255',
+            'id_number' => 'nullable|string|max:255',
+            'date_of_birth' => 'nullable|date',
+            'gender' => 'nullable|in:M,F',
+            'notes' => 'nullable|string',
+        ]);
+
+        $nextOfKin = \App\Models\NextOfKin::create([
+            'customer_id' => $customerId,
+            'name' => $request->name,
+            'relationship' => $request->relationship,
+            'phone' => $request->phone,
+            'email' => $request->email,
+            'address' => $request->address,
+            'id_type' => $request->id_type,
+            'id_number' => $request->id_number,
+            'date_of_birth' => $request->date_of_birth,
+            'gender' => $request->gender,
+            'notes' => $request->notes,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Next of kin added successfully',
+            'nextOfKin' => $nextOfKin
+        ]);
+    }
+
+    /**
+     * Update a next of kin
+     */
+    public function updateNextOfKin(Request $request, $encodedCustomerId, $encodedNextOfKinId)
+    {
+        $customerId = Hashids::decode($encodedCustomerId)[0] ?? null;
+        $nextOfKinId = Hashids::decode($encodedNextOfKinId)[0] ?? null;
+        
+        if (!$customerId || !$nextOfKinId) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+
+        $nextOfKin = \App\Models\NextOfKin::where('id', $nextOfKinId)
+            ->where('customer_id', $customerId)
+            ->firstOrFail();
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'relationship' => 'required|string|max:255',
+            'phone' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'address' => 'nullable|string|max:500',
+            'id_type' => 'nullable|string|max:255',
+            'id_number' => 'nullable|string|max:255',
+            'date_of_birth' => 'nullable|date',
+            'gender' => 'nullable|in:M,F',
+            'notes' => 'nullable|string',
+        ]);
+
+        $nextOfKin->update($request->all());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Next of kin updated successfully',
+            'nextOfKin' => $nextOfKin
+        ]);
+    }
+
+    /**
+     * Delete a next of kin
+     */
+    public function deleteNextOfKin($encodedCustomerId, $encodedNextOfKinId)
+    {
+        $customerId = Hashids::decode($encodedCustomerId)[0] ?? null;
+        $nextOfKinId = Hashids::decode($encodedNextOfKinId)[0] ?? null;
+        
+        if (!$customerId || !$nextOfKinId) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+
+        $nextOfKin = \App\Models\NextOfKin::where('id', $nextOfKinId)
+            ->where('customer_id', $customerId)
+            ->firstOrFail();
+
+        $nextOfKin->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Next of kin deleted successfully'
+        ]);
+    }
 }

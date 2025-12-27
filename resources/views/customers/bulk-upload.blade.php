@@ -47,7 +47,7 @@
                                                 <li>Fill in the customer data following the format</li>
                                                 <li>Save as CSV format</li>
                                                 <li>Upload the file below</li>
-                                                <li>Select cash deposit options if needed</li>
+                                                <li>Select shares or contributions options if needed</li>
                                             </ul>
                                         </div>
                                     </div>
@@ -90,7 +90,7 @@
 
                             <!-- Upload Form -->
                             <form action="{{ route('customers.bulk-upload.store') }}" method="POST"
-                                enctype="multipart/form-data" id="bulkUploadForm">
+                                enctype="multipart/form-data" id="bulkUploadForm" data-has-custom-handler="true">
                                 @csrf
 
                                 <div class="row">
@@ -117,11 +117,11 @@
                                         </div>
                                     </div>
 
-                                    <!-- Cash Deposit Options -->
+                                    <!-- Shares Options -->
                                     <div class="col-md-12 mb-4">
                                         <div class="card">
                                             <div class="card-header">
-                                                <h6 class="mb-0"><i class="bx bx-money me-2"></i>Cash Deposit Options
+                                                <h6 class="mb-0"><i class="bx bx-bar-chart-square me-2"></i>Shares Options
                                                 </h6>
                                             </div>
                                             <div class="card-body">
@@ -129,21 +129,60 @@
                                                     <div class="col-md-6 mb-3">
                                                         <div class="form-check">
                                                             <input type="checkbox" class="form-check-input" value="1"
-                                                                name="has_cash_collateral" id="has_cash_collateral" checked>
-                                                            <label class="form-check-label" for="has_cash_collateral">
-                                                                Apply Cash Deposit to All Customers
+                                                                name="has_shares" id="has_shares">
+                                                            <label class="form-check-label" for="has_shares">
+                                                                Create Share Accounts for All Customers
                                                             </label>
                                                         </div>
                                                     </div>
 
-                                                    <div class="col-md-6 mb-3" id="collateral-type-container">
-                                                        <label class="form-label">Deposit Type</label>
-                                                        <select name="collateral_type_id" class="form-select">
-                                                            <option value="">Select Deposit Type</option>
-                                                            @foreach($collateralTypes as $index => $type)
-                                                                <option value="{{ $type->id }}" {{ $index === 0 ? 'selected' : '' }}>{{ $type->name }}</option>
+                                                    <div class="col-md-6 mb-3" id="share-product-container" style="display: none;">
+                                                        <label class="form-label">Share Product <span class="text-danger">*</span></label>
+                                                        <select name="share_product_id" id="share_product_id" class="form-select @error('share_product_id') is-invalid @enderror">
+                                                            <option value="">Select Share Product</option>
+                                                            @foreach($shareProducts as $product)
+                                                                <option value="{{ $product->id }}">{{ $product->share_name }}</option>
                                                             @endforeach
                                                         </select>
+                                                        @error('share_product_id')
+                                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                        @enderror
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Contributions Options -->
+                                    <div class="col-md-12 mb-4">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h6 class="mb-0"><i class="bx bx-donate-heart me-2"></i>Contributions Options
+                                                </h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="row">
+                                                    <div class="col-md-6 mb-3">
+                                                        <div class="form-check">
+                                                            <input type="checkbox" class="form-check-input" value="1"
+                                                                name="has_contributions" id="has_contributions">
+                                                            <label class="form-check-label" for="has_contributions">
+                                                                Create Contribution Accounts for All Customers
+                                                            </label>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-md-6 mb-3" id="contribution-product-container" style="display: none;">
+                                                        <label class="form-label">Contribution Product <span class="text-danger">*</span></label>
+                                                        <select name="contribution_product_id" id="contribution_product_id" class="form-select @error('contribution_product_id') is-invalid @enderror">
+                                                            <option value="">Select Contribution Product</option>
+                                                            @foreach($contributionProducts as $product)
+                                                                <option value="{{ $product->id }}">{{ $product->product_name }} ({{ $product->category }})</option>
+                                                            @endforeach
+                                                        </select>
+                                                        @error('contribution_product_id')
+                                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                        @enderror
                                                     </div>
                                                 </div>
                                             </div>
@@ -173,27 +212,79 @@
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const checkbox = document.querySelector('#has_cash_collateral');
-            const collateralContainer = document.querySelector('#collateral-type-container');
+            const sharesCheckbox = document.querySelector('#has_shares');
+            const shareProductContainer = document.querySelector('#share-product-container');
+            const contributionsCheckbox = document.querySelector('#has_contributions');
+            const contributionProductContainer = document.querySelector('#contribution-product-container');
             const form = document.querySelector('#bulkUploadForm');
             const submitBtn = document.querySelector('#submitBtn');
             const submitText = document.querySelector('#submitText');
 
-            // Show/hide collateral type
-            function toggleCollateralField() {
-                if (checkbox.checked) {
-                    collateralContainer.style.display = 'block';
+            // Show/hide share product
+            function toggleShareProductField() {
+                if (sharesCheckbox.checked) {
+                    shareProductContainer.style.display = 'block';
+                    document.querySelector('select[name="share_product_id"]').required = true;
                 } else {
-                    collateralContainer.style.display = 'none';
+                    shareProductContainer.style.display = 'none';
+                    document.querySelector('select[name="share_product_id"]').required = false;
+                    document.querySelector('select[name="share_product_id"]').value = '';
                 }
             }
 
-            checkbox.addEventListener('change', toggleCollateralField);
+            // Show/hide contribution product
+            function toggleContributionProductField() {
+                if (contributionsCheckbox.checked) {
+                    contributionProductContainer.style.display = 'block';
+                    document.querySelector('select[name="contribution_product_id"]').required = true;
+                } else {
+                    contributionProductContainer.style.display = 'none';
+                    document.querySelector('select[name="contribution_product_id"]').required = false;
+                    document.querySelector('select[name="contribution_product_id"]').value = '';
+                }
+            }
+
+            // Event listeners
+            sharesCheckbox.addEventListener('change', toggleShareProductField);
+            contributionsCheckbox.addEventListener('change', toggleContributionProductField);
+
             // Initialize the state on page load
-            toggleCollateralField();
+            toggleShareProductField();
+            toggleContributionProductField();
 
             // Handle form submission
-            form.addEventListener('submit', function () {
+            form.addEventListener('submit', function (e) {
+                // Validate shares checkbox
+                if (sharesCheckbox.checked && !document.querySelector('select[name="share_product_id"]').value) {
+                    e.preventDefault();
+                    Swal.fire({
+                        title: 'Validation Error',
+                        text: 'Please select a Share Product when Shares option is checked.',
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                    return false;
+                }
+
+                // Validate contributions checkbox
+                if (contributionsCheckbox.checked && !document.querySelector('select[name="contribution_product_id"]').value) {
+                    e.preventDefault();
+                    Swal.fire({
+                        title: 'Validation Error',
+                        text: 'Please select a Contribution Product when Contributions option is checked.',
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                    return false;
+                }
+
+                // Prevent multiple submissions
+                if (form.dataset.submitting === 'true') {
+                    e.preventDefault();
+                    return false;
+                }
+
+                form.dataset.submitting = 'true';
                 submitBtn.disabled = true;
                 submitText.textContent = 'Uploading...';
                 submitBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Uploading...';

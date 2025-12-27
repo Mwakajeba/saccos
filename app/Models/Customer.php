@@ -142,6 +142,21 @@ class Customer extends Model
         return 20000000;
     }
 
+    public function contributionAccounts()
+    {
+        return $this->hasMany(ContributionAccount::class);
+    }
+
+    public function nextOfKin()
+    {
+        return $this->hasMany(NextOfKin::class);
+    }
+
+    public function shareAccounts()
+    {
+        return $this->hasMany(ShareAccount::class);
+    }
+
 
 
 }

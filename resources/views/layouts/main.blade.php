@@ -249,6 +249,223 @@
     <!-- App JS -->
     <script src="{{ asset('assets/js/app.js') }}"></script>
 
+    <!-- Global Form Submit Handler with Loading Spinner -->
+    <script>
+        (function() {
+            'use strict';
+            
+            /**
+             * Initialize form submit button loading states
+             * Prevents double-clicking and shows loading spinner
+             */
+            function initFormSubmitHandlers() {
+                // Find all forms with submit buttons
+                document.querySelectorAll('form').forEach(function(form) {
+                    // Skip if form already has custom submit handler (has data attribute)
+                    if (form.dataset.hasCustomHandler === 'true' || form.hasAttribute('data-has-custom-handler')) {
+                        return;
+                    }
+                    
+                    // Find submit buttons in this form
+                    const submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+                    
+                    if (submitButtons.length === 0) {
+                        return;
+                    }
+                    
+                    // Track if form is submitting
+                    let isSubmitting = false;
+                    
+                    // Store original button states
+                    const buttonStates = new Map();
+                    submitButtons.forEach(function(btn) {
+                        buttonStates.set(btn, {
+                            originalHTML: btn.innerHTML || btn.value,
+                            originalDisabled: btn.disabled,
+                            originalText: btn.textContent || btn.value
+                        });
+                    });
+                    
+                    form.addEventListener('submit', function(e) {
+                        // Prevent multiple submissions
+                        if (isSubmitting) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return false;
+                        }
+                        
+                        // Mark as submitting
+                        isSubmitting = true;
+                        
+                        // Disable all submit buttons and show loading state
+                        submitButtons.forEach(function(btn) {
+                            const state = buttonStates.get(btn);
+                            
+                            // Disable button
+                            btn.disabled = true;
+                            btn.setAttribute('aria-disabled', 'true');
+                            btn.classList.add('opacity-75', 'cursor-not-allowed');
+                            
+                            // Add loading spinner
+                            if (btn.tagName === 'BUTTON') {
+                                const originalHTML = state.originalHTML;
+                                // Check if button already has spinner
+                                if (!originalHTML.includes('bx-loader-alt') && !originalHTML.includes('bx-spin')) {
+                                    // Preserve button structure if it has btn-text span
+                                    if (originalHTML.includes('btn-text')) {
+                                        const btnTextSpan = btn.querySelector('.btn-text');
+                                        if (btnTextSpan) {
+                                            btnTextSpan.textContent = 'Processing...';
+                                            // Add spinner before the span if not already present
+                                            if (!btn.querySelector('.bx-loader-alt')) {
+                                                const spinner = document.createElement('i');
+                                                spinner.className = 'bx bx-loader-alt bx-spin me-1';
+                                                btn.insertBefore(spinner, btnTextSpan);
+                                            }
+                                        } else {
+                                            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> <span class="btn-text">Processing...</span>';
+                                        }
+                                    } else {
+                                        btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> Processing...';
+                                    }
+                                }
+                            } else if (btn.tagName === 'INPUT') {
+                                btn.value = 'Processing...';
+                            }
+                        });
+                        
+                        // Use readonly for text inputs and textareas instead of disabled
+                        // This prevents changes but still allows values to be submitted
+                        const textInputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="number"], input[type="date"], input[type="tel"], textarea');
+                        textInputs.forEach(function(input) {
+                            if (!input.readOnly) {
+                                input.setAttribute('data-original-readonly', input.readOnly);
+                                input.readOnly = true;
+                                input.classList.add('bg-light');
+                            }
+                        });
+                        
+                        // For selects, use a visual indicator but don't disable (disabled selects don't submit values)
+                        // Instead, add a visual overlay or pointer-events-none
+                        const selects = form.querySelectorAll('select');
+                        selects.forEach(function(select) {
+                            if (!select.disabled) {
+                                select.setAttribute('data-original-disabled', select.disabled);
+                                select.style.pointerEvents = 'none';
+                                select.style.opacity = '0.6';
+                                select.classList.add('bg-light');
+                            }
+                        });
+                        
+                        // Disable checkboxes and radio buttons (these can be disabled as they have boolean values)
+                        const checkboxesRadios = form.querySelectorAll('input[type="checkbox"], input[type="radio"]');
+                        checkboxesRadios.forEach(function(input) {
+                            if (!input.disabled) {
+                                input.setAttribute('data-original-disabled', input.disabled);
+                                input.disabled = true;
+                            }
+                        });
+                        
+                        // For regular form submissions, reset on page reload/redirect
+                        // For AJAX forms, they should call form._resetSubmitState() on error
+                        
+                        // Timeout protection - re-enable after 30 seconds if still submitting
+                        const timeoutId = setTimeout(function() {
+                            if (isSubmitting) {
+                                console.warn('Form submission timeout - re-enabling form');
+                                resetFormState();
+                            }
+                        }, 30000);
+                        
+                        // Store timeout ID for cleanup
+                        form._submitTimeoutId = timeoutId;
+                    });
+                    
+                    // Reset form state function
+                    function resetFormState() {
+                        if (!isSubmitting) return; // Already reset
+                        
+                        isSubmitting = false;
+                        
+                        // Clear timeout if exists
+                        if (form._submitTimeoutId) {
+                            clearTimeout(form._submitTimeoutId);
+                            form._submitTimeoutId = null;
+                        }
+                        
+                        submitButtons.forEach(function(btn) {
+                            const state = buttonStates.get(btn);
+                            
+                            btn.disabled = state.originalDisabled;
+                            btn.removeAttribute('aria-disabled');
+                            btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                            
+                            if (btn.tagName === 'BUTTON') {
+                                btn.innerHTML = state.originalHTML;
+                            } else if (btn.tagName === 'INPUT') {
+                                btn.value = state.originalText;
+                            }
+                        });
+                        
+                        // Re-enable form inputs
+                        // Restore readonly state for text inputs
+                        form.querySelectorAll('input[type="text"], input[type="email"], input[type="number"], input[type="date"], input[type="tel"], textarea').forEach(function(input) {
+                            if (input.hasAttribute('data-original-readonly')) {
+                                input.readOnly = input.getAttribute('data-original-readonly') === 'true';
+                                input.removeAttribute('data-original-readonly');
+                                input.classList.remove('bg-light');
+                            }
+                        });
+                        
+                        // Restore select state
+                        form.querySelectorAll('select').forEach(function(select) {
+                            if (select.hasAttribute('data-original-disabled')) {
+                                select.style.pointerEvents = '';
+                                select.style.opacity = '';
+                                select.classList.remove('bg-light');
+                                select.removeAttribute('data-original-disabled');
+                            }
+                        });
+                        
+                        // Restore disabled state for checkboxes and radio buttons
+                        form.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(function(input) {
+                            if (input.hasAttribute('data-original-disabled')) {
+                                input.disabled = input.getAttribute('data-original-disabled') === 'true';
+                                input.removeAttribute('data-original-disabled');
+                            }
+                        });
+                    }
+                    
+                    // Store reset function for external access if needed
+                    form._resetSubmitState = resetFormState;
+                });
+            }
+            
+            // Initialize on DOM ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initFormSubmitHandlers);
+            } else {
+                initFormSubmitHandlers();
+            }
+            
+            // Re-initialize for dynamically added forms
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1 && (node.tagName === 'FORM' || node.querySelector('form'))) {
+                            initFormSubmitHandlers();
+                        }
+                    });
+                });
+            });
+            
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        })();
+    </script>
+
     @stack('scripts')
 </body>
 

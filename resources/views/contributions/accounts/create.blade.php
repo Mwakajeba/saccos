@@ -1,21 +1,21 @@
 @extends('layouts.main')
 
-@section('title', 'Create Share Account')
+@section('title', 'Create Contribution Account')
 
 @section('content')
 <div class="page-wrapper">
     <div class="page-content">
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
-            ['label' => 'Shares Management', 'url' => route('shares.management'), 'icon' => 'bx bx-bar-chart-square'],
-            ['label' => 'Share Accounts', 'url' => route('shares.accounts.index'), 'icon' => 'bx bx-wallet'],
+            ['label' => 'Contributions', 'url' => route('contributions.index'), 'icon' => 'bx bx-donate-heart'],
+            ['label' => 'Contribution Accounts', 'url' => route('contributions.accounts.index'), 'icon' => 'bx bx-wallet'],
             ['label' => 'Create', 'url' => '#', 'icon' => 'bx bx-plus']
         ]" />
 
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="mb-0 text-uppercase text-success">Add share account</h6>
-            <a href="{{ route('shares.accounts.index') }}" class="btn btn-success">
-                <i class="bx bx-list-ul me-1"></i> Share accounts list
+            <h6 class="mb-0 text-uppercase text-success">Add Contribution Account</h6>
+            <a href="{{ route('contributions.accounts.index') }}" class="btn btn-success">
+                <i class="bx bx-list-ul me-1"></i> Contribution Accounts List
             </a>
         </div>
         <hr />
@@ -38,8 +38,29 @@
                             </div>
                         @endif
 
-                        <form action="{{ route('shares.accounts.store') }}" method="POST" id="shareAccountForm" data-has-custom-handler="true">
+                        <form action="{{ route('contributions.accounts.store') }}" method="POST" id="contributionAccountForm" data-has-custom-handler="true">
                             @csrf
+
+                            <!-- Contribution Product Selection (at the top) -->
+                            <div class="row mb-3">
+                                <div class="col-12 mb-3">
+                                    <label class="form-label">Contribution Product <span class="text-danger">*</span></label>
+                                    <select name="contribution_product_id" 
+                                            id="contribution_product_id"
+                                            class="form-select @error('contribution_product_id') is-invalid @enderror" required>
+                                        <option value="">Select Contribution Product</option>
+                                        @foreach($products as $product)
+                                            <option value="{{ $product->id }}" 
+                                                {{ old('contribution_product_id') == $product->id ? 'selected' : '' }}>
+                                                {{ $product->product_name }} ({{ $product->category }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @error('contribution_product_id') 
+                                        <div class="invalid-feedback">{{ $message }}</div> 
+                                    @enderror
+                                </div>
+                            </div>
 
                             <!-- Opening date and Notes (only for first line) -->
                             <div class="row mb-3">
@@ -66,12 +87,12 @@
                             </div>
 
                             <!-- Form Lines Container -->
-                            <div id="shareAccountLines">
+                            <div id="contributionAccountLines">
                                 <!-- Default Line -->
-                                <div class="share-account-line mb-3 border-bottom pb-3" data-line-index="0">
+                                <div class="contribution-account-line mb-3 border-bottom pb-3" data-line-index="0">
                                     <div class="row">
                                         <!-- Member name -->
-                                        <div class="col-md-6 mb-3">
+                                        <div class="col-md-12 mb-3">
                                             <label class="form-label">Member name <span class="text-danger">*</span></label>
                                             <select name="lines[0][customer_id]" 
                                                     class="form-select customer-select @error('lines.0.customer_id') is-invalid @enderror" required>
@@ -88,24 +109,8 @@
                                             @enderror
                                         </div>
 
-                                        <!-- Share product -->
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Share product <span class="text-danger">*</span></label>
-                                            <select name="lines[0][share_product_id]" 
-                                                    class="form-select share-product-select @error('lines.0.share_product_id') is-invalid @enderror" required>
-                                                <option value="">Select account</option>
-                                                @foreach($shareProducts as $product)
-                                                    <option value="{{ $product->id }}" 
-                                                        {{ old('lines.0.share_product_id') == $product->id ? 'selected' : '' }}
-                                                        data-nominal-price="{{ $product->nominal_price }}">
-                                                        {{ $product->share_name }}
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                            @error('lines.0.share_product_id') 
-                                                <div class="invalid-feedback">{{ $message }}</div> 
-                                            @enderror
-                                        </div>
+                                        <!-- Hidden contribution_product_id for this line -->
+                                        <input type="hidden" name="lines[0][contribution_product_id]" class="line-product-id" value="{{ old('contribution_product_id') }}">
 
                                         <!-- Remove Line Button (hidden for first line) -->
                                         <div class="col-12 text-end">
@@ -153,15 +158,15 @@
                             <ul class="list-unstyled mb-0">
                                 <li class="mb-2">
                                     <i class="bx bx-check-circle text-success me-2"></i>
-                                    Select a member from the dropdown
+                                    Select a contribution product first
                                 </li>
                                 <li class="mb-2">
                                     <i class="bx bx-check-circle text-success me-2"></i>
-                                    Choose a share product for the account
+                                    Select members from the dropdown
                                 </li>
                                 <li class="mb-2">
                                     <i class="bx bx-check-circle text-success me-2"></i>
-                                    Set the opening date for the account
+                                    Set the opening date for all accounts
                                 </li>
                                 <li class="mb-2">
                                     <i class="bx bx-check-circle text-success me-2"></i>
@@ -169,7 +174,7 @@
                                 </li>
                                 <li class="mb-2">
                                     <i class="bx bx-check-circle text-success me-2"></i>
-                                    Click "Add Line" to add multiple accounts
+                                    Click "Add Line" to add more members
                                 </li>
                             </ul>
                         </div>
@@ -184,7 +189,7 @@
                             </div>
                             <div class="d-flex justify-content-between mb-2">
                                 <span class="text-muted">Active Products:</span>
-                                <strong>{{ $shareProducts->count() }}</strong>
+                                <strong>{{ $products->count() }}</strong>
                             </div>
                         </div>
 
@@ -193,7 +198,7 @@
                         <div class="alert alert-info mb-0">
                             <small>
                                 <i class="bx bx-info-circle me-1"></i>
-                                <strong>Note:</strong> Account numbers will be automatically generated when you save.
+                                <strong>Note:</strong> Account numbers (16 characters) will be automatically generated when you save.
                             </small>
                         </div>
                     </div>
@@ -209,21 +214,47 @@
     $(document).ready(function() {
         let lineIndex = 1;
 
-        // Initialize Select2 for customer and share product dropdowns
-        $('.customer-select, .share-product-select').select2({
-            placeholder: 'Select an option',
+        // Initialize Select2 for customer dropdowns
+        $('.customer-select').select2({
+            placeholder: 'Select a member',
             allowClear: true,
             width: '100%',
             theme: 'bootstrap-5'
         });
 
+        // Update all line product IDs when main product selection changes
+        $('#contribution_product_id').on('change', function() {
+            const productId = $(this).val();
+            $('.line-product-id').val(productId);
+            // Also update the hidden input for line 0
+            $('input[name="lines[0][contribution_product_id]"]').val(productId);
+        });
+        
+        // Initialize line 0 product ID on page load
+        const initialProductId = $('#contribution_product_id').val();
+        if (initialProductId) {
+            $('input[name="lines[0][contribution_product_id]"]').val(initialProductId);
+        }
+
         // Add Line Button Click Handler
         $('#addLineBtn').on('click', function() {
+            const productId = $('#contribution_product_id').val();
+            
+            if (!productId) {
+                Swal.fire({
+                    title: 'Product Required',
+                    text: 'Please select a Contribution Product first before adding lines.',
+                    icon: 'warning',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+
             const template = `
-                <div class="share-account-line mb-3 border-bottom pb-3" data-line-index="${lineIndex}">
+                <div class="contribution-account-line mb-3 border-bottom pb-3" data-line-index="${lineIndex}">
                     <div class="row">
                         <!-- Member name -->
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-12 mb-3">
                             <label class="form-label">Member name <span class="text-danger">*</span></label>
                             <select name="lines[${lineIndex}][customer_id]" 
                                     class="form-select customer-select" required>
@@ -236,19 +267,8 @@
                             </select>
                         </div>
 
-                        <!-- Share product -->
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Share product <span class="text-danger">*</span></label>
-                            <select name="lines[${lineIndex}][share_product_id]" 
-                                    class="form-select share-product-select" required>
-                                <option value="">Select account</option>
-                                @foreach($shareProducts as $product)
-                                    <option value="{{ $product->id }}" data-nominal-price="{{ $product->nominal_price }}">
-                                        {{ $product->share_name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
+                        <!-- Hidden contribution_product_id for this line -->
+                        <input type="hidden" name="lines[${lineIndex}][contribution_product_id]" class="line-product-id" value="${productId}">
 
                         <!-- Remove Line Button -->
                         <div class="col-12 text-end">
@@ -260,11 +280,11 @@
                 </div>
             `;
 
-            $('#shareAccountLines').append(template);
+            $('#contributionAccountLines').append(template);
             
-            // Initialize Select2 for new dropdowns
-            $('#shareAccountLines .share-account-line').last().find('.customer-select, .share-product-select').select2({
-                placeholder: 'Select an option',
+            // Initialize Select2 for new dropdown
+            $('#contributionAccountLines .contribution-account-line').last().find('.customer-select').select2({
+                placeholder: 'Select a member',
                 allowClear: true,
                 width: '100%',
                 theme: 'bootstrap-5'
@@ -273,17 +293,17 @@
             lineIndex++;
 
             // Show remove buttons if more than one line
-            if ($('.share-account-line').length > 1) {
+            if ($('.contribution-account-line').length > 1) {
                 $('.remove-line-btn').show();
             }
         });
 
         // Remove Line Button Click Handler
         $(document).on('click', '.remove-line-btn', function() {
-            $(this).closest('.share-account-line').remove();
+            $(this).closest('.contribution-account-line').remove();
             
             // Re-index remaining lines
-            $('#shareAccountLines .share-account-line').each(function(index) {
+            $('#contributionAccountLines .contribution-account-line').each(function(index) {
                 $(this).attr('data-line-index', index);
                 $(this).find('select, input').each(function() {
                     const name = $(this).attr('name');
@@ -294,17 +314,16 @@
             });
 
             // Hide remove buttons if only one line remains
-            if ($('.share-account-line').length <= 1) {
+            if ($('.contribution-account-line').length <= 1) {
                 $('.remove-line-btn').hide();
             }
         });
 
-        // Form submission handler - copy opening_date and notes to all lines
-        $('#shareAccountForm').on('submit', function(e) {
+        // Form submission handler - copy opening_date, notes, and product_id to all lines
+        $('#contributionAccountForm').on('submit', function(e) {
             const form = this;
             const submitBtn = $(form).find('button[type="submit"]');
             const originalHTML = submitBtn.html();
-            let isSubmitting = false;
             
             // Prevent multiple submissions
             if (form.dataset.submitting === 'true') {
@@ -312,12 +331,33 @@
                 return false;
             }
             
-            // Get opening date and notes from first line (the ones at the top)
+            // Validate product is selected
+            const productId = $('#contribution_product_id').val();
+            if (!productId) {
+                e.preventDefault();
+                Swal.fire({
+                    title: 'Validation Error',
+                    text: 'Please select a Contribution Product',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+                return false;
+            }
+
+            // Sync Select2 values to actual select elements before submission
+            $('.customer-select').each(function() {
+                $(this).trigger('change.select2');
+            });
+            
+            // Ensure line 0 has the product ID set before submission
+            $('input[name="lines[0][contribution_product_id]"]').val(productId);
+            
+            // Get opening date and notes from first line
             const openingDate = $('input[name="lines[0][opening_date]"]').val();
             const notes = $('input[name="lines[0][notes]"]').val();
 
-            // Copy opening date and notes to all additional lines as hidden inputs
-            $('.share-account-line[data-line-index!="0"]').each(function() {
+            // Copy opening date, notes, and product_id to all additional lines
+            $('.contribution-account-line[data-line-index!="0"]').each(function() {
                 const lineIndex = $(this).attr('data-line-index');
                 // Remove existing hidden inputs if any
                 $(this).find(`input[name="lines[${lineIndex}][opening_date]"]`).remove();
@@ -325,14 +365,15 @@
                 // Add hidden inputs with values from first line
                 $(this).append(`<input type="hidden" name="lines[${lineIndex}][opening_date]" value="${openingDate}">`);
                 $(this).append(`<input type="hidden" name="lines[${lineIndex}][notes]" value="${notes || ''}">`);
+                // Ensure product_id is set
+                $(this).find('.line-product-id').val(productId);
             });
 
             // Validate at least one line is filled
             let hasValidLine = false;
-            $('.share-account-line').each(function() {
+            $('.contribution-account-line').each(function() {
                 const customerId = $(this).find('.customer-select').val();
-                const shareProductId = $(this).find('.share-product-select').val();
-                if (customerId && shareProductId) {
+                if (customerId) {
                     hasValidLine = true;
                     return false; // break loop
                 }
@@ -342,11 +383,20 @@
                 e.preventDefault();
                 Swal.fire({
                     title: 'Validation Error',
-                    text: 'Please fill at least one complete line (Member name and Share product)',
+                    text: 'Please fill at least one complete line (Member name)',
                     icon: 'error',
                     confirmButtonText: 'OK'
                 });
                 return false;
+            }
+            
+            // Ensure CSRF token is present before submission
+            let csrfToken = $(form).find('input[name="_token"]').val();
+            if (!csrfToken) {
+                csrfToken = $('meta[name="csrf-token"]').attr('content');
+                if (csrfToken) {
+                    $(form).append('<input type="hidden" name="_token" value="' + csrfToken + '">');
+                }
             }
             
             // Mark form as submitting and show loading state
@@ -354,16 +404,18 @@
             submitBtn.prop('disabled', true);
             submitBtn.html('<i class="bx bx-loader-alt bx-spin me-1"></i> Processing...');
             
-            // Disable all form inputs
-            $(form).find('input, select, textarea, button').not('button[type="submit"]').prop('disabled', true);
+            // DO NOT disable form inputs - they need to be submitted with the form
+            // Disabled inputs don't get sent in form submissions
             
-            // Reset state on form error (validation errors will reload page, so this is for AJAX errors if any)
+            // Allow form to submit normally - don't prevent default
+            // The form will submit with all data including CSRF token
+            
+            // Reset state on timeout (in case submission hangs)
             setTimeout(function() {
                 if (form.dataset.submitting === 'true') {
                     form.dataset.submitting = 'false';
                     submitBtn.prop('disabled', false);
                     submitBtn.html(originalHTML);
-                    $(form).find('input, select, textarea, button').not('button[type="submit"]').prop('disabled', false);
                 }
             }, 30000); // 30 second timeout
         });
