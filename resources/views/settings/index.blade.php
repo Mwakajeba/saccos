@@ -360,6 +360,24 @@
                             </div>
                             @endrole
 
+                            <!-- Opening Balance Accounts Settings -->
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-primary">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-bar-chart-alt-2 fs-1 text-primary"></i>
+                                        </div>
+                                        <h5 class="card-title">Opening Balance Accounts</h5>
+                                        <p class="card-text">
+                                            Configure chart accounts for SHARES, SAVINGS, and DEPOSITS opening balances.
+                                        </p>
+                                        <a href="{{ route('settings.opening-balance-accounts') }}" class="btn btn-primary">
+                                            <i class="bx bx-cog me-1"></i> Configure
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
                             @endcan
                         </div>
                     </div>

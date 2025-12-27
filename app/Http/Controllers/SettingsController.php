@@ -11,6 +11,8 @@ use App\Services\AiAssistantService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use App\Models\SystemSetting;
+use App\Models\ChartAccount;
 use Vinkla\Hashids\Facades\Hashids;
 
 class SettingsController extends Controller
@@ -875,5 +877,69 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             return redirect()->route('settings.payment-voucher-approval')->with('error', 'Failed to update payment voucher approval settings: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Show opening balance accounts settings form
+     */
+    public function openingBalanceAccountsSettings()
+    {
+        // Get chart accounts for dropdown
+        $chartAccounts = ChartAccount::orderBy('account_name')->get();
+
+        // Get current settings
+        $sharesOpeningBalanceAccountId = SystemSetting::getValue('shares_opening_balance_account_id', null);
+        $savingsOpeningBalanceAccountId = SystemSetting::getValue('savings_opening_balance_account_id', null);
+        $depositsOpeningBalanceAccountId = SystemSetting::getValue('deposits_opening_balance_account_id', null);
+
+        return view('settings.opening-balance-accounts', compact(
+            'chartAccounts',
+            'sharesOpeningBalanceAccountId',
+            'savingsOpeningBalanceAccountId',
+            'depositsOpeningBalanceAccountId'
+        ));
+    }
+
+    /**
+     * Update opening balance accounts settings
+     */
+    public function updateOpeningBalanceAccountsSettings(Request $request)
+    {
+        $request->validate([
+            'shares_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
+            'savings_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
+            'deposits_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
+        ]);
+
+        // Save settings
+        SystemSetting::setValue(
+            'shares_opening_balance_account_id',
+            $request->shares_opening_balance_account_id,
+            'integer',
+            'accounting',
+            'SHARES Opening Balance Account',
+            'Chart account for SHARES opening balances'
+        );
+
+        SystemSetting::setValue(
+            'savings_opening_balance_account_id',
+            $request->savings_opening_balance_account_id,
+            'integer',
+            'accounting',
+            'SAVINGS Opening Balance Account',
+            'Chart account for SAVINGS opening balances'
+        );
+
+        SystemSetting::setValue(
+            'deposits_opening_balance_account_id',
+            $request->deposits_opening_balance_account_id,
+            'integer',
+            'accounting',
+            'DEPOSITS Opening Balance Account',
+            'Chart account for DEPOSITS opening balances'
+        );
+
+        return redirect()->route('settings.opening-balance-accounts')
+            ->with('success', 'Opening balance accounts settings updated successfully.');
     }
 }
