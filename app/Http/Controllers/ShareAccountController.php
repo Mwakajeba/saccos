@@ -108,6 +108,9 @@ class ShareAccountController extends Controller
                     // Edit action
                     $actions .= '<a href="' . route('shares.accounts.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
 
+                    // Certificate print action
+                    $actions .= '<a href="' . route('shares.accounts.certificate', $encodedId) . '" class="btn btn-sm btn-primary me-1" title="Print Certificate" target="_blank"><i class="bx bx-award"></i></a>';
+
                     // Change status action
                     $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" data-name="' . e($account->account_number) . '" data-status="' . e($account->status) . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
 
@@ -277,7 +280,7 @@ class ShareAccountController extends Controller
             // Get share product to get nominal price
             $shareProduct = ShareProduct::findOrFail($line['share_product_id']);
 
-            ShareAccount::create([
+            $account = ShareAccount::create([
                 'customer_id' => $line['customer_id'],
                 'share_product_id' => $line['share_product_id'],
                 'account_number' => $accountNumber,
@@ -291,6 +294,12 @@ class ShareAccountController extends Controller
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
             ]);
+
+            // Generate certificate number if auto-generate is enabled
+            if ($shareProduct->auto_generate_certificate) {
+                $account->certificate_number = $this->generateCertificateNumber($account);
+                $account->save();
+            }
 
             // Mark this combination as created in this batch
             $createdInBatch[$combination] = true;
@@ -575,7 +584,7 @@ class ShareAccountController extends Controller
                     $accountNumber = $this->generateAccountNumber();
 
                     // Create share account
-                    ShareAccount::create([
+                    $account = ShareAccount::create([
                         'customer_id' => $customer->id,
                         'share_product_id' => $request->share_product_id,
                         'account_number' => $accountNumber,
@@ -589,6 +598,12 @@ class ShareAccountController extends Controller
                         'created_by' => $user->id,
                         'updated_by' => $user->id,
                     ]);
+
+                    // Generate certificate number if auto-generate is enabled
+                    if ($shareProduct->auto_generate_certificate) {
+                        $account->certificate_number = $this->generateCertificateNumber($account);
+                        $account->save();
+                    }
 
                     $successCount++;
                 } catch (\Exception $e) {
@@ -630,6 +645,86 @@ class ShareAccountController extends Controller
         } while (ShareAccount::where('account_number', $accountNumber)->exists());
 
         return $accountNumber;
+    }
+
+    /**
+     * Generate certificate number for a share account
+     */
+    private function generateCertificateNumber(ShareAccount $account)
+    {
+        $product = $account->shareProduct;
+        
+        if (!$product || !$product->auto_generate_certificate) {
+            return null;
+        }
+
+        $prefix = $product->certificate_number_prefix ?? 'CERT';
+        $format = $product->certificate_number_format ?? '{PREFIX}-{YYYY}-{NUMBER}';
+        
+        // Get the year
+        $year = $account->opening_date ? $account->opening_date->format('Y') : date('Y');
+        
+        // Get the next number for this product and year
+        $lastCertificate = ShareAccount::where('share_product_id', $product->id)
+            ->whereNotNull('certificate_number')
+            ->where('certificate_number', 'like', $prefix . '-' . $year . '-%')
+            ->orderBy('certificate_number', 'desc')
+            ->first();
+        
+        $number = 1;
+        if ($lastCertificate && preg_match('/-(\d+)$/', $lastCertificate->certificate_number, $matches)) {
+            $number = (int)$matches[1] + 1;
+        }
+        
+        // Format: {PREFIX}-{YYYY}-{NUMBER} or custom format
+        $certificateNumber = str_replace(
+            ['{PREFIX}', '{YYYY}', '{YEAR}', '{NUMBER}', '{NUM}'],
+            [$prefix, $year, $year, str_pad($number, 6, '0', STR_PAD_LEFT), str_pad($number, 6, '0', STR_PAD_LEFT)],
+            $format
+        );
+        
+        // Ensure uniqueness
+        $originalCertificateNumber = $certificateNumber;
+        $counter = 1;
+        while (ShareAccount::where('certificate_number', $certificateNumber)->where('id', '!=', $account->id)->exists()) {
+            $certificateNumber = $originalCertificateNumber . '-' . $counter;
+            $counter++;
+        }
+        
+        return $certificateNumber;
+    }
+
+    /**
+     * Print certificate for a share account
+     */
+    public function printCertificate($encodedId)
+    {
+        try {
+            $account = ShareAccount::with([
+                'customer',
+                'shareProduct',
+                'company',
+                'branch'
+            ])->findOrFail(Hashids::decode($encodedId)[0]);
+
+            // Generate certificate number if not exists and auto_generate is enabled
+            if (empty($account->certificate_number) && $account->shareProduct->auto_generate_certificate) {
+                $account->certificate_number = $this->generateCertificateNumber($account);
+                $account->save();
+            }
+
+            $company = $account->company ?? Auth::user()->company;
+            
+            $pdf = Pdf::loadView('shares.accounts.certificate', compact('account', 'company'))
+                ->setPaper('a4', 'landscape');
+            
+            $filename = 'share_certificate_' . ($account->certificate_number ?? $account->account_number) . '.pdf';
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            Log::error('Share Certificate Print Error: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Failed to print certificate: ' . $e->getMessage());
+        }
     }
 
     /**

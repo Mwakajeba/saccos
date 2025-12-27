@@ -15,7 +15,7 @@ class AccountGroupSeeder extends Seeder
      */
     public function run(): void
     {
-        DB::table('account_class_groups')->insert([
+        $groups = [
             [
                 'class_id' => 1,
                 'company_id' => 1,
@@ -136,7 +136,17 @@ class AccountGroupSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+        ];
 
-        ]);
+        // Insert or update each group (prevents duplicate entry errors)
+        foreach ($groups as $group) {
+            DB::table('account_class_groups')->updateOrInsert(
+                [
+                    'name' => $group['name'],
+                    'company_id' => $group['company_id']
+                ],
+                $group
+            );
+        }
     }
 }

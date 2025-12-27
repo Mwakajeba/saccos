@@ -140,6 +140,7 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::post('accounts/import', [\App\Http\Controllers\ShareAccountController::class, 'import'])->name('accounts.import');
     Route::get('accounts/export', [\App\Http\Controllers\ShareAccountController::class, 'export'])->name('accounts.export');
     Route::patch('accounts/{encodedId}/change-status', [\App\Http\Controllers\ShareAccountController::class, 'changeStatus'])->name('accounts.change-status');
+    Route::get('accounts/{encodedId}/certificate', [\App\Http\Controllers\ShareAccountController::class, 'printCertificate'])->name('accounts.certificate');
     Route::resource('accounts', \App\Http\Controllers\ShareAccountController::class);
     
     // Share Deposits Routes (data route must come BEFORE resource to avoid route conflicts)
@@ -208,6 +209,7 @@ Route::post('/send-email-otp', [OtpEmailController::class, 'sendOtpEmail'])->nam
 Route::get('/reports', [App\Http\Controllers\ReportsController::class, 'index'])->middleware('auth')->name('reports.index');
 Route::get('/reports/loans', [App\Http\Controllers\ReportsController::class, 'loans'])->middleware('auth')->name('reports.loans');
 Route::get('/reports/customers', [App\Http\Controllers\ReportsController::class, 'customers'])->middleware('auth')->name('reports.customers');
+Route::get('/reports/shares', [App\Http\Controllers\ReportsController::class, 'shares'])->middleware('auth')->name('reports.shares');
 Route::get("/reports/customers/list", [App\Http\Controllers\Reports\CustomerListReportController::class, "index"])->middleware("auth")->name("reports.customers.list");
 Route::get("/reports/customers/list/export", [App\Http\Controllers\Reports\CustomerListReportController::class, "export"])->middleware("auth")->name("reports.customers.list.export");
 Route::get("/reports/customers/list/export-pdf", [App\Http\Controllers\Reports\CustomerListReportController::class, "exportPdf"])->middleware("auth")->name("reports.customers.list.export-pdf");
@@ -226,6 +228,13 @@ Route::get("/reports/customers/risk-assessment/export-pdf", [App\Http\Controller
 Route::get("/reports/customers/communication", [App\Http\Controllers\Reports\CustomerCommunicationReportController::class, "index"])->middleware("auth")->name("reports.customers.communication");
 Route::get("/reports/customers/communication/export", [App\Http\Controllers\Reports\CustomerCommunicationReportController::class, "export"])->middleware("auth")->name("reports.customers.communication.export");
 Route::get("/reports/customers/communication/export-pdf", [App\Http\Controllers\Reports\CustomerCommunicationReportController::class, "exportPdf"])->middleware("auth")->name("reports.customers.communication.export-pdf");
+
+// Share Reports Routes
+Route::prefix('reports/shares')->middleware('auth')->name('reports.shares.')->group(function () {
+    Route::get('/share-register', [App\Http\Controllers\Reports\ShareReportController::class, 'shareRegister'])->name('share-register');
+    Route::get('/member-ledger', [App\Http\Controllers\Reports\ShareReportController::class, 'memberLedger'])->name('member-ledger');
+});
+
 Route::get('/reports/bot', [App\Http\Controllers\ReportsController::class, 'bot'])->middleware('auth')->name('reports.bot');
 // BOT Balance Sheet & Income Statement
 Route::prefix('reports/bot')->middleware('auth')->name('reports.bot.')->group(function () {

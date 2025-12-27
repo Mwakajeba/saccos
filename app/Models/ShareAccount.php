@@ -16,6 +16,7 @@ class ShareAccount extends Model
         'customer_id',
         'share_product_id',
         'account_number',
+        'certificate_number',
         'share_balance',
         'nominal_value',
         'opening_date',

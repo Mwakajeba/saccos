@@ -34,4 +34,11 @@ class ReportsController extends Controller
         
         return view('reports.bot', compact('user'));
     }
+
+    public function shares()
+    {
+        $user = Auth::user();
+        
+        return view('reports.shares.index', compact('user'));
+    }
 } 
