@@ -98,6 +98,22 @@
                                 </div>
                             </div>
 
+                            <!-- Opening Balance -->
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-dark position-relative">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-calendar-check fs-1 text-dark"></i>
+                                        </div>
+                                        <h5 class="card-title">Opening Balance</h5>
+                                        <p class="card-text">Import and manage share opening balances.</p>
+                                        <a href="{{ route('shares.opening-balance.index') }}" class="btn btn-dark position-relative">
+                                            <i class="bx bx-calendar-check me-1"></i> Import Opening Balance
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Dividend Management -->
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-danger position-relative">

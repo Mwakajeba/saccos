@@ -257,7 +257,7 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Bank Account <span class="text-danger">*</span></label>
-                                    <select name="bank_account_id" class="form-select @error('bank_account_id') is-invalid @enderror" required>
+                                    <select name="bank_account_id" class="form-select chart-account-select @error('bank_account_id') is-invalid @enderror" required>
                                         <option value="">Select Bank Account</option>
                                         @foreach($chartAccounts as $account)
                                         <option value="{{ $account->id }}" {{ old('bank_account_id') == $account->id ? 'selected' : '' }}>
@@ -270,7 +270,7 @@
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Journal Reference (Contribution Transfer) <span class="text-danger">*</span></label>
-                                    <select name="journal_reference_id" class="form-select @error('journal_reference_id') is-invalid @enderror" required>
+                                    <select name="journal_reference_id" class="form-select journal-reference-select @error('journal_reference_id') is-invalid @enderror" required>
                                         <option value="">Select Journal Reference</option>
                                         @foreach($journalReferences as $journalRef)
                                         <option value="{{ $journalRef->id }}" {{ old('journal_reference_id') == $journalRef->id ? 'selected' : '' }}>
@@ -283,7 +283,7 @@
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Riba Journal (Journal ya riba juu ya contribution) <span class="text-danger">*</span></label>
-                                    <select name="riba_journal_id" class="form-select @error('riba_journal_id') is-invalid @enderror" required>
+                                    <select name="riba_journal_id" class="form-select journal-reference-select @error('riba_journal_id') is-invalid @enderror" required>
                                         <option value="">Select Riba Journal</option>
                                         @foreach($journalReferences as $journalRef)
                                         <option value="{{ $journalRef->id }}" {{ old('riba_journal_id') == $journalRef->id ? 'selected' : '' }}>
@@ -296,7 +296,7 @@
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Pay Loan Journal (Journal ya kulipa mkopo kwa contribution) <span class="text-danger">*</span></label>
-                                    <select name="pay_loan_journal_id" class="form-select @error('pay_loan_journal_id') is-invalid @enderror" required>
+                                    <select name="pay_loan_journal_id" class="form-select journal-reference-select @error('pay_loan_journal_id') is-invalid @enderror" required>
                                         <option value="">Select Pay Loan Journal</option>
                                         @foreach($journalReferences as $journalRef)
                                         <option value="{{ $journalRef->id }}" {{ old('pay_loan_journal_id') == $journalRef->id ? 'selected' : '' }}>
@@ -321,7 +321,7 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Liability Account <span class="text-danger">*</span></label>
-                                    <select name="liability_account_id" class="form-select @error('liability_account_id') is-invalid @enderror" required>
+                                    <select name="liability_account_id" class="form-select chart-account-select @error('liability_account_id') is-invalid @enderror" required>
                                         <option value="">Select Liability Account</option>
                                         @foreach($chartAccounts as $account)
                                         <option value="{{ $account->id }}" {{ old('liability_account_id') == $account->id ? 'selected' : '' }}>
@@ -334,7 +334,7 @@
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Expense Account <span class="text-danger">*</span></label>
-                                    <select name="expense_account_id" class="form-select @error('expense_account_id') is-invalid @enderror" required>
+                                    <select name="expense_account_id" class="form-select chart-account-select @error('expense_account_id') is-invalid @enderror" required>
                                         <option value="">Select Expense Account</option>
                                         @foreach($chartAccounts as $account)
                                         <option value="{{ $account->id }}" {{ old('expense_account_id') == $account->id ? 'selected' : '' }}>
@@ -347,7 +347,7 @@
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Riba Payable Account <span class="text-danger">*</span></label>
-                                    <select name="riba_payable_account_id" class="form-select @error('riba_payable_account_id') is-invalid @enderror" required>
+                                    <select name="riba_payable_account_id" class="form-select chart-account-select @error('riba_payable_account_id') is-invalid @enderror" required>
                                         <option value="">Select Riba Payable Account</option>
                                         @foreach($chartAccounts as $account)
                                         <option value="{{ $account->id }}" {{ old('riba_payable_account_id') == $account->id ? 'selected' : '' }}>
@@ -360,7 +360,7 @@
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Withholding Account <span class="text-danger">*</span></label>
-                                    <select name="withholding_account_id" class="form-select @error('withholding_account_id') is-invalid @enderror" required>
+                                    <select name="withholding_account_id" class="form-select chart-account-select @error('withholding_account_id') is-invalid @enderror" required>
                                         <option value="">Select Withholding Account</option>
                                         @foreach($chartAccounts as $account)
                                         <option value="{{ $account->id }}" {{ old('withholding_account_id') == $account->id ? 'selected' : '' }}>
@@ -439,6 +439,26 @@
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
         toggleChargeFields();
+        
+        // Initialize Select2 for chart account dropdowns (including bank account)
+        if (typeof $ !== 'undefined' && $.fn.select2) {
+            $('.chart-account-select').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: function() {
+                    return $(this).data('placeholder') || 'Search and select account...';
+                },
+                allowClear: true
+            });
+            
+            // Initialize Select2 for journal reference dropdowns
+            $('.journal-reference-select').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: 'Search and select journal reference...',
+                allowClear: true
+            });
+        }
         
         // Handle form submission via AJAX
         const form = document.getElementById('contributionProductForm');

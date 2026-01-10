@@ -13,37 +13,37 @@
         <hr />
 
         <!-- Dashboard Stats -->
-        <div class="row row-cols-1 row-cols-lg-4">
+        <div class="row row-cols-1 row-cols-lg-3">
             <div class="col mb-4">
-                <div class="card radius-10">
+                <div class="card radius-10 cursor-pointer filter-card" data-status="active" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
                     <div class="card-body d-flex align-items-center">
                         <div class="flex-grow-1">
-                            <p class="text-muted mb-1">Total Customers</p>
-                            <h4 class="mb-0">{{ $customerCount ?? 0 }}</h4>
+                            <p class="text-muted mb-1">Total Active Customers</p>
+                            <h4 class="mb-0">{{ $activeCount ?? 0 }}</h4>
                         </div>
-                        <div class="widgets-icons bg-gradient-burning text-white"><i class='bx bx-group'></i></div>
+                        <div class="widgets-icons bg-gradient-success text-white"><i class='bx bx-check-circle'></i></div>
                     </div>
                 </div>
             </div>
             <div class="col mb-4">
-                <div class="card radius-10">
+                <div class="card radius-10 cursor-pointer filter-card" data-status="inactive" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
                     <div class="card-body d-flex align-items-center">
                         <div class="flex-grow-1">
-                            <p class="text-muted mb-1">Total Borrowers</p>
-                            <h4 class="mb-0">{{ $borrowerCount ?? 0 }}</h4>
+                            <p class="text-muted mb-1">Total Inactive Customers</p>
+                            <h4 class="mb-0">{{ $inactiveCount ?? 0 }}</h4>
                         </div>
-                        <div class="widgets-icons bg-gradient-burning text-white"><i class='bx bx-user'></i></div>
+                        <div class="widgets-icons bg-gradient-danger text-white"><i class='bx bx-x-circle'></i></div>
                     </div>
                 </div>
             </div>
             <div class="col mb-4">
-                <div class="card radius-10">
+                <div class="card radius-10 cursor-pointer filter-card" data-status="" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
                     <div class="card-body d-flex align-items-center">
                         <div class="flex-grow-1">
-                            <p class="text-muted mb-1">Total Guarantors</p>
-                            <h4 class="mb-0">{{ $guarantorCount ?? 0 }}</h4>
+                            <p class="text-muted mb-1">All Customers</p>
+                            <h4 class="mb-0">{{ ($activeCount ?? 0) + ($inactiveCount ?? 0) }}</h4>
                         </div>
-                        <div class="widgets-icons bg-gradient-burning text-white"><i class='bx bx-shield'></i></div>
+                        <div class="widgets-icons bg-gradient-primary text-white"><i class='bx bx-group'></i></div>
                     </div>
                 </div>
             </div>
@@ -135,6 +135,9 @@
 @push('scripts')
 <script>
     $(document).ready(function() {
+        // Initialize status filter (default: show all customers)
+        window.currentStatusFilter = '';
+
         // Initialize DataTable with Ajax
         var table = $('#customersTable').DataTable({
             processing: true,
@@ -142,6 +145,12 @@
             ajax: {
                 url: '{{ route("customers.data") }}',
                 type: 'GET',
+                data: function(d) {
+                    // Add status filter to AJAX request only if set
+                    if (window.currentStatusFilter) {
+                        d.status = window.currentStatusFilter;
+                    }
+                },
                 error: function(xhr, error, code) {
                     console.error('DataTables Ajax Error:', error, code);
                     Swal.fire({
@@ -248,6 +257,88 @@
                     form.submit();
                 }
             });
+        });
+
+        // Handle block/unblock button clicks
+        $('#customersTable').on('click', '.toggle-status-btn', function(e) {
+            e.preventDefault();
+            
+            var customerId = $(this).data('id');
+            var customerName = $(this).data('name');
+            var currentStatus = $(this).data('status');
+            var isActive = currentStatus === 'active';
+            var actionText = isActive ? 'block' : 'unblock';
+            
+            Swal.fire({
+                title: 'Are you sure?',
+                text: `You want to ${actionText} customer "${customerName}"?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: isActive ? '#f0ad4e' : '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: `Yes, ${actionText} it!`,
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading
+                    Swal.fire({
+                        title: 'Processing...',
+                        text: `Please wait while we ${actionText} the customer.`,
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    // Make AJAX request
+                    $.ajax({
+                        url: '{{ route("customers.toggle-status", ":id") }}'.replace(':id', customerId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            Swal.fire({
+                                title: 'Success!',
+                                text: response.message,
+                                icon: 'success',
+                                confirmButtonText: 'OK'
+                            }).then(() => {
+                                // Reload table to reflect changes
+                                table.ajax.reload(null, false);
+                            });
+                        },
+                        error: function(xhr) {
+                            var errorMessage = 'Failed to update customer status.';
+                            if (xhr.responseJSON && xhr.responseJSON.error) {
+                                errorMessage = xhr.responseJSON.error;
+                            }
+                            Swal.fire({
+                                title: 'Error!',
+                                text: errorMessage,
+                                icon: 'error',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
+                }
+            });
+        });
+
+        // Highlight "All Customers" card by default
+        $('.filter-card[data-status=""]').addClass('border-primary border-2');
+
+        // Handle filter card clicks
+        $('.filter-card').on('click', function() {
+            var status = $(this).data('status');
+            window.currentStatusFilter = status || '';
+            
+            // Update card styles to show active filter
+            $('.filter-card').removeClass('border-primary border-2');
+            $(this).addClass('border-primary border-2');
+            
+            // Reload table with new filter
+            table.ajax.reload(null, false);
         });
 
         // Refresh table data function

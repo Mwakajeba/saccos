@@ -99,11 +99,10 @@ class CustomerController extends Controller
     public function index()
     {
         $branchId = auth()->user()->branch_id;
-        $borrowerCount = Customer::where('category', 'Borrower')->where('branch_id', $branchId)->count();
-        $guarantorCount = Customer::where('category', 'Guarantor')->where('branch_id', $branchId)->count();
-        $customerCount = Customer::where('branch_id', $branchId)->count();
+        $activeCount = Customer::where('status', 'active')->where('branch_id', $branchId)->count();
+        $inactiveCount = Customer::where('status', 'inactive')->where('branch_id', $branchId)->count();
 
-        return view('customers.index', compact('borrowerCount', 'guarantorCount', 'customerCount'));
+        return view('customers.index', compact('activeCount', 'inactiveCount'));
     }
 
     // Ajax endpoint for DataTables
@@ -115,6 +114,11 @@ class CustomerController extends Controller
             $customers = Customer::with(['branch', 'company', 'user', 'region', 'district'])
                 ->where('branch_id', $branchId)
                 ->select('customers.*');
+
+            // Filter by status if provided and not empty
+            if ($request->filled('status')) {
+                $customers->where('status', $request->status);
+            }
 
             return DataTables::eloquent($customers)
                 ->addColumn('avatar_name', function ($customer) {
@@ -152,6 +156,16 @@ class CustomerController extends Controller
                     // Edit action
                     if (auth()->user()->can('edit customer')) {
                         $actions .= '<a href="' . route('customers.edit', $encodedId) . '" class="btn btn-sm btn-outline-primary me-1" title="Edit"><i class="bx bx-edit"></i> Edit</a>';
+                    }
+
+                    // Block/Unblock action
+                    if (auth()->user()->can('edit customer')) {
+                        $status = $customer->status ?? 'active';
+                        $isActive = $status === 'active';
+                        $btnClass = $isActive ? 'btn-outline-warning' : 'btn-outline-success';
+                        $btnIcon = $isActive ? 'bx-block' : 'bx-check-circle';
+                        $btnText = $isActive ? 'Block' : 'Unblock';
+                        $actions .= '<button class="btn btn-sm ' . $btnClass . ' toggle-status-btn me-1" data-id="' . $encodedId . '" data-name="' . e($customer->name) . '" data-status="' . $status . '" title="' . $btnText . ' Customer"><i class="bx ' . $btnIcon . '"></i> ' . $btnText . '</button>';
                     }
 
                     // Delete action
@@ -215,8 +229,9 @@ class CustomerController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
-            'phone1' => ['required', 'string', 'regex:/^\+255[0-9]{9}$/'],
-            'phone2' => ['nullable', 'string', 'regex:/^\+255[0-9]{9}$/'],
+            'phone1' => ['required', 'string', 'regex:/^\+255[0-9]{9}$/', 'unique:customers,phone1'],
+            'phone2' => ['nullable', 'string', 'regex:/^\+255[0-9]{9}$/', 'unique:customers,phone2'],
+            'reference' => 'nullable|string|max:255',
             'dob' => ['required', 'date', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
             'sex' => 'required|in:M,F',
             'region_id' => 'required|exists:regions,id',
@@ -446,8 +461,9 @@ class CustomerController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000', // Added description validation
-            'phone1' => 'required|string|max:20',
-            'phone2' => 'nullable|string|max:20',
+            'phone1' => ['required', 'string', 'regex:/^\+255[0-9]{9}$/', 'unique:customers,phone1,' . $customer->id],
+            'phone2' => ['nullable', 'string', 'regex:/^\+255[0-9]{9}$/', 'unique:customers,phone2,' . $customer->id],
+            'reference' => 'nullable|string|max:255',
             'dob' => 'required|date',
             'sex' => 'required|in:M,F',
             'region_id' => 'required|exists:regions,id',
@@ -645,6 +661,44 @@ class CustomerController extends Controller
         }
     }
 
+    /**
+     * Toggle customer status (block/unblock)
+     */
+    public function toggleStatus($encodedId)
+    {
+        $decoded = Hashids::decode($encodedId);
+        if (empty($decoded)) {
+            return response()->json(['error' => 'Invalid customer ID'], 400);
+        }
+
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+
+        $customer = Customer::where('id', $decoded[0])
+            ->where('branch_id', $branchId)
+            ->first();
+
+        if (!$customer) {
+            return response()->json(['error' => 'Customer not found'], 404);
+        }
+
+        try {
+            $newStatus = ($customer->status ?? 'active') === 'active' ? 'inactive' : 'active';
+            $customer->status = $newStatus;
+            $customer->save();
+
+            $statusText = $newStatus === 'active' ? 'unblocked' : 'blocked';
+
+            return response()->json([
+                'success' => true,
+                'message' => "Customer {$statusText} successfully.",
+                'status' => $newStatus
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to update customer status: ' . $e->getMessage()], 500);
+        }
+    }
+
     // Show bulk upload form
     public function bulkUpload()
     {
@@ -671,7 +725,7 @@ class CustomerController extends Controller
     public function bulkUploadStore(Request $request)
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt|max:5120', // 5MB max
+            'csv_file' => 'required|file|mimes:csv,txt,xlsx,xls|max:10240', // 10MB max, CSV and Excel
             'has_shares' => 'nullable|boolean',
             'share_product_id' => 'nullable|required_if:has_shares,1|exists:share_products,id',
             'has_contributions' => 'nullable|boolean',
@@ -689,213 +743,84 @@ class CustomerController extends Controller
         try {
             $file = $request->file('csv_file');
             $path = $file->getRealPath();
+            $extension = strtolower($file->getClientOriginalExtension());
 
-            $data = array_map('str_getcsv', file($path));
+            // Read file based on extension
+            if (in_array($extension, ['xlsx', 'xls'])) {
+                $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+                $sheet = $spreadsheet->getActiveSheet();
+                $rows = $sheet->toArray(null, true, true, false);
+                $data = $rows;
+            } else {
+                $data = array_map('str_getcsv', file($path));
+            }
+
+            if (empty($data)) {
+                return back()->withErrors(['csv_file' => 'The file is empty.']);
+            }
+
             $header = array_shift($data); // Remove header row
+            $header = array_map(function ($h) {
+                return strtolower(trim((string) $h));
+            }, $header);
 
-            // Validate CSV structure
+            // Validate file structure
             $requiredColumns = ['name', 'phone1', 'dob', 'sex'];
-            $missingColumns = array_diff($requiredColumns, array_map('strtolower', $header));
+            $missingColumns = array_diff($requiredColumns, $header);
 
             if (!empty($missingColumns)) {
                 return back()->withErrors(['csv_file' => 'Missing required columns: ' . implode(', ', $missingColumns)]);
             }
 
-            $successCount = 0;
-            $errorCount = 0;
-            $errors = [];
-
-            DB::beginTransaction();
-
-            foreach ($data as $rowIndex => $row) {
-                try {
-                    $rowData = array_combine(array_map('strtolower', $header), $row);
-
-                    // Validate required fields
-                    if (
-                        empty($rowData['name']) || empty($rowData['phone1']) || empty($rowData['dob']) ||
-                        empty($rowData['sex'])
-                    ) {
-                        $errors[] = "Row " . ($rowIndex + 2) . ": Missing required fields";
-                        $errorCount++;
-                        continue;
-                    }
-
-                    // Validate sex
-                    if (!in_array(strtoupper($rowData['sex']), ['M', 'F'])) {
-                        $errors[] = "Row " . ($rowIndex + 2) . ": Sex must be M or F";
-                        $errorCount++;
-                        continue;
-                    }
-
-                    // Create customer data
-                    $customerData = [
-                        // Format phone numbers
-                        "phone1" => $this->formatPhoneNumber(trim($rowData["phone1"])),
-                        "phone2" => !empty($rowData["phone2"]) ? $this->formatPhoneNumber(trim($rowData["phone2"])) : "",
-                        'name' => trim($rowData['name']),
-                        'phone1' => trim($rowData['phone1']),
-                        'phone2' => trim($rowData['phone2'] ?? ''),
-                        'dob' => $rowData['dob'],
-                        'sex' => strtoupper($rowData['sex']),
-                        'region_id' => $rowData['region_id'] ?? null,
-                        'district_id' => $rowData['district_id'] ?? null,
-                        'work' => trim($rowData['work'] ?? ''),
-                        'workAddress' => trim($rowData['workaddress'] ?? ''),
-                        'idType' => trim($rowData['idtype'] ?? ''),
-                        'idNumber' => trim($rowData['idnumber'] ?? ''),
-                        'relation' => trim($rowData['relation'] ?? ''),
-                        'description' => trim($rowData['description'] ?? ''),
-                        'customerNo' => 100000 + (Customer::max('id') ?? 0) + 1,
-                        'password' => Hash::make('1234567890'),
-                        'branch_id' => auth()->user()->branch_id,
-                        'company_id' => auth()->user()->company_id,
-                        'registrar' => auth()->id(),
-                        'dateRegistered' => now()->toDateString(),
-                        'category' => 'Borrower', // Always assign Borrower in bulk upload
-                    ];
-
-                    $customer = Customer::create($customerData);
-
-                    // Create share account if selected
-                    if ($request->has('has_shares') && $request->share_product_id) {
-                        $shareProduct = \App\Models\ShareProduct::find($request->share_product_id);
-                        $accountNumber = $this->generateShareAccountNumber();
-                        
-                        \App\Models\ShareAccount::create([
-                            'customer_id' => $customer->id,
-                            'share_product_id' => $request->share_product_id,
-                            'account_number' => $accountNumber,
-                            'share_balance' => 0,
-                            'nominal_value' => $shareProduct->nominal_price ?? 0,
-                            'opening_date' => now()->toDateString(),
-                            'status' => 'active',
-                            'branch_id' => auth()->user()->branch_id,
-                            'company_id' => auth()->user()->company_id,
-                            'created_by' => auth()->id(),
-                            'updated_by' => auth()->id(),
-                        ]);
-                    }
-
-                    // Create contribution account if selected
-                    if ($request->has('has_contributions') && $request->contribution_product_id) {
-                        $accountNumber = $this->generateContributionAccountNumber();
-                        
-                        \App\Models\ContributionAccount::create([
-                            'customer_id' => $customer->id,
-                            'contribution_product_id' => $request->contribution_product_id,
-                            'account_number' => $accountNumber,
-                            'balance' => 0,
-                            'opening_date' => now()->toDateString(),
-                            'branch_id' => auth()->user()->branch_id,
-                            'company_id' => auth()->user()->company_id,
-                            'created_by' => auth()->id(),
-                            'updated_by' => auth()->id(),
-                        ]);
-                    }
-
-                    //assign all member to the individual group - check if customer is already in a group first
-                    $existingMembership = DB::table('group_members')->where('customer_id', $customer->id)->first();
-                    if (!$existingMembership) {
-                        DB::table('group_members')->insert([
-                            'group_id' => 1,
-                            'customer_id' => $customer->id,
-                            'status' => 'active',
-                            'joined_date' => now()->toDateString(),
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
-                    }
-
-                    $successCount++;
-                } catch (\Exception $e) {
-                    $errors[] = "Row " . ($rowIndex + 2) . ": " . $e->getMessage();
-                    $errorCount++;
-                }
+            // Prepare data for job
+            $csvData = [];
+            foreach ($data as $row) {
+                $rowData = array_combine($header, $row);
+                $csvData[] = $rowData;
             }
 
-            if ($errorCount > 0) {
-                DB::rollBack();
-                return back()->withErrors(['csv_file' => 'Upload completed with errors. ' . $errorCount . ' rows failed.'])->with('upload_errors', $errors);
+            // Prepare validated data
+            $validated = [
+                'has_shares' => $request->has('has_shares'),
+                'share_product_id' => $request->share_product_id,
+                'has_contributions' => $request->has('has_contributions'),
+                'contribution_product_id' => $request->contribution_product_id,
+            ];
+
+            // Dispatch job
+            \App\Jobs\BulkCustomerImportJob::dispatch(
+                $csvData,
+                $validated,
+                auth()->id(),
+                auth()->user()->branch_id,
+                auth()->user()->company_id
+            );
+
+            // Auto-start queue worker to process the job immediately
+            try {
+                \Illuminate\Support\Facades\Artisan::call('queue:work', [
+                    '--once' => true,
+                    '--timeout' => 300,
+                    '--tries' => 1,
+                ]);
+            } catch (\Exception $e) {
+                \Log::warning('Failed to auto-start queue worker: ' . $e->getMessage());
             }
 
-            DB::commit();
-
-            $message = "Successfully uploaded {$successCount} customers.";
-            if ($request->has('has_shares')) {
-                $message .= " Share accounts created for all customers.";
-            }
-            if ($request->has('has_contributions')) {
-                $message .= " Contribution accounts created for all customers.";
-            }
-
-            return redirect()->route('customers.index')->with('success', $message);
+            return redirect()->route('customers.index')
+                ->with('success', 'Customer import job has been queued and processing has started. The import will be processed in the background.');
         } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->withErrors(['csv_file' => 'Failed to process CSV file: ' . $e->getMessage()]);
+            return back()->withErrors(['csv_file' => 'Failed to process file: ' . $e->getMessage()]);
         }
     }
 
-    // Download sample CSV
+    // Download sample Excel template
     public function downloadSample()
     {
-        $filename = 'customer_bulk_upload_sample.csv';
-        $headers = [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-        ];
-
-        $callback = function () {
-            $file = fopen('php://output', 'w');
-
-            // Add headers
-            fputcsv($file, [
-                'name',
-                'phone1',
-                'phone2',
-                'dob',
-                'sex',
-                'work',
-                'workaddress',
-                'idtype',
-                'idnumber',
-                'relation',
-                'description'
-            ]);
-
-            // Add sample data
-            fputcsv($file, [
-                'John Doe',
-                '0712345678',
-                '0755123456',
-                '1990-01-15',
-                'M',
-                'Teacher',
-                'ABC School, Dar es Salaam',
-                'National ID',
-                '123456789',
-                'Spouse',
-                'Sample customer'
-            ]);
-
-            fputcsv($file, [
-                'Jane Smith',
-                '0723456789',
-                '',
-                '1985-05-20',
-                'F',
-                'Nurse',
-                'City Hospital',
-                'License',
-                '987654321',
-                'Parent',
-                'Another sample'
-            ]);
-
-            fclose($file);
-        };
-
-        return response()->stream($callback, 200, $headers);
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\CustomerImportTemplateExport(true),
+            'customer_import_template_with_sample_data.xlsx'
+        );
     }
 
     /**

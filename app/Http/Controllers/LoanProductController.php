@@ -8,6 +8,8 @@ use App\Models\Fee;
 use App\Models\Penalty;
 use App\Models\CashCollateralType;
 use App\Models\Role;
+use App\Models\ContributionProduct;
+use App\Models\ShareProduct;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -43,6 +45,12 @@ class LoanProductController extends Controller
 
         // Get cash collateral types for dropdowns
         $cashCollateralTypes = CashCollateralType::where('is_active', 1)->get();
+
+        // Get contribution products for dropdowns
+        $contributionProducts = ContributionProduct::where('is_active', true)->orderBy('product_name')->get();
+
+        // Get share products for dropdowns
+        $shareProducts = ShareProduct::where('is_active', true)->orderBy('share_name')->get();
 
         // Get roles for approval levels
         $roles = Role::whereNotIn('name', ['admin', 'super-admin'])->orderBy('name')->get();
@@ -94,6 +102,8 @@ class LoanProductController extends Controller
             'fees',
             'penalties',
             'cashCollateralTypes',
+            'contributionProducts',
+            'shareProducts',
             'roles',
             'productTypes',
             'interestCycles',
@@ -297,6 +307,12 @@ class LoanProductController extends Controller
         // Get cash collateral types for dropdowns
         $cashCollateralTypes = CashCollateralType::where('is_active', 1)->get();
 
+        // Get contribution products for dropdowns
+        $contributionProducts = ContributionProduct::where('is_active', true)->orderBy('product_name')->get();
+
+        // Get share products for dropdowns
+        $shareProducts = ShareProduct::where('is_active', true)->orderBy('share_name')->get();
+
         // Get roles for approval levels
         $roles = Role::whereNotIn('name', ['admin', 'super-admin'])->orderBy('name')->get();
 
@@ -343,6 +359,8 @@ class LoanProductController extends Controller
         return view('loan-products.edit', compact(
             'loanProduct',
             'chartAccounts',
+            'contributionProducts',
+            'shareProducts',
             'fees',
             'penalties',
             'cashCollateralTypes',

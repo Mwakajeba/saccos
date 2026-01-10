@@ -215,55 +215,102 @@
             </div>
         </div>
 
-        <!-- Cash Deposit Configuration -->
+        <!-- Contributions Configuration -->
         <div class="col-12">
-            <h5 class="mb-3 text-primary mt-4">Cash Deposit Configuration</h5>
+            <h5 class="mb-3 text-primary mt-4">Contributions Configuration</h5>
         </div>
 
         <div class="col-md-6 mb-3">
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="has_cash_collateral" id="has_cash_collateral"
-                    value="1" {{ old('has_cash_collateral', $loanProduct->has_cash_collateral ?? false) ? 'checked' : '' }}>
-                <label class="form-check-label" for="has_cash_collateral">
-                    Has Cash Deposit
+                <input class="form-check-input" type="checkbox" name="has_contribution" id="has_contribution"
+                    value="1" {{ old('has_contribution', $loanProduct->has_contribution ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="has_contribution">
+                    Has Contribution
                 </label>
             </div>
         </div>
 
-        <div class="col-md-6 mb-3" id="cash_collateral_type_div" style="display: none;">
-            <label class="form-label">Cash Deposit Account</label>
-            <select name="cash_collateral_type" class="form-select @error('cash_collateral_type') is-invalid @enderror">
-                <option value="">-- Select Cash Deposit Account --</option>
-                @foreach($cashCollateralTypes as $collateralType)
-                    <option value="{{ $collateralType->name }}" {{ old('cash_collateral_type', $loanProduct->cash_collateral_type ?? '') == $collateralType->name ? 'selected' : '' }}>
-                        {{ $collateralType->name }}
+        <div class="col-md-6 mb-3" id="contribution_product_div" style="display: none;">
+            <label class="form-label">Contribution Product <span class="text-danger">*</span></label>
+            <select name="contribution_product_id" class="form-select @error('contribution_product_id') is-invalid @enderror">
+                <option value="">-- Select Contribution Product --</option>
+                @foreach($contributionProducts ?? [] as $product)
+                    <option value="{{ $product->id }}" {{ old('contribution_product_id', $loanProduct->contribution_product_id ?? '') == $product->id ? 'selected' : '' }}>
+                        {{ $product->product_name }}
                     </option>
                 @endforeach
             </select>
-            @error('cash_collateral_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            @error('contribution_product_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
-        <div class="col-md-6 mb-3" id="cash_collateral_value_type_div" style="display: none;">
-            <label class="form-label">Cash Deposit Value Type</label>
-            <select name="cash_collateral_value_type"
-                class="form-select @error('cash_collateral_value_type') is-invalid @enderror">
+        <div class="col-md-6 mb-3" id="contribution_value_type_div" style="display: none;">
+            <label class="form-label">Contribution Value Type <span class="text-danger">*</span></label>
+            <select name="contribution_value_type"
+                class="form-select @error('contribution_value_type') is-invalid @enderror">
                 <option value="">-- Select Value Type --</option>
-                @foreach($cashCollateralValueTypes as $key => $value)
-                    <option value="{{ $key }}" {{ old('cash_collateral_value_type', $loanProduct->cash_collateral_value_type ?? '') == $key ? 'selected' : '' }}>
-                        {{ $value }}
+                <option value="percentage" {{ old('contribution_value_type', $loanProduct->contribution_value_type ?? '') == 'percentage' ? 'selected' : '' }}>Percentage (%)</option>
+                <option value="fixed_amount" {{ old('contribution_value_type', $loanProduct->contribution_value_type ?? '') == 'fixed_amount' ? 'selected' : '' }}>Fixed Amount</option>
+            </select>
+            @error('contribution_value_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        </div>
+
+        <div class="col-md-6 mb-3" id="contribution_value_div" style="display: none;">
+            <label class="form-label">Contribution Value <span class="text-danger">*</span></label>
+            <input type="number" name="contribution_value" step="0.01" min="0"
+                class="form-control @error('contribution_value') is-invalid @enderror"
+                value="{{ old('contribution_value', $loanProduct->contribution_value ?? '') }}"
+                placeholder="0.00">
+            <small class="text-muted" id="contribution_value_help">Enter the percentage or fixed amount</small>
+            @error('contribution_value') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        </div>
+
+        <!-- Shares Configuration -->
+        <div class="col-12">
+            <h5 class="mb-3 text-primary mt-4">Shares Configuration</h5>
+        </div>
+
+        <div class="col-md-6 mb-3">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="has_share" id="has_share"
+                    value="1" {{ old('has_share', $loanProduct->has_share ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="has_share">
+                    Has Share
+                </label>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-3" id="share_product_div" style="display: none;">
+            <label class="form-label">Share Product <span class="text-danger">*</span></label>
+            <select name="share_product_id" class="form-select @error('share_product_id') is-invalid @enderror">
+                <option value="">-- Select Share Product --</option>
+                @foreach($shareProducts ?? [] as $product)
+                    <option value="{{ $product->id }}" {{ old('share_product_id', $loanProduct->share_product_id ?? '') == $product->id ? 'selected' : '' }}>
+                        {{ $product->share_name }}
                     </option>
                 @endforeach
             </select>
-            @error('cash_collateral_value_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            @error('share_product_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
-        <div class="col-md-6 mb-3" id="cash_collateral_value_div" style="display: none;">
-            <label class="form-label">Cash Deposit Value</label>
-            <input type="number" name="cash_collateral_value" step="0.000000000000001" min="0"
-                class="form-control @error('cash_collateral_value') is-invalid @enderror"
-                value="{{ old('cash_collateral_value', $loanProduct->cash_collateral_value ?? '') }}"
+        <div class="col-md-6 mb-3" id="share_value_type_div" style="display: none;">
+            <label class="form-label">Share Value Type <span class="text-danger">*</span></label>
+            <select name="share_value_type"
+                class="form-select @error('share_value_type') is-invalid @enderror">
+                <option value="">-- Select Value Type --</option>
+                <option value="percentage" {{ old('share_value_type', $loanProduct->share_value_type ?? '') == 'percentage' ? 'selected' : '' }}>Percentage (%)</option>
+                <option value="fixed_amount" {{ old('share_value_type', $loanProduct->share_value_type ?? '') == 'fixed_amount' ? 'selected' : '' }}>Fixed Amount</option>
+            </select>
+            @error('share_value_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        </div>
+
+        <div class="col-md-6 mb-3" id="share_value_div" style="display: none;">
+            <label class="form-label">Share Value <span class="text-danger">*</span></label>
+            <input type="number" name="share_value" step="0.01" min="0"
+                class="form-control @error('share_value') is-invalid @enderror"
+                value="{{ old('share_value', $loanProduct->share_value ?? '') }}"
                 placeholder="0.00">
-            @error('cash_collateral_value') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            <small class="text-muted" id="share_value_help">Enter the percentage or fixed amount</small>
+            @error('share_value') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
         <!-- Approval Levels Configuration -->
@@ -871,12 +918,60 @@
             setDisplay('top_up_value_div', showValue);
         }
 
-                function toggleCashCollateral() {
-            var hasCash = document.getElementById('has_cash_collateral');
-            var isChecked = hasCash && hasCash.checked;
-            setDisplay('cash_collateral_type_div', isChecked);
-            setDisplay('cash_collateral_value_type_div', isChecked);
-            setDisplay('cash_collateral_value_div', isChecked);
+                function toggleContribution() {
+            var hasContribution = document.getElementById('has_contribution');
+            var isChecked = hasContribution && hasContribution.checked;
+            setDisplay('contribution_product_div', isChecked);
+            setDisplay('contribution_value_type_div', isChecked);
+            setDisplay('contribution_value_div', isChecked);
+            
+            // Update help text based on value type
+            if (isChecked) {
+                var valueType = document.querySelector('select[name="contribution_value_type"]');
+                if (valueType) {
+                    updateContributionHelpText(valueType.value);
+                    valueType.addEventListener('change', function() {
+                        updateContributionHelpText(this.value);
+                    });
+                }
+            }
+        }
+
+                function toggleShare() {
+            var hasShare = document.getElementById('has_share');
+            var isChecked = hasShare && hasShare.checked;
+            setDisplay('share_product_div', isChecked);
+            setDisplay('share_value_type_div', isChecked);
+            setDisplay('share_value_div', isChecked);
+            
+            // Update help text based on value type
+            if (isChecked) {
+                var valueType = document.querySelector('select[name="share_value_type"]');
+                if (valueType) {
+                    updateShareHelpText(valueType.value);
+                    valueType.addEventListener('change', function() {
+                        updateShareHelpText(this.value);
+                    });
+                }
+            }
+        }
+
+                function updateContributionHelpText(valueType) {
+            var helpText = document.getElementById('contribution_value_help');
+            if (helpText) {
+                helpText.textContent = valueType === 'percentage' 
+                    ? 'Enter the percentage (e.g., 10 for 10%)' 
+                    : 'Enter the fixed amount';
+            }
+        }
+
+                function updateShareHelpText(valueType) {
+            var helpText = document.getElementById('share_value_help');
+            if (helpText) {
+                helpText.textContent = valueType === 'percentage' 
+                    ? 'Enter the percentage (e.g., 10 for 10%)' 
+                    : 'Enter the fixed amount';
+            }
         }
 
                 function toggleApprovalLevels() {
@@ -888,7 +983,8 @@
                 document.addEventListener('DOMContentLoaded', function () {
             // Initial state
             toggleTopUp();
-            toggleCashCollateral();
+            toggleContribution();
+            toggleShare();
             toggleApprovalLevels();
 
             // Listeners
@@ -897,8 +993,23 @@
             var topUpType = document.getElementById('top_up_type');
             if (topUpType) topUpType.addEventListener('change', toggleTopUp);
 
-            var hasCash = document.getElementById('has_cash_collateral');
-            if (hasCash) hasCash.addEventListener('change', toggleCashCollateral);
+            var hasContribution = document.getElementById('has_contribution');
+            if (hasContribution) hasContribution.addEventListener('change', toggleContribution);
+            var contributionValueType = document.querySelector('select[name="contribution_value_type"]');
+            if (contributionValueType) {
+                contributionValueType.addEventListener('change', function() {
+                    updateContributionHelpText(this.value);
+                });
+            }
+
+            var hasShare = document.getElementById('has_share');
+            if (hasShare) hasShare.addEventListener('change', toggleShare);
+            var shareValueType = document.querySelector('select[name="share_value_type"]');
+            if (shareValueType) {
+                shareValueType.addEventListener('change', function() {
+                    updateShareHelpText(this.value);
+                });
+            }
 
             var hasApproval = document.getElementById('has_approval_levels');
             if (hasApproval) hasApproval.addEventListener('change', toggleApprovalLevels);

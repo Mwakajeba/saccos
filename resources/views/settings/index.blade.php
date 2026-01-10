@@ -378,6 +378,24 @@
                                 </div>
                             </div>
 
+                            <!-- Opening Balance Logs -->
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-dark">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-history fs-1 text-dark"></i>
+                                        </div>
+                                        <h5 class="card-title">Opening Balance Logs</h5>
+                                        <p class="card-text">
+                                            View and track all contribution opening balance import transactions and records.
+                                        </p>
+                                        <a href="{{ route('settings.opening-balance-logs.index') }}" class="btn btn-dark">
+                                            <i class="bx bx-list-ul me-1"></i> View Logs
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
                             @endcan
                         </div>
                     </div>

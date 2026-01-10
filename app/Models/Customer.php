@@ -12,6 +12,7 @@ class Customer extends Model
 
     protected $fillable = [
         'customerNo',
+        'reference',
         'name',
         'description', // Added description
         'work',
@@ -34,6 +35,7 @@ class Customer extends Model
         'document',
         'has_cash_collateral',
         'category',
+        'status',
     ];
 
     protected $hidden = [

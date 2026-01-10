@@ -21,6 +21,14 @@ $isEdit = isset($customer);
     @if($isEdit) @method('PUT') @endif
 
     <div class="row">
+        <!-- Reference -->
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Reference</label>
+            <input type="text" name="reference" class="form-control @error('reference') is-invalid @enderror"
+                value="{{ old('reference', $customer->reference ?? '') }}" placeholder="Enter reference (optional)">
+            @error('reference') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        </div>
+
         <!-- Name -->
         <div class="col-md-6 mb-3">
             <label class="form-label">Full Name <span class="text-danger">*</span></label>

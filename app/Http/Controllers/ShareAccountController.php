@@ -6,6 +6,8 @@ use App\Models\ShareAccount;
 use App\Models\Customer;
 use App\Models\ShareProduct;
 use App\Models\Company;
+use App\Models\GlTransaction;
+use App\Models\BankAccount;
 use App\Exports\ShareAccountImportTemplateExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -325,16 +327,299 @@ class ShareAccountController extends Controller
             abort(404, 'Share account not found.');
         }
         
-        $shareAccount = ShareAccount::with([
-            'customer',
-            'shareProduct',
-            'branch',
-            'company',
-            'createdBy',
-            'updatedBy'
-        ])->findOrFail($decoded[0]);
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
 
-        return view('shares.accounts.show', compact('shareAccount'));
+        $shareAccount = ShareAccount::where('id', $decoded[0])
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->with([
+                'customer',
+                'shareProduct',
+                'branch',
+                'company',
+                'createdBy',
+                'updatedBy'
+            ])
+            ->firstOrFail();
+
+        $product = $shareAccount->shareProduct;
+        if (!$product || !$product->liability_account_id) {
+            abort(404, 'Share product or liability account not configured.');
+        }
+
+        // Calculate statistics for this specific account
+        // Get deposits (credits to liability account for this customer)
+        $totalDeposits = GlTransaction::whereIn('transaction_type', ['share_deposit', 'journal'])
+            ->where('nature', 'credit')
+            ->where('chart_account_id', $product->liability_account_id)
+            ->where('customer_id', $shareAccount->customer_id)
+            ->where('branch_id', $branchId)
+            ->sum('amount');
+
+        // Get withdrawals (debits to liability account for this customer)
+        $totalWithdrawals = GlTransaction::whereIn('transaction_type', ['share_withdrawal', 'journal'])
+            ->where('nature', 'debit')
+            ->where('chart_account_id', $product->liability_account_id)
+            ->where('customer_id', $shareAccount->customer_id)
+            ->where('branch_id', $branchId)
+            ->sum('amount');
+
+        // Get transfers out (debits for transfers from this account)
+        $totalTransfersOut = GlTransaction::where('transaction_type', 'share_transfer')
+            ->where('nature', 'debit')
+            ->where('chart_account_id', $product->liability_account_id)
+            ->where('customer_id', $shareAccount->customer_id)
+            ->where('branch_id', $branchId)
+            ->sum('amount');
+
+        // Get transfers in (credits for transfers to this account)
+        $totalTransfersIn = GlTransaction::where('transaction_type', 'share_transfer')
+            ->where('nature', 'credit')
+            ->where('chart_account_id', $product->liability_account_id)
+            ->where('customer_id', $shareAccount->customer_id)
+            ->where('branch_id', $branchId)
+            ->sum('amount');
+
+        // Calculate net transfers (out - in)
+        $totalTransfers = $totalTransfersOut - $totalTransfersIn;
+
+        // Current balance (share_balance * nominal_value)
+        $currentBalance = $shareAccount->share_balance * $shareAccount->nominal_value;
+
+        return view('shares.accounts.show', compact(
+            'shareAccount',
+            'product',
+            'totalDeposits',
+            'totalWithdrawals',
+            'totalTransfers',
+            'currentBalance'
+        ));
+    }
+
+    /**
+     * Get account transactions data for DataTable
+     */
+    public function getAccountTransactionsData(Request $request, $encodedId)
+    {
+        if ($request->ajax()) {
+            $decoded = Hashids::decode($encodedId);
+            if (empty($decoded)) {
+                return response()->json(['error' => 'Invalid account ID'], 400);
+            }
+
+            $user = auth()->user();
+            $branchId = $user->branch_id;
+
+            $shareAccount = ShareAccount::find($decoded[0]);
+            if (!$shareAccount) {
+                return response()->json(['error' => 'Account not found'], 400);
+            }
+
+            $product = $shareAccount->shareProduct;
+            if (!$product || !$product->liability_account_id) {
+                return response()->json(['error' => 'Product or liability account not configured'], 400);
+            }
+
+            // Get date filters
+            $startDate = $request->get('start_date');
+            $endDate = $request->get('end_date');
+
+            // Build query for transactions
+            $query = GlTransaction::where('chart_account_id', $product->liability_account_id)
+                ->where('customer_id', $shareAccount->customer_id)
+                ->where('branch_id', $branchId)
+                ->whereIn('transaction_type', ['share_deposit', 'share_withdrawal', 'share_transfer', 'journal']);
+
+            // Apply date filters
+            if ($startDate) {
+                $query->whereDate('date', '>=', $startDate);
+            }
+            if ($endDate) {
+                $query->whereDate('date', '<=', $endDate);
+            }
+
+            // Calculate opening balance (before start date)
+            $openingBalance = 0;
+            if ($startDate) {
+                $openingDeposits = GlTransaction::whereIn('transaction_type', ['share_deposit', 'journal'])
+                    ->where('nature', 'credit')
+                    ->where('chart_account_id', $product->liability_account_id)
+                    ->where('customer_id', $shareAccount->customer_id)
+                    ->where('branch_id', $branchId)
+                    ->whereDate('date', '<', $startDate)
+                    ->sum('amount');
+
+                $openingWithdrawals = GlTransaction::whereIn('transaction_type', ['share_withdrawal', 'share_transfer', 'journal'])
+                    ->where('nature', 'debit')
+                    ->where('chart_account_id', $product->liability_account_id)
+                    ->where('customer_id', $shareAccount->customer_id)
+                    ->where('branch_id', $branchId)
+                    ->whereDate('date', '<', $startDate)
+                    ->sum('amount');
+
+                $openingBalance = $openingDeposits - $openingWithdrawals;
+            }
+
+            $transactions = $query->with(['customer', 'chartAccount'])
+                ->orderBy('date', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+
+            // Calculate running balance
+            $runningBalance = $openingBalance;
+            $transactionsData = $transactions->map(function ($transaction) use (&$runningBalance) {
+                if ($transaction->nature === 'credit') {
+                    $runningBalance += $transaction->amount;
+                } else {
+                    $runningBalance -= $transaction->amount;
+                }
+
+                // Generate transaction ID
+                $trxId = '';
+                if ($transaction->transaction_type === 'journal') {
+                    $journal = \App\Models\Journal::find($transaction->transaction_id);
+                    $trxId = $journal ? $journal->reference : 'JRN-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+                } elseif ($transaction->transaction_type === 'share_transfer') {
+                    $journal = \App\Models\Journal::find($transaction->transaction_id);
+                    $trxId = $journal ? $journal->reference : 'ST-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+                } else {
+                    $prefix = $transaction->transaction_type === 'share_deposit' ? 'SD' : 'SW';
+                    $trxId = $prefix . '-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+                }
+
+                return [
+                    'id' => $transaction->id,
+                    'trx_id' => $trxId,
+                    'date' => $transaction->date->format('M d, Y'),
+                    'description' => $transaction->description,
+                    'credit' => $transaction->nature === 'credit' ? number_format($transaction->amount, 2) : '-',
+                    'debit' => $transaction->nature === 'debit' ? number_format($transaction->amount, 2) : '-',
+                    'balance' => number_format($runningBalance, 2),
+                    'type' => ucfirst(str_replace('_', ' ', $transaction->transaction_type)),
+                ];
+            });
+
+            return response()->json([
+                'data' => $transactionsData,
+                'opening_balance' => number_format($openingBalance, 2),
+                'closing_balance' => number_format($runningBalance, 2),
+            ]);
+        }
+
+        return response()->json(['error' => 'Invalid request'], 400);
+    }
+
+    /**
+     * Export account statement to PDF
+     */
+    public function exportStatement(Request $request, $encodedId)
+    {
+        $decoded = Hashids::decode($encodedId);
+        if (empty($decoded)) {
+            abort(404, 'Share account not found.');
+        }
+
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        $shareAccount = ShareAccount::where('id', $decoded[0])
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->with(['customer', 'shareProduct', 'branch', 'company'])
+            ->firstOrFail();
+
+        $product = $shareAccount->shareProduct;
+        if (!$product || !$product->liability_account_id) {
+            abort(404, 'Share product or liability account not configured.');
+        }
+
+        // Get date filters
+        $startDate = $request->get('start_date', $shareAccount->opening_date->format('Y-m-d'));
+        $endDate = $request->get('end_date', now()->format('Y-m-d'));
+
+        // Calculate opening balance
+        $openingDeposits = GlTransaction::whereIn('transaction_type', ['share_deposit', 'journal'])
+            ->where('nature', 'credit')
+            ->where('chart_account_id', $product->liability_account_id)
+            ->where('customer_id', $shareAccount->customer_id)
+            ->where('branch_id', $branchId)
+            ->whereDate('date', '<', $startDate)
+            ->sum('amount');
+
+        $openingWithdrawals = GlTransaction::whereIn('transaction_type', ['share_withdrawal', 'share_transfer', 'journal'])
+            ->where('nature', 'debit')
+            ->where('chart_account_id', $product->liability_account_id)
+            ->where('customer_id', $shareAccount->customer_id)
+            ->where('branch_id', $branchId)
+            ->whereDate('date', '<', $startDate)
+            ->sum('amount');
+
+        $openingBalance = $openingDeposits - $openingWithdrawals;
+
+        // Get transactions in date range
+        $transactions = GlTransaction::where('chart_account_id', $product->liability_account_id)
+            ->where('customer_id', $shareAccount->customer_id)
+            ->where('branch_id', $branchId)
+            ->whereIn('transaction_type', ['share_deposit', 'share_withdrawal', 'share_transfer', 'journal'])
+            ->whereDate('date', '>=', $startDate)
+            ->whereDate('date', '<=', $endDate)
+            ->with(['customer', 'chartAccount'])
+            ->orderBy('date', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        // Calculate running balance
+        $runningBalance = $openingBalance;
+        $transactionsData = $transactions->map(function ($transaction) use (&$runningBalance) {
+            if ($transaction->nature === 'credit') {
+                $runningBalance += $transaction->amount;
+            } else {
+                $runningBalance -= $transaction->amount;
+            }
+
+            // Generate transaction ID
+            $trxId = '';
+            if ($transaction->transaction_type === 'journal') {
+                $journal = \App\Models\Journal::find($transaction->transaction_id);
+                $trxId = $journal ? $journal->reference : 'JRN-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+            } elseif ($transaction->transaction_type === 'share_transfer') {
+                $journal = \App\Models\Journal::find($transaction->transaction_id);
+                $trxId = $journal ? $journal->reference : 'ST-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+            } else {
+                $prefix = $transaction->transaction_type === 'share_deposit' ? 'SD' : 'SW';
+                $trxId = $prefix . '-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+            }
+
+            return [
+                'trx_id' => $trxId,
+                'date' => $transaction->date->format('M d, Y'),
+                'description' => $transaction->description,
+                'credit' => $transaction->nature === 'credit' ? $transaction->amount : 0,
+                'debit' => $transaction->nature === 'debit' ? $transaction->amount : 0,
+                'balance' => $runningBalance,
+                'type' => ucfirst(str_replace('_', ' ', $transaction->transaction_type)),
+            ];
+        });
+
+        $closingBalance = $runningBalance;
+
+        $pdf = Pdf::loadView('shares.accounts.statement-pdf', [
+            'shareAccount' => $shareAccount,
+            'product' => $product,
+            'startDate' => Carbon::parse($startDate),
+            'endDate' => Carbon::parse($endDate),
+            'openingBalance' => $openingBalance,
+            'closingBalance' => $closingBalance,
+            'transactions' => $transactionsData,
+            'company' => $user->company,
+            'branch' => $user->branch,
+        ]);
+
+        $filename = 'Share_Statement_' . $shareAccount->account_number . '_' . $startDate . '_to_' . $endDate . '.pdf';
+        return $pdf->download($filename);
     }
 
     /**
@@ -815,6 +1100,159 @@ class ShareAccountController extends Controller
             Log::error('Share Accounts Export Error: ' . $e->getMessage());
             return redirect()->back()
                 ->with('error', 'Failed to export share accounts: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show opening balance import form
+     */
+    public function openingBalanceIndex()
+    {
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        // Get active share products
+        $shareProducts = ShareProduct::where('is_active', true)
+            ->orderBy('share_name')
+            ->get();
+
+        // Get bank accounts
+        $bankAccounts = BankAccount::with('chartAccount')
+            ->orderBy('name')
+            ->get();
+
+        return view('shares.opening-balance.index', compact('shareProducts', 'bankAccounts'));
+    }
+
+    /**
+     * Download opening balance import template
+     */
+    public function downloadOpeningBalanceTemplate(Request $request)
+    {
+        $validator = \Validator::make($request->all(), [
+            'share_product_id' => 'required|exists:share_products,id',
+            'opening_balance_date' => 'required|date',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        try {
+            $shareProductId = $request->share_product_id;
+            $openingDate = $request->opening_balance_date;
+            $fileName = 'share_opening_balance_import_template_' . date('Y-m-d') . '.xlsx';
+
+            return \Maatwebsite\Excel\Facades\Excel::download(
+                new \App\Exports\ShareOpeningBalanceImportTemplateExport($shareProductId, $openingDate),
+                $fileName
+            );
+        } catch (\Exception $e) {
+            \Log::error('Share Opening Balance Template Download Error: ' . $e->getMessage());
+            
+            return redirect()->back()
+                ->with('error', 'Failed to generate template: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Import share opening balances from Excel
+     */
+    public function importOpeningBalance(Request $request)
+    {
+        $validator = \Validator::make($request->all(), [
+            'share_product_id' => 'required|exists:share_products,id',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
+            'opening_balance_date' => 'required|date',
+            'import_file' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        try {
+            $user = auth()->user();
+            $openingBalanceDate = $request->opening_balance_date;
+
+            // Read Excel file
+            $rows = \Maatwebsite\Excel\Facades\Excel::toArray([], $request->file('import_file'));
+            $rows = $rows[0]; // Get first sheet
+
+            // Get header row and create mapping
+            $header = array_shift($rows);
+            $header = array_map(function ($h) {
+                return strtolower(trim((string) $h));
+            }, $header);
+
+            // Find column indices
+            $accountNumberIndex = array_search('account_number', $header);
+            $openingBalanceDateIndex = array_search('opening_balance_date', $header);
+            $openingBalanceAmountIndex = array_search('opening_balance_amount', $header);
+            $openingBalanceDescriptionIndex = array_search('opening_balance_description', $header);
+            $transactionReferenceIndex = array_search('transaction_reference', $header);
+            $notesIndex = array_search('notes', $header);
+
+            if ($accountNumberIndex === false || $openingBalanceAmountIndex === false) {
+                return redirect()->back()
+                    ->with('error', 'Excel file must contain account_number and opening_balance_amount columns')
+                    ->withInput();
+            }
+
+            // Prepare data for job
+            $dataRows = [];
+            foreach ($rows as $row) {
+                // Skip empty rows
+                if (empty(array_filter($row))) {
+                    continue;
+                }
+
+                $dataRows[] = [
+                    'account_number' => trim($row[$accountNumberIndex] ?? ''),
+                    'opening_balance_date' => isset($row[$openingBalanceDateIndex]) && !empty(trim($row[$openingBalanceDateIndex])) 
+                        ? trim($row[$openingBalanceDateIndex]) 
+                        : $openingBalanceDate,
+                    'opening_balance_amount' => trim($row[$openingBalanceAmountIndex] ?? ''),
+                    'opening_balance_description' => isset($row[$openingBalanceDescriptionIndex]) ? trim($row[$openingBalanceDescriptionIndex]) : '',
+                    'transaction_reference' => isset($row[$transactionReferenceIndex]) ? trim($row[$transactionReferenceIndex]) : '',
+                    'notes' => isset($row[$notesIndex]) ? trim($row[$notesIndex]) : '',
+                ];
+            }
+
+            // Dispatch job for processing
+            \App\Jobs\BulkShareOpeningBalanceJob::dispatch(
+                $dataRows,
+                $request->share_product_id,
+                $request->bank_account_id,
+                $openingBalanceDate,
+                $user->id
+            );
+
+            // Auto-start queue worker to process the job immediately
+            try {
+                \Illuminate\Support\Facades\Artisan::call('queue:work', [
+                    '--once' => true,
+                    '--timeout' => 300,
+                    '--tries' => 1,
+                ]);
+            } catch (\Exception $e) {
+                \Log::warning('Failed to auto-start queue worker: ' . $e->getMessage());
+            }
+
+            return redirect()->back()
+                ->with('success', 'Opening balance import has been queued and processing has started. Check logs for progress.');
+
+        } catch (\Exception $e) {
+            \Log::error('Share Opening Balance Import Error: ' . $e->getMessage());
+            
+            return redirect()->back()
+                ->with('error', 'Failed to process import: ' . $e->getMessage())
+                ->withInput();
         }
     }
 }

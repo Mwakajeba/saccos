@@ -14,6 +14,8 @@ use App\Models\Journal;
 use App\Models\JournalItem;
 use App\Models\GlTransaction;
 use App\Models\Customer;
+use App\Models\Receipt;
+use App\Models\ReceiptItem;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -32,6 +34,7 @@ class ContributionController extends Controller
             'deposits' => $this->getCount('contribution_deposits', $branchId, $companyId),
             'withdrawals' => $this->getCount('contribution_withdrawals', $branchId, $companyId),
             'transfers' => $this->getCount('contribution_transfers', $branchId, $companyId),
+            'opening_balances' => 0, // Placeholder for opening balance count
         ];
 
         return view('contributions.index', compact('stats'));
@@ -1406,6 +1409,161 @@ class ContributionController extends Controller
         } catch (\Exception $e) {
             return redirect()->route('contributions.products.index')
                 ->with('error', 'Error deleting contribution product: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show opening balance import form
+     */
+    public function openingBalanceIndex()
+    {
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        // Get active contribution products
+        $products = ContributionProduct::where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->orderBy('product_name')
+            ->get();
+
+        // Get bank accounts
+        $bankAccounts = BankAccount::with('chartAccount')
+            ->orderBy('name')
+            ->get();
+
+        return view('contributions.opening-balance.index', compact('products', 'bankAccounts'));
+    }
+
+    /**
+     * Download opening balance import template
+     */
+    public function downloadOpeningBalanceTemplate(Request $request)
+    {
+        $validator = \Validator::make($request->all(), [
+            'contribution_product_id' => 'required|exists:contribution_products,id',
+            'opening_balance_date' => 'required|date',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        try {
+            $contributionProductId = $request->contribution_product_id;
+            $openingDate = $request->opening_balance_date;
+            $fileName = 'contribution_opening_balance_import_template_' . date('Y-m-d') . '.xlsx';
+
+            return \Maatwebsite\Excel\Facades\Excel::download(
+                new \App\Exports\ContributionOpeningBalanceImportTemplateExport($contributionProductId, $openingDate),
+                $fileName
+            );
+        } catch (\Exception $e) {
+            \Log::error('Contribution Opening Balance Template Download Error: ' . $e->getMessage());
+            
+            return redirect()->back()
+                ->with('error', 'Failed to generate template: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Import contribution opening balances from Excel
+     */
+    public function importOpeningBalance(Request $request)
+    {
+        $validator = \Validator::make($request->all(), [
+            'contribution_product_id' => 'required|exists:contribution_products,id',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
+            'opening_balance_date' => 'required|date',
+            'import_file' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        try {
+            $user = auth()->user();
+            $openingBalanceDate = $request->opening_balance_date;
+
+            // Read Excel file
+            $rows = \Maatwebsite\Excel\Facades\Excel::toArray([], $request->file('import_file'));
+            $rows = $rows[0]; // Get first sheet
+
+            // Get header row and create mapping
+            $header = array_shift($rows);
+            $header = array_map(function ($h) {
+                return strtolower(trim((string) $h));
+            }, $header);
+
+            // Find column indices
+            $customerNoIndex = array_search('customer_no', $header);
+            $openingBalanceDateIndex = array_search('opening_balance_date', $header);
+            $openingBalanceAmountIndex = array_search('opening_balance_amount', $header);
+            $openingBalanceDescriptionIndex = array_search('opening_balance_description', $header);
+            $transactionReferenceIndex = array_search('transaction_reference', $header);
+            $notesIndex = array_search('notes', $header);
+
+            if ($customerNoIndex === false || $openingBalanceAmountIndex === false) {
+                return redirect()->back()
+                    ->with('error', 'Excel file must contain customer_no and opening_balance_amount columns')
+                    ->withInput();
+            }
+
+            // Prepare data for job
+            $dataRows = [];
+            foreach ($rows as $row) {
+                // Skip empty rows
+                if (empty(array_filter($row))) {
+                    continue;
+                }
+
+                $dataRows[] = [
+                    'customer_no' => trim($row[$customerNoIndex] ?? ''),
+                    'opening_balance_date' => isset($row[$openingBalanceDateIndex]) && !empty(trim($row[$openingBalanceDateIndex])) 
+                        ? trim($row[$openingBalanceDateIndex]) 
+                        : $openingBalanceDate,
+                    'opening_balance_amount' => trim($row[$openingBalanceAmountIndex] ?? ''),
+                    'opening_balance_description' => isset($row[$openingBalanceDescriptionIndex]) ? trim($row[$openingBalanceDescriptionIndex]) : '',
+                    'transaction_reference' => isset($row[$transactionReferenceIndex]) ? trim($row[$transactionReferenceIndex]) : '',
+                    'notes' => isset($row[$notesIndex]) ? trim($row[$notesIndex]) : '',
+                ];
+            }
+
+            // Dispatch job for processing
+            \App\Jobs\BulkContributionOpeningBalanceJob::dispatch(
+                $dataRows,
+                $request->contribution_product_id,
+                $request->bank_account_id,
+                $openingBalanceDate,
+                $user->id
+            );
+
+            // Auto-start queue worker to process the job immediately
+            try {
+                \Illuminate\Support\Facades\Artisan::call('queue:work', [
+                    '--once' => true,
+                    '--timeout' => 300,
+                    '--tries' => 1,
+                ]);
+            } catch (\Exception $e) {
+                \Log::warning('Failed to auto-start queue worker: ' . $e->getMessage());
+            }
+
+            return redirect()->back()
+                ->with('success', 'Opening balance import has been queued and processing has started. Check logs for progress.');
+
+        } catch (\Exception $e) {
+            \Log::error('Contribution Opening Balance Import Error: ' . $e->getMessage());
+            
+            return redirect()->back()
+                ->with('error', 'Failed to process import: ' . $e->getMessage())
+                ->withInput();
         }
     }
 }

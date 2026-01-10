@@ -147,6 +147,153 @@
 
     <script>
         $(document).ready(function () {
+            // Function to refresh CSRF token
+            function refreshCsrfToken() {
+                $.ajax({
+                    url: window.location.href,
+                    type: 'GET',
+                    cache: false,
+                    success: function(data) {
+                        // Extract new CSRF token from response
+                        var parser = new DOMParser();
+                        var doc = parser.parseFromString(data, 'text/html');
+                        var newToken = doc.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                        
+                        if (newToken) {
+                            // Update meta tag
+                            $('meta[name="csrf-token"]').attr('content', newToken);
+                            
+                            // Update all hidden CSRF input fields
+                            $('input[name="_token"]').val(newToken);
+                            
+                            // Update logout form
+                            $('#logout-form input[name="_token"]').val(newToken);
+                            
+                            console.log('CSRF token refreshed');
+                        }
+                    },
+                    error: function() {
+                        console.warn('Failed to refresh CSRF token');
+                    }
+                });
+            }
+            
+            // Session keep-alive: ping server every 4 minutes to prevent session expiration
+            setInterval(function() {
+                $.ajax({
+                    url: window.location.href,
+                    type: 'GET',
+                    cache: false,
+                    success: function(data) {
+                        // Extract new CSRF token from response
+                        var parser = new DOMParser();
+                        var doc = parser.parseFromString(data, 'text/html');
+                        var newToken = doc.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                        
+                        if (newToken) {
+                            // Update meta tag
+                            $('meta[name="csrf-token"]').attr('content', newToken);
+                            
+                            // Update all hidden CSRF input fields
+                            $('input[name="_token"]').val(newToken);
+                            
+                            // Update logout form
+                            $('#logout-form input[name="_token"]').val(newToken);
+                        }
+                    },
+                    error: function() {
+                        // Silent fail - don't disturb user
+                    }
+                });
+            }, 4 * 60 * 1000); // Every 4 minutes
+            
+            // Refresh CSRF token every 5 minutes (300000 ms) to prevent expiration
+            setInterval(refreshCsrfToken, 5 * 60 * 1000);
+            
+            // Also refresh token when user becomes active (clicks, types, etc.)
+            var activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+            var lastActivity = Date.now();
+            var activityTimeout;
+            
+            activityEvents.forEach(function(event) {
+                $(document).on(event, function() {
+                    lastActivity = Date.now();
+                    clearTimeout(activityTimeout);
+                    
+                    // Refresh token if user was inactive for more than 2 minutes
+                    activityTimeout = setTimeout(function() {
+                        if (Date.now() - lastActivity > 2 * 60 * 1000) {
+                            refreshCsrfToken();
+                        }
+                    }, 2 * 60 * 1000);
+                });
+            });
+            
+            // Refresh token before form submissions
+            $(document).on('submit', 'form', function(e) {
+                var form = $(this);
+                var csrfInput = form.find('input[name="_token"]');
+                var metaToken = $('meta[name="csrf-token"]').attr('content');
+                
+                // Update form CSRF token with latest from meta tag
+                if (csrfInput.length && metaToken) {
+                    csrfInput.val(metaToken);
+                } else if (metaToken && !csrfInput.length) {
+                    // Add CSRF token if missing
+                    form.prepend('<input type="hidden" name="_token" value="' + metaToken + '">');
+                }
+            });
+            
+            // Setup AJAX to include CSRF token in all requests
+            $.ajaxSetup({
+                beforeSend: function(xhr, settings) {
+                    if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                        var token = $('meta[name="csrf-token"]').attr('content');
+                        if (token) {
+                            xhr.setRequestHeader("X-CSRF-TOKEN", token);
+                        }
+                    }
+                }
+            });
+            
+            // Global AJAX error handler for 419 CSRF token mismatch
+            $(document).ajaxError(function(event, xhr, settings, thrownError) {
+                if (xhr.status === 419) {
+                    // Try to refresh token first
+                    refreshCsrfToken();
+                    
+                    // If it's a form submission, retry after a short delay
+                    if (settings.type === 'POST' || settings.type === 'PUT' || settings.type === 'PATCH' || settings.type === 'DELETE') {
+                        setTimeout(function() {
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Session Expired',
+                                text: 'Your session has expired. Please wait while we refresh the page...',
+                                showConfirmButton: false,
+                                allowOutsideClick: false,
+                                timer: 2000,
+                                timerProgressBar: true
+                            }).then(function() {
+                                window.location.reload();
+                            });
+                        }, 500);
+                    } else {
+                        // For AJAX requests, just reload
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Session Expired',
+                            text: 'Your session has expired. Please wait while we refresh the page...',
+                            showConfirmButton: false,
+                            allowOutsideClick: false,
+                            timer: 2000,
+                            timerProgressBar: true
+                        }).then(function() {
+                            window.location.reload();
+                        });
+                    }
+                }
+            });
+
             // Initialize first table without buttons
             $('#example').DataTable();
 
@@ -292,6 +439,22 @@
                             e.preventDefault();
                             e.stopPropagation();
                             return false;
+                        }
+                        
+                        // Ensure CSRF token is present before submission
+                        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+                        if (csrfToken) {
+                            const csrfInput = form.querySelector('input[name="_token"]');
+                            if (csrfInput) {
+                                csrfInput.value = csrfToken.getAttribute('content');
+                            } else {
+                                // Add CSRF token if missing
+                                const hiddenInput = document.createElement('input');
+                                hiddenInput.type = 'hidden';
+                                hiddenInput.name = '_token';
+                                hiddenInput.value = csrfToken.getAttribute('content');
+                                form.appendChild(hiddenInput);
+                            }
                         }
                         
                         // Mark as submitting

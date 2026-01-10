@@ -905,41 +905,192 @@ class SettingsController extends Controller
      */
     public function updateOpeningBalanceAccountsSettings(Request $request)
     {
-        $request->validate([
-            'shares_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
-            'savings_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
-            'deposits_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
-        ]);
+        // Validate lines if provided, otherwise validate old format for backward compatibility
+        if ($request->has('lines')) {
+            $request->validate([
+                'lines' => 'required|array|min:1',
+                'lines.*.category' => 'required|in:Shares,Contributions,Loans',
+                'lines.*.chart_account_id' => 'required|exists:chart_accounts,id',
+            ]);
 
-        // Save settings
-        SystemSetting::setValue(
-            'shares_opening_balance_account_id',
-            $request->shares_opening_balance_account_id,
-            'integer',
-            'accounting',
-            'SHARES Opening Balance Account',
-            'Chart account for SHARES opening balances'
-        );
+            // Group by category and get the first account for each category (for backward compatibility)
+            $lines = $request->lines;
+            $sharesAccountId = null;
+            $contributionsAccountId = null;
+            $loansAccountId = null;
 
-        SystemSetting::setValue(
-            'savings_opening_balance_account_id',
-            $request->savings_opening_balance_account_id,
-            'integer',
-            'accounting',
-            'SAVINGS Opening Balance Account',
-            'Chart account for SAVINGS opening balances'
-        );
+            foreach ($lines as $line) {
+                if ($line['category'] === 'Shares' && !$sharesAccountId) {
+                    $sharesAccountId = $line['chart_account_id'];
+                } elseif ($line['category'] === 'Contributions' && !$contributionsAccountId) {
+                    $contributionsAccountId = $line['chart_account_id'];
+                } elseif ($line['category'] === 'Loans' && !$loansAccountId) {
+                    $loansAccountId = $line['chart_account_id'];
+                }
+            }
 
-        SystemSetting::setValue(
-            'deposits_opening_balance_account_id',
-            $request->deposits_opening_balance_account_id,
-            'integer',
-            'accounting',
-            'DEPOSITS Opening Balance Account',
-            'Chart account for DEPOSITS opening balances'
-        );
+            // Save settings (maintaining backward compatibility with existing keys)
+            SystemSetting::setValue(
+                'shares_opening_balance_account_id',
+                $sharesAccountId,
+                'integer',
+                'accounting',
+                'SHARES Opening Balance Account',
+                'Chart account for SHARES opening balances'
+            );
+
+            SystemSetting::setValue(
+                'savings_opening_balance_account_id',
+                $contributionsAccountId,
+                'integer',
+                'accounting',
+                'SAVINGS Opening Balance Account',
+                'Chart account for SAVINGS/Contributions opening balances'
+            );
+
+            SystemSetting::setValue(
+                'deposits_opening_balance_account_id',
+                $loansAccountId,
+                'integer',
+                'accounting',
+                'DEPOSITS Opening Balance Account',
+                'Chart account for DEPOSITS/Loans opening balances'
+            );
+
+            // Also save the full lines array as JSON for future use
+            SystemSetting::setValue(
+                'opening_balance_accounts_lines',
+                json_encode($lines),
+                'json',
+                'accounting',
+                'Opening Balance Accounts Lines',
+                'Full configuration of opening balance accounts by category'
+            );
+        } else {
+            // Backward compatibility with old format
+            $request->validate([
+                'shares_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
+                'savings_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
+                'deposits_opening_balance_account_id' => 'nullable|exists:chart_accounts,id',
+            ]);
+
+            SystemSetting::setValue(
+                'shares_opening_balance_account_id',
+                $request->shares_opening_balance_account_id,
+                'integer',
+                'accounting',
+                'SHARES Opening Balance Account',
+                'Chart account for SHARES opening balances'
+            );
+
+            SystemSetting::setValue(
+                'savings_opening_balance_account_id',
+                $request->savings_opening_balance_account_id,
+                'integer',
+                'accounting',
+                'SAVINGS Opening Balance Account',
+                'Chart account for SAVINGS opening balances'
+            );
+
+            SystemSetting::setValue(
+                'deposits_opening_balance_account_id',
+                $request->deposits_opening_balance_account_id,
+                'integer',
+                'accounting',
+                'DEPOSITS Opening Balance Account',
+                'Chart account for DEPOSITS opening balances'
+            );
+        }
 
         return redirect()->route('settings.opening-balance-accounts')
             ->with('success', 'Opening balance accounts settings updated successfully.');
+    }
+
+    /**
+     * Show opening balance logs index page
+     */
+    public function openingBalanceLogsIndex()
+    {
+        return view('settings.opening-balance-logs.index');
+    }
+
+    /**
+     * Get opening balance logs data for DataTable
+     */
+    public function getOpeningBalanceLogsData(Request $request)
+    {
+        if ($request->ajax()) {
+            $user = auth()->user();
+            $branchId = $user->branch_id;
+            $companyId = $user->company_id;
+            $type = $request->get('type', 'all'); // 'contribution', 'share', or 'all'
+
+            $logs = \App\Models\OpeningBalanceLog::with([
+                'customer',
+                'contributionAccount',
+                'contributionProduct',
+                'shareAccount',
+                'shareProduct',
+                'journal',
+                'user',
+                'branch'
+            ])
+            ->where('branch_id', $branchId);
+            
+            // Filter by type if specified
+            if ($type !== 'all') {
+                $logs->where('type', $type);
+            }
+            
+            $logs->select('opening_balance_logs.*');
+
+            return \Yajra\DataTables\Facades\DataTables::eloquent($logs)
+                ->addColumn('type_badge', function ($log) {
+                    $color = $log->type === 'share' ? 'primary' : 'success';
+                    $label = $log->type === 'share' ? 'Share' : 'Contribution';
+                    return '<span class="badge bg-' . $color . '">' . $label . '</span>';
+                })
+                ->addColumn('customer_name', function ($log) {
+                    return $log->customer ? $log->customer->name : 'N/A';
+                })
+                ->addColumn('customer_no', function ($log) {
+                    return $log->customer ? $log->customer->customerNo : 'N/A';
+                })
+                ->addColumn('product_name', function ($log) {
+                    if ($log->type === 'share') {
+                        return $log->shareProduct ? $log->shareProduct->share_name : 'N/A';
+                    }
+                    return $log->contributionProduct ? $log->contributionProduct->product_name : 'N/A';
+                })
+                ->addColumn('account_number', function ($log) {
+                    if ($log->type === 'share') {
+                        return $log->shareAccount ? $log->shareAccount->account_number : 'N/A';
+                    }
+                    return $log->contributionAccount ? $log->contributionAccount->account_number : 'N/A';
+                })
+                ->addColumn('amount_formatted', function ($log) {
+                    return number_format($log->amount, 2);
+                })
+                ->addColumn('date_formatted', function ($log) {
+                    return $log->date ? $log->date->format('M d, Y') : 'N/A';
+                })
+                ->addColumn('journal_reference', function ($log) {
+                    return $log->journal ? $log->journal->reference : 'N/A';
+                })
+                ->addColumn('user_name', function ($log) {
+                    return $log->user ? $log->user->name : 'N/A';
+                })
+                ->addColumn('branch_name', function ($log) {
+                    return $log->branch ? $log->branch->name : 'N/A';
+                })
+                ->addColumn('transaction_reference_formatted', function ($log) {
+                    return $log->transaction_reference ?: 'N/A';
+                })
+                ->orderColumn('date', 'date DESC')
+                ->rawColumns(['type_badge', 'customer_name', 'customer_no', 'product_name', 'account_number', 'amount_formatted', 'date_formatted', 'journal_reference', 'user_name', 'branch_name', 'transaction_reference_formatted'])
+                ->make(true);
+        }
+
+        return response()->json(['error' => 'Invalid request'], 400);
     }
 }

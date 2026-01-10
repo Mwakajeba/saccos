@@ -13,8 +13,9 @@ return new class extends Migration
     {
         Schema::create('share_transfers', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('from_account_id')->constrained('share_accounts')->onDelete('restrict'); // Source account
-            $table->foreignId('to_account_id')->constrained('share_accounts')->onDelete('restrict'); // Destination account
+            // Create columns without foreign key constraints first (share_accounts table may not exist yet)
+            $table->unsignedBigInteger('from_account_id'); // Source account
+            $table->unsignedBigInteger('to_account_id'); // Destination account
             $table->date('transfer_date');
             $table->decimal('number_of_shares', 15, 4); // Number of shares being transferred
             $table->decimal('transfer_amount', 15, 2); // transfer_amount = number_of_shares * nominal_price

@@ -22,14 +22,14 @@
                                 <div class="col-md-6 mb-4">
                                     <div class="card border-primary">
                                         <div class="card-header bg-primary text-white">
-                                            <h6 class="mb-0"><i class="bx bx-download me-2"></i>Download Sample CSV</h6>
+                                            <h6 class="mb-0"><i class="bx bx-download me-2"></i>Download Sample Template</h6>
                                         </div>
                                         <div class="card-body">
-                                            <p class="text-muted mb-3">Download the sample CSV file to understand the
+                                            <p class="text-muted mb-3">Download the sample Excel template with 100 sample customers to understand the
                                                 required format for bulk upload.</p>
                                             <a href="{{ route('customers.download-sample') }}"
                                                 class="btn btn-outline-primary">
-                                                <i class="bx bx-download me-2"></i>Download Sample CSV
+                                                <i class="bx bx-download me-2"></i>Download Sample Template (Excel)
                                             </a>
                                         </div>
                                     </div>
@@ -43,9 +43,9 @@
                                         </div>
                                         <div class="card-body">
                                             <ul class="mb-0">
-                                                <li>Download the sample CSV file first</li>
+                                                <li>Download the sample Excel template first</li>
                                                 <li>Fill in the customer data following the format</li>
-                                                <li>Save as CSV format</li>
+                                                <li>Save as Excel (.xlsx) or CSV format</li>
                                                 <li>Upload the file below</li>
                                                 <li>Select shares or contributions options if needed</li>
                                             </ul>
@@ -98,16 +98,16 @@
                                     <div class="col-md-12 mb-4">
                                         <div class="card">
                                             <div class="card-header">
-                                                <h6 class="mb-0"><i class="bx bx-file me-2"></i>Upload CSV File</h6>
+                                                <h6 class="mb-0"><i class="bx bx-file me-2"></i>Upload File</h6>
                                             </div>
                                             <div class="card-body">
                                                 <div class="mb-3">
-                                                    <label for="csv_file" class="form-label">Select CSV File <span
+                                                    <label for="csv_file" class="form-label">Select File (CSV or Excel) <span
                                                             class="text-danger">*</span></label>
                                                     <input type="file" name="csv_file" id="csv_file"
                                                         class="form-control @error('csv_file') is-invalid @enderror"
-                                                        accept=".csv" required>
-                                                    <div class="form-text">Only CSV files are allowed. Maximum size: 5MB
+                                                        accept=".csv,.xlsx,.xls" required>
+                                                    <div class="form-text">CSV and Excel files (.csv, .xlsx, .xls) are allowed. Maximum size: 10MB
                                                     </div>
                                                     @error('csv_file')
                                                         <div class="invalid-feedback">{{ $message }}</div>

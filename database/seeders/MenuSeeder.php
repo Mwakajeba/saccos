@@ -94,6 +94,32 @@ class MenuSeeder extends Seeder
                 'hiddenRoutes' => ['shares.products.index', 'shares.accounts.index', 'shares.deposits.index', 'shares.withdrawals.index', 'shares.transfers.index'],
             ],
 
+            'Investment' => [
+                'icon' => 'bx bx-trending-up',
+                'visibleRoutes' => [
+                    ['name' => 'UTT Funds', 'route' => 'investments.funds.index'],
+                    ['name' => 'Holdings Register', 'route' => 'investments.holdings.index'],
+                    ['name' => 'Transactions', 'route' => 'investments.transactions.index'],
+                    ['name' => 'NAV Prices', 'route' => 'investments.nav-prices.index'],
+                    ['name' => 'Cash Flows', 'route' => 'investments.cash-flows.index'],
+                    ['name' => 'Reconciliations', 'route' => 'investments.reconciliations.index'],
+                ],
+                'hiddenRoutes' => [
+                    'investments.funds.create',
+                    'investments.funds.edit',
+                    'investments.funds.show',
+                    'investments.transactions.create',
+                    'investments.transactions.show',
+                    'investments.transactions.approve',
+                    'investments.transactions.settle',
+                    'investments.transactions.cancel',
+                    'investments.nav-prices.create',
+                    'investments.reconciliations.create',
+                    'investments.valuation',
+                    'investments.member-view',
+                ],
+            ],
+
             'Reports' => [
                 'icon' => 'bx bx-file',
                 'visibleRoutes' => [

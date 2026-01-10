@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('share_deposits', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('share_account_id')->constrained('share_accounts')->onDelete('restrict');
+            // Create column without foreign key constraint first (share_accounts table may not exist yet)
+            $table->unsignedBigInteger('share_account_id');
             $table->date('deposit_date');
             $table->decimal('deposit_amount', 15, 2);
             $table->decimal('number_of_shares', 15, 4); // Can have decimal shares

@@ -1099,6 +1099,23 @@ class ShareDepositController extends Controller
                     $shareAccount->updated_by = $user->id;
                     $shareAccount->save();
 
+                    // Create opening balance log
+                    \App\Models\OpeningBalanceLog::create([
+                        'type' => 'share',
+                        'customer_id' => $customerId,
+                        'share_account_id' => $shareAccount->id,
+                        'share_product_id' => $shareProduct->id,
+                        'amount' => $totalAmount,
+                        'date' => $openingBalanceDate,
+                        'description' => $openingBalanceDescription ?: ($notes ?: "Opening balance for {$shareProduct->share_name}"),
+                        'transaction_reference' => $transactionReference ?: $deposit->transaction_reference,
+                        'receipt_id' => null,
+                        'journal_id' => null,
+                        'share_deposit_id' => $deposit->id,
+                        'branch_id' => $user->branch_id ?? null,
+                        'user_id' => $user->id,
+                    ]);
+
                     $successCount++;
                 } catch (\Exception $e) {
                     $errorCount++;

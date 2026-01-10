@@ -540,7 +540,13 @@ $roleName = Auth::user()->roles->first() ? ucfirst(Auth::user()->roles->first()-
                     </li>
                     <li>
                         <a class="dropdown-item" href="#"
-                            onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+                            onclick="event.preventDefault(); 
+                                var form = document.getElementById('logout-form');
+                                var metaToken = document.querySelector('meta[name=\"csrf-token\"]')?.getAttribute('content');
+                                if (metaToken) {
+                                    form.querySelector('input[name=\"_token\"]').value = metaToken;
+                                }
+                                form.submit();">
                             <i class='bx bx-log-out-circle'></i><span> Logout
                         </a>
                     </li>
@@ -1252,7 +1258,29 @@ $roleName = Auth::user()->roles->first() ? ucfirst(Auth::user()->roles->first()-
 </header>
 <form id="logout-form" action="{{ url('/logout') }}" method="POST" style="display: none;">
     @csrf
+    <input type="hidden" name="_token" id="logout-csrf-token" value="{{ csrf_token() }}">
 </form>
+<script>
+    // Update logout form CSRF token when meta tag is updated
+    document.addEventListener('DOMContentLoaded', function() {
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'content') {
+                    var metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                    var logoutToken = document.getElementById('logout-csrf-token');
+                    if (metaToken && logoutToken) {
+                        logoutToken.value = metaToken;
+                    }
+                }
+            });
+        });
+        
+        var metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag) {
+            observer.observe(metaTag, { attributes: true });
+        }
+    });
+</script>
 
 <!-- Loan Messages Modal -->
 <div class="modal fade" id="loanMessagesModal" tabindex="-1" aria-labelledby="loanMessagesModalLabel"

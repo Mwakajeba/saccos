@@ -407,7 +407,7 @@ class DashboardController extends Controller
             ];
         });
 
-        // Get Shares data - products with their total balances
+        // Get Shares data - products with their total balances (amount in TZS)
         // Note: ShareProduct doesn't have branch_id, so we filter by accounts' branch_id
         $shareProducts = ShareProduct::where('is_active', true)->get();
         
@@ -420,7 +420,12 @@ class DashboardController extends Controller
                 $accountsQuery->whereIn('branch_id', $userBranchIds);
             }
             
-            $totalBalance = $accountsQuery->sum('share_balance');
+            // Calculate total number of shares
+            $totalShares = $accountsQuery->sum('share_balance');
+            
+            // Convert to amount by multiplying by nominal price
+            $nominalPrice = $product->nominal_price ?? 1;
+            $totalBalance = $totalShares * $nominalPrice;
             
             return [
                 'id' => $product->id,

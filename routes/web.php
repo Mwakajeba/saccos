@@ -142,7 +142,19 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     
     // Share Accounts Routes (data route must come BEFORE resource to avoid route conflicts)
     Route::get('accounts/data', [\App\Http\Controllers\ShareAccountController::class, 'getShareAccountsData'])->name('accounts.data');
+    Route::get('accounts/export', [\App\Http\Controllers\ShareAccountController::class, 'export'])->name('accounts.export');
+    Route::get('accounts/download-template', [\App\Http\Controllers\ShareAccountController::class, 'downloadTemplate'])->name('accounts.download-template');
+    Route::post('accounts/import', [\App\Http\Controllers\ShareAccountController::class, 'import'])->name('accounts.import');
+    Route::get('accounts/{encodedId}/certificate', [\App\Http\Controllers\ShareAccountController::class, 'printCertificate'])->name('accounts.certificate');
+    Route::post('accounts/{encodedId}/change-status', [\App\Http\Controllers\ShareAccountController::class, 'changeStatus'])->name('accounts.change-status');
+    Route::get('accounts/{encodedId}/transactions/data', [\App\Http\Controllers\ShareAccountController::class, 'getAccountTransactionsData'])->name('accounts.transactions.data');
+    Route::get('accounts/{encodedId}/statement/export', [\App\Http\Controllers\ShareAccountController::class, 'exportStatement'])->name('accounts.statement.export');
     Route::resource('accounts', \App\Http\Controllers\ShareAccountController::class);
+    
+    // Share Opening Balance Routes
+    Route::get('opening-balance', [\App\Http\Controllers\ShareAccountController::class, 'openingBalanceIndex'])->name('opening-balance.index');
+    Route::get('opening-balance/download-template', [\App\Http\Controllers\ShareAccountController::class, 'downloadOpeningBalanceTemplate'])->name('opening-balance.download-template');
+    Route::post('opening-balance/import', [\App\Http\Controllers\ShareAccountController::class, 'importOpeningBalance'])->name('opening-balance.import');
     
     Route::get('/deposits', function () {
         return view('shares.deposits.index');
@@ -155,6 +167,30 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::get('/transfers', function () {
         return view('shares.transfers.index');
     })->name('transfers.index');
+});
+
+// Dividends Management Routes
+Route::middleware(['auth'])->prefix('dividends')->name('dividends.')->group(function () {
+    // Profit Allocations Routes
+    Route::get('/profit-allocations', [\App\Http\Controllers\DividendController::class, 'profitAllocations'])->name('profit-allocations');
+    Route::get('/profit-allocations/data', [\App\Http\Controllers\DividendController::class, 'getProfitAllocationsData'])->name('profit-allocations.data');
+    Route::get('/profit-allocations/create', [\App\Http\Controllers\DividendController::class, 'createProfitAllocation'])->name('profit-allocations.create');
+    Route::post('/profit-allocations/calculate-profit', [\App\Http\Controllers\DividendController::class, 'calculateProfit'])->name('profit-allocations.calculate-profit');
+    Route::post('/profit-allocations', [\App\Http\Controllers\DividendController::class, 'storeProfitAllocation'])->name('profit-allocations.store');
+    Route::get('/profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'showProfitAllocation'])->name('profit-allocations.show');
+    Route::get('/profit-allocations/{encodedId}/edit', [\App\Http\Controllers\DividendController::class, 'editProfitAllocation'])->name('profit-allocations.edit');
+    Route::put('/profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'updateProfitAllocation'])->name('profit-allocations.update');
+    Route::delete('/profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'destroyProfitAllocation'])->name('profit-allocations.destroy');
+    Route::patch('/profit-allocations/{encodedId}/change-status', [\App\Http\Controllers\DividendController::class, 'changeProfitAllocationStatus'])->name('profit-allocations.change-status');
+    
+    // Dividends Routes
+    Route::get('/dividends', [\App\Http\Controllers\DividendController::class, 'dividends'])->name('dividends');
+    Route::get('/dividends/data', [\App\Http\Controllers\DividendController::class, 'getDividendsData'])->name('dividends.data');
+    Route::get('/dividends/create', [\App\Http\Controllers\DividendController::class, 'createDividend'])->name('dividends.create');
+    Route::post('/dividends', [\App\Http\Controllers\DividendController::class, 'storeDividend'])->name('dividends.store');
+    Route::get('/dividends/{encodedId}', [\App\Http\Controllers\DividendController::class, 'showDividend'])->name('dividends.show');
+    Route::post('/dividends/{encodedId}/calculate', [\App\Http\Controllers\DividendController::class, 'calculateDividends'])->name('dividends.calculate');
+    Route::post('/dividends/payments/{encodedId}/process', [\App\Http\Controllers\DividendController::class, 'processPayment'])->name('dividends.process-payment');
 });
 
 // Laravel Logs Route
@@ -358,6 +394,10 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     // Opening Balance Accounts Settings
     Route::get('/opening-balance-accounts', [SettingsController::class, 'openingBalanceAccountsSettings'])->name('opening-balance-accounts');
     Route::put('/opening-balance-accounts', [SettingsController::class, 'updateOpeningBalanceAccountsSettings'])->name('opening-balance-accounts.update');
+    
+    // Opening Balance Logs
+    Route::get('/opening-balance-logs', [SettingsController::class, 'openingBalanceLogsIndex'])->name('opening-balance-logs.index');
+    Route::get('/opening-balance-logs/data', [SettingsController::class, 'getOpeningBalanceLogsData'])->name('opening-balance-logs.data');
 
     // Bulk Email Settings (Super Admin only)
     Route::middleware(['role:super-admin'])->group(function () {
@@ -867,6 +907,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Parameterized routes (must come after specific routes)
     Route::post('customers/{customerId}/send-message', [CustomerController::class, 'sendMessage'])->name('customers.send-message');
+    Route::post('customers/{encodedId}/toggle-status', [CustomerController::class, 'toggleStatus'])->name('customers.toggle-status');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
     Route::get('customers/{customer}/edit', [CustomerController::class, 'edit'])->name('customers.edit');
     Route::put('customers/{customer}', [CustomerController::class, 'update'])->name('customers.update');
@@ -880,10 +921,10 @@ Route::middleware(['auth'])->group(function () {
 Route::get('/contributions', [ContributionController::class, 'index'])->name('contributions.index')->middleware('auth');
 Route::get('/contributions/products', [ContributionController::class, 'products'])->name('contributions.products.index')->middleware('auth');
 Route::get('/contributions/products/data', [ContributionController::class, 'getContributionProductsData'])->name('contributions.products.data')->middleware('auth');
-Route::get('/contributions/products/{encodedId}', [ContributionController::class, 'productsShow'])->name('contributions.products.show')->middleware('auth');
-Route::get('/contributions/products/{encodedId}/transactions/data', [ContributionController::class, 'getProductTransactionsData'])->name('contributions.products.transactions.data')->middleware('auth');
 Route::get('/contributions/products/create', [ContributionController::class, 'productsCreate'])->name('contributions.products.create')->middleware('auth');
 Route::post('/contributions/products', [ContributionController::class, 'productsStore'])->name('contributions.products.store')->middleware('auth');
+Route::get('/contributions/products/{encodedId}', [ContributionController::class, 'productsShow'])->name('contributions.products.show')->middleware('auth');
+Route::get('/contributions/products/{encodedId}/transactions/data', [ContributionController::class, 'getProductTransactionsData'])->name('contributions.products.transactions.data')->middleware('auth');
 Route::get('/contributions/products/{encodedId}/edit', [ContributionController::class, 'productsEdit'])->name('contributions.products.edit')->middleware('auth');
 Route::put('/contributions/products/{encodedId}', [ContributionController::class, 'productsUpdate'])->name('contributions.products.update')->middleware('auth');
 Route::delete('/contributions/products/{encodedId}', [ContributionController::class, 'productsDestroy'])->name('contributions.products.destroy')->middleware('auth');
@@ -900,6 +941,9 @@ Route::get('/contributions/deposits', [ContributionController::class, 'deposits'
 Route::get('/contributions/deposits/data', [ContributionController::class, 'getDepositsData'])->name('contributions.deposits.data')->middleware('auth');
 Route::get('/contributions/deposits/create', [ContributionController::class, 'depositsCreate'])->name('contributions.deposits.create')->middleware('auth');
 Route::post('/contributions/deposits', [ContributionController::class, 'depositsStore'])->name('contributions.deposits.store')->middleware('auth');
+Route::get('/contributions/opening-balance', [ContributionController::class, 'openingBalanceIndex'])->name('contributions.opening-balance.index')->middleware('auth');
+Route::get('/contributions/opening-balance/download-template', [ContributionController::class, 'downloadOpeningBalanceTemplate'])->name('contributions.opening-balance.download-template')->middleware('auth');
+Route::post('/contributions/opening-balance/import', [ContributionController::class, 'importOpeningBalance'])->name('contributions.opening-balance.import')->middleware('auth');
 Route::get('/contributions/withdrawals', [ContributionController::class, 'withdrawals'])->name('contributions.withdrawals.index')->middleware('auth');
 Route::get('/contributions/withdrawals/data', [ContributionController::class, 'getWithdrawalsData'])->name('contributions.withdrawals.data')->middleware('auth');
 Route::get('/contributions/withdrawals/create', [ContributionController::class, 'withdrawalsCreate'])->name('contributions.withdrawals.create')->middleware('auth');
@@ -911,6 +955,55 @@ Route::post('/contributions/transfers', [ContributionController::class, 'transfe
 Route::get('/contributions/transfers/pending', [ContributionController::class, 'pendingTransfers'])->name('contributions.transfers.pending')->middleware('auth');
 Route::get('/contributions/reports/balance', [ContributionController::class, 'balanceReport'])->name('contributions.reports.balance')->middleware('auth');
 Route::get('/contributions/reports/transactions', [ContributionController::class, 'transactionsReport'])->name('contributions.reports.transactions')->middleware('auth');
+
+// Investment (UTT) Routes
+use App\Http\Controllers\InvestmentController;
+Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(function () {
+    // Funds Management
+    Route::get('/funds', [InvestmentController::class, 'fundsIndex'])->name('funds.index');
+    Route::get('/funds/data', [InvestmentController::class, 'getFundsData'])->name('funds.data');
+    Route::get('/funds/create', [InvestmentController::class, 'fundsCreate'])->name('funds.create');
+    Route::post('/funds', [InvestmentController::class, 'fundsStore'])->name('funds.store');
+    Route::get('/funds/{encodedId}', [InvestmentController::class, 'fundsShow'])->name('funds.show');
+    Route::get('/funds/{encodedId}/edit', [InvestmentController::class, 'fundsEdit'])->name('funds.edit');
+    Route::put('/funds/{encodedId}', [InvestmentController::class, 'fundsUpdate'])->name('funds.update');
+    
+    // Holdings Management
+    Route::get('/holdings', [InvestmentController::class, 'holdingsIndex'])->name('holdings.index');
+    Route::get('/holdings/data', [InvestmentController::class, 'getHoldingsData'])->name('holdings.data');
+    
+    // Transactions Management
+    Route::get('/transactions', [InvestmentController::class, 'transactionsIndex'])->name('transactions.index');
+    Route::get('/transactions/data', [InvestmentController::class, 'getTransactionsData'])->name('transactions.data');
+    Route::get('/transactions/create', [InvestmentController::class, 'transactionsCreate'])->name('transactions.create');
+    Route::post('/transactions', [InvestmentController::class, 'transactionsStore'])->name('transactions.store');
+    Route::get('/transactions/{encodedId}', [InvestmentController::class, 'transactionsShow'])->name('transactions.show');
+    Route::post('/transactions/{encodedId}/approve', [InvestmentController::class, 'transactionsApprove'])->name('transactions.approve');
+    Route::post('/transactions/{encodedId}/settle', [InvestmentController::class, 'transactionsSettle'])->name('transactions.settle');
+    Route::post('/transactions/{encodedId}/cancel', [InvestmentController::class, 'transactionsCancel'])->name('transactions.cancel');
+    
+    // NAV Prices Management
+    Route::get('/nav-prices', [InvestmentController::class, 'navPricesIndex'])->name('nav-prices.index');
+    Route::get('/nav-prices/data', [InvestmentController::class, 'getNavPricesData'])->name('nav-prices.data');
+    Route::get('/nav-prices/create', [InvestmentController::class, 'navPricesCreate'])->name('nav-prices.create');
+    Route::post('/nav-prices', [InvestmentController::class, 'navPricesStore'])->name('nav-prices.store');
+    
+    // Cash Flows Management
+    Route::get('/cash-flows', [InvestmentController::class, 'cashFlowsIndex'])->name('cash-flows.index');
+    Route::get('/cash-flows/data', [InvestmentController::class, 'getCashFlowsData'])->name('cash-flows.data');
+    
+    // Reconciliations Management
+    Route::get('/reconciliations', [InvestmentController::class, 'reconciliationsIndex'])->name('reconciliations.index');
+    Route::get('/reconciliations/data', [InvestmentController::class, 'getReconciliationsData'])->name('reconciliations.data');
+    Route::get('/reconciliations/create', [InvestmentController::class, 'reconciliationsCreate'])->name('reconciliations.create');
+    Route::post('/reconciliations', [InvestmentController::class, 'reconciliationsStore'])->name('reconciliations.store');
+    
+    // Valuation & Reports
+    Route::get('/valuation', [InvestmentController::class, 'getPortfolioValuation'])->name('valuation');
+    
+    // Member View (Read-Only)
+    Route::get('/member-view', [InvestmentController::class, 'memberView'])->name('member-view');
+});
 
 //////////////////////////////////////////////////// END CONTRIBUTIONS //////////////////////////////////////////////////////////////
 

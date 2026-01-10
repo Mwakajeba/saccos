@@ -395,6 +395,21 @@
                         d.status = currentStatus;
                     },
                     error: function (xhr, error, code) {
+                        if (xhr.status === 419) {
+                            // CSRF token mismatch - reload page to get new token
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Session Expired',
+                                text: 'Your session has expired. Please wait while we refresh the page...',
+                                showConfirmButton: false,
+                                allowOutsideClick: false,
+                                timer: 2000,
+                                timerProgressBar: true
+                            }).then(function() {
+                                window.location.reload();
+                            });
+                            return false;
+                        }
                         console.log('Ajax error:', xhr.responseJSON);
                     }
                 },
@@ -504,6 +519,23 @@
             $.ajaxSetup({
                 headers: {
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                error: function(xhr, status, error) {
+                    if (xhr.status === 419) {
+                        // CSRF token mismatch - reload page to get new token
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Session Expired',
+                            text: 'Your session has expired. Please wait while we refresh the page...',
+                            showConfirmButton: false,
+                            allowOutsideClick: false,
+                            timer: 2000,
+                            timerProgressBar: true
+                        }).then(function() {
+                            window.location.reload();
+                        });
+                        return false;
+                    }
                 }
             });
 

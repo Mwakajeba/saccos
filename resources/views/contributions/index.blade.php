@@ -23,6 +23,7 @@
                                 ['title' => 'Contributions Deposits', 'icon' => 'bx bx-down-arrow-circle', 'color' => 'info', 'description' => 'Process and manage contribution deposits.', 'route' => 'contributions.deposits.index', 'button_text' => 'View Deposits', 'permission' => 'view contributions deposits', 'count_key' => 'deposits'],
                                 ['title' => 'Contributions Withdrawals', 'icon' => 'bx bx-up-arrow-circle', 'color' => 'warning', 'description' => 'Process and manage contribution withdrawals.', 'route' => 'contributions.withdrawals.index', 'button_text' => 'View Withdrawals', 'permission' => 'view contributions withdrawal', 'count_key' => 'withdrawals'],
                                 ['title' => 'Contributions Transfers', 'icon' => 'bx bx-transfer', 'color' => 'secondary', 'description' => 'Manage transfers between contribution accounts.', 'route' => 'contributions.transfers.index', 'button_text' => 'View Transfers', 'permission' => 'view contributions transfer', 'count_key' => 'transfers'],
+                                ['title' => 'Opening Balance', 'icon' => 'bx bx-calendar-check', 'color' => 'dark', 'description' => 'Import and manage contribution opening balances.', 'route' => 'contributions.opening-balance.index', 'button_text' => 'Import Opening Balance', 'permission' => 'view contributions deposits', 'count_key' => 'opening_balances'],
                             ] as $card)
                                 @can($card['permission'])
                                 <div class="col-md-6 col-lg-4 mb-4">

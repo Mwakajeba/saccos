@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('share_withdrawals', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('share_account_id')->constrained('share_accounts')->onDelete('restrict');
+            // Create column without foreign key constraint first (share_accounts table may not exist yet)
+            $table->unsignedBigInteger('share_account_id');
             $table->date('withdrawal_date');
             $table->decimal('withdrawal_amount', 15, 2); // Amount to be paid out
             $table->decimal('number_of_shares', 15, 4); // Number of shares being withdrawn
