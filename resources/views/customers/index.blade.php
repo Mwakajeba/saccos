@@ -145,6 +145,7 @@
             ajax: {
                 url: '{{ route("customers.data") }}',
                 type: 'GET',
+                timeout: 60000, // 60 second timeout
                 data: function(d) {
                     // Add status filter to AJAX request only if set
                     if (window.currentStatusFilter) {
@@ -152,29 +153,37 @@
                     }
                 },
                 error: function(xhr, error, code) {
-                    console.error('DataTables Ajax Error:', error, code);
+                    console.error('DataTables Ajax Error:', error, code, xhr);
+                    var errorMessage = 'Failed to load customers data.';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMessage = xhr.responseJSON.error;
+                    } else if (error === 'timeout') {
+                        errorMessage = 'Request timed out. Please try again.';
+                    } else if (error === 'parsererror') {
+                        errorMessage = 'Failed to parse response. Please check the console for details.';
+                    }
                     Swal.fire({
                         title: 'Error!',
-                        text: 'Failed to load customers data. Please refresh the page.',
+                        text: errorMessage,
                         icon: 'error',
                         confirmButtonText: 'OK'
                     });
                 }
             },
             columns: [
-                { data: 'customerNo', name: 'customerNo', title: 'Customer No' },
+                { data: 'customerNo', name: 'customerNo', title: 'Customer No', orderable: true, searchable: false },
                 { data: 'avatar_name', name: 'name', title: 'Name', orderable: true, searchable: true },
-                { data: 'phone1', name: 'phone1', title: 'Phone' },
-                { data: 'region_name', name: 'region.name', title: 'Region' },
-                { data: 'district_name', name: 'district.name', title: 'District' },
-                { data: 'branch_name', name: 'branch.name', title: 'Branch' },
-                { data: 'category', name: 'category', title: 'Category' },
+                { data: 'phone1', name: 'phone1', title: 'Phone', orderable: true, searchable: true },
+                { data: 'region_name', name: 'region_name', title: 'Region', orderable: false, searchable: false },
+                { data: 'district_name', name: 'district_name', title: 'District', orderable: false, searchable: false },
+                { data: 'branch_name', name: 'branch_name', title: 'Branch', orderable: false, searchable: false },
+                { data: 'category', name: 'category', title: 'Category', orderable: true, searchable: true },
                 { data: 'actions', name: 'actions', title: 'Actions', orderable: false, searchable: false }
             ],
             responsive: true,
-            order: [[1, 'asc']],
+            order: [[0, 'desc']], // Order by customerNo descending
             pageLength: 10,
-            engthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
             language: {
                 search: "",
                 searchPlaceholder: "Search customers...",

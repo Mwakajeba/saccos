@@ -3,7 +3,13 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = 'https://dev.smartsoft.co.tz/api';
+  // For Linux/Windows/Mac desktop use: 127.0.0.1
+  // For Android Emulator use: 10.0.2.2
+  // For physical device/iOS use: 192.168.1.193 (your computer's IP)
+  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  //static const String baseUrl = 'http://10.0.2.2:8000/api'; // For Android Emulator
+  //static const String baseUrl = 'http://192.168.1.193:8000/api'; // For physical device
+  //static const String baseUrl = 'https://dev.smartsoft.co.tz/api';
   
   // Login API
   static Future<Map<String, dynamic>> login(String username, String password) async {
@@ -60,15 +66,25 @@ class ApiService {
         body: jsonEncode({
           'customer_id': customerId,
         }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
       );
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        throw Exception('Failed to load profile');
+        throw Exception('SERVER_ERROR:${response.statusCode}');
       }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
     } catch (e) {
-      throw Exception('Network error: ${e.toString()}');
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
     }
   }
 
@@ -84,15 +100,25 @@ class ApiService {
         body: jsonEncode({
           'customer_id': customerId,
         }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
       );
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        throw Exception('Failed to load loans');
+        throw Exception('SERVER_ERROR:${response.statusCode}');
       }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
     } catch (e) {
-      throw Exception('Network error: ${e.toString()}');
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
     }
   }
 
@@ -108,15 +134,25 @@ class ApiService {
         body: jsonEncode({
           'customer_id': customerId,
         }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
       );
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        throw Exception('Failed to load group members');
+        throw Exception('SERVER_ERROR:${response.statusCode}');
       }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
     } catch (e) {
-      throw Exception('Network error: ${e.toString()}');
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
     }
   }
 
@@ -188,6 +224,142 @@ class ApiService {
         print(jsonEncode(data));
         print('=============================');
         return data;
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Get customer contributions
+  static Future<Map<String, dynamic>> getContributions(int customerId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/contributions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'customer_id': customerId,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Get customer shares
+  static Future<Map<String, dynamic>> getShares(int customerId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/shares'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'customer_id': customerId,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Get contribution transactions
+  static Future<Map<String, dynamic>> getContributionTransactions(int accountId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/contribution-transactions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'account_id': accountId,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Get share transactions
+  static Future<Map<String, dynamic>> getShareTransactions(int accountId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/share-transactions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'account_id': accountId,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
       } else {
         throw Exception('SERVER_ERROR:${response.statusCode}');
       }

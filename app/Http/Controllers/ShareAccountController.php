@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Vinkla\Hashids\Facades\Hashids;
+use App\Helpers\HashidsHelper;
 use Yajra\DataTables\Facades\DataTables;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -80,14 +81,24 @@ class ShareAccountController extends Controller
                     return $account->shareProduct->share_name ?? 'N/A';
                 })
                 ->addColumn('share_balance_formatted', function ($account) {
-                    $encodedId = Hashids::encode($account->id);
-                    $balance = number_format($account->share_balance, 2);
-                    return '<a href="' . route('shares.accounts.show', $encodedId) . '" class="text-decoration-none fw-bold text-primary" title="View account details">' . $balance . '</a>';
+                    try {
+                        $encodedId = HashidsHelper::encode($account->id);
+                        $balance = number_format($account->share_balance, 2);
+                        return '<a href="' . route('shares.accounts.show', $encodedId) . '" class="text-decoration-none fw-bold text-primary" title="View account details">' . $balance . '</a>';
+                    } catch (\Exception $e) {
+                        Log::error('Hashids encode error in share_balance_formatted: ' . $e->getMessage());
+                        return number_format($account->share_balance, 2);
+                    }
                 })
                 ->addColumn('nominal_value_formatted', function ($account) {
-                    $encodedId = Hashids::encode($account->id);
-                    $value = number_format($account->nominal_value, 2);
-                    return '<a href="' . route('shares.accounts.show', $encodedId) . '" class="text-decoration-none fw-bold text-primary" title="View account details">' . $value . '</a>';
+                    try {
+                        $encodedId = HashidsHelper::encode($account->id);
+                        $value = number_format($account->nominal_value, 2);
+                        return '<a href="' . route('shares.accounts.show', $encodedId) . '" class="text-decoration-none fw-bold text-primary" title="View account details">' . $value . '</a>';
+                    } catch (\Exception $e) {
+                        Log::error('Hashids encode error in nominal_value_formatted: ' . $e->getMessage());
+                        return number_format($account->nominal_value, 2);
+                    }
                 })
                 ->addColumn('opening_date_formatted', function ($account) {
                     return $account->opening_date ? $account->opening_date->format('Y-m-d') : 'N/A';
@@ -101,25 +112,30 @@ class ShareAccountController extends Controller
                     return $badges[$account->status] ?? '<span class="badge bg-secondary">Unknown</span>';
                 })
                 ->addColumn('actions', function ($account) {
-                    $actions = '';
-                    $encodedId = Hashids::encode($account->id);
+                    try {
+                        $actions = '';
+                        $encodedId = HashidsHelper::encode($account->id);
 
-                    // View action
-                    $actions .= '<a href="' . route('shares.accounts.show', $encodedId) . '" class="btn btn-sm btn-info me-1" title="View"><i class="bx bx-show"></i></a>';
+                        // View action
+                        $actions .= '<a href="' . route('shares.accounts.show', $encodedId) . '" class="btn btn-sm btn-info me-1" title="View"><i class="bx bx-show"></i></a>';
 
-                    // Edit action
-                    $actions .= '<a href="' . route('shares.accounts.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
+                        // Edit action
+                        $actions .= '<a href="' . route('shares.accounts.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
 
-                    // Certificate print action
-                    $actions .= '<a href="' . route('shares.accounts.certificate', $encodedId) . '" class="btn btn-sm btn-primary me-1" title="Print Certificate" target="_blank"><i class="bx bx-award"></i></a>';
+                        // Certificate print action
+                        $actions .= '<a href="' . route('shares.accounts.certificate', $encodedId) . '" class="btn btn-sm btn-primary me-1" title="Print Certificate" target="_blank"><i class="bx bx-award"></i></a>';
 
-                    // Change status action
-                    $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" data-name="' . e($account->account_number) . '" data-status="' . e($account->status) . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
+                        // Change status action
+                        $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" data-name="' . e($account->account_number) . '" data-status="' . e($account->status) . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
 
-                    // Delete action
-                    $actions .= '<button class="btn btn-sm btn-danger delete-btn" data-id="' . $encodedId . '" data-name="' . e($account->account_number) . '" title="Delete"><i class="bx bx-trash"></i></button>';
+                        // Delete action
+                        $actions .= '<button class="btn btn-sm btn-danger delete-btn" data-id="' . $encodedId . '" data-name="' . e($account->account_number) . '" title="Delete"><i class="bx bx-trash"></i></button>';
 
-                    return '<div class="text-center d-flex justify-content-center gap-1">' . $actions . '</div>';
+                        return '<div class="text-center d-flex justify-content-center gap-1">' . $actions . '</div>';
+                    } catch (\Exception $e) {
+                        Log::error('Hashids encode error in actions column: ' . $e->getMessage());
+                        return '<div class="text-center text-danger">Error</div>';
+                    }
                 })
                 ->rawColumns(['status_badge', 'actions', 'share_balance_formatted', 'nominal_value_formatted'])
                 ->make(true);

@@ -7,6 +7,10 @@ import 'loan_products_page.dart';
 import 'models/user_session.dart';
 import 'deposit_accounts_page.dart';
 import 'loan_calculator_page.dart';
+import 'contributions_page.dart';
+import 'shares_page.dart';
+import 'services/api_service.dart';
+import 'account_transactions_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,6 +22,48 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   bool _isBalanceVisible = true;
+  List<dynamic> _contributions = [];
+  List<dynamic> _shares = [];
+  bool _isLoadingAssets = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAssets();
+  }
+
+  Future<void> _loadAssets() async {
+    setState(() {
+      _isLoadingAssets = true;
+    });
+
+    try {
+      final userId = UserSession.instance.userId;
+      if (userId != null) {
+        final contributionsResponse = await ApiService.getContributions(userId);
+        final sharesResponse = await ApiService.getShares(userId);
+
+        setState(() {
+          if (contributionsResponse['status'] == 200) {
+            _contributions = contributionsResponse['contributions'] ?? [];
+          }
+          if (sharesResponse['status'] == 200) {
+            _shares = sharesResponse['shares'] ?? [];
+          }
+          _isLoadingAssets = false;
+        });
+      } else {
+        setState(() {
+          _isLoadingAssets = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading assets: $e');
+      setState(() {
+        _isLoadingAssets = false;
+      });
+    }
+  }
 
   String _formatCurrency(double amount) {
     return amount.toStringAsFixed(0).replaceAllMapped(
@@ -554,7 +600,7 @@ class _HomePageState extends State<HomePage> {
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            'Mchanganuo wa Mali',
+            'Michango na Hisa',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -565,38 +611,146 @@ class _HomePageState extends State<HomePage> {
         const SizedBox(height: 12),
         SizedBox(
           height: 130,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              _buildAssetCard(
-                icon: Icons.donut_small,
-                label: 'Hisa',
-                amount: '500,000',
-                change: '+5%',
-                isPositive: true,
-                color: Colors.blue,
-              ),
-              const SizedBox(width: 16),
-              _buildAssetCard(
-                icon: Icons.savings_outlined,
-                label: 'Amana',
-                amount: '450,000',
-                change: 'Imetulia',
-                isPositive: null,
-                color: Colors.purple,
-              ),
-              const SizedBox(width: 16),
-              _buildAssetCard(
-                icon: Icons.account_balance_outlined,
-                label: 'Akiba',
-                amount: '200,000',
-                change: '+2%',
-                isPositive: true,
-                color: Colors.amber,
-              ),
-            ],
-          ),
+          child: _isLoadingAssets
+              ? const Center(
+                  child: CircularProgressIndicator(),
+                )
+              : ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    // Michango (Contributions)
+                    if (_contributions.isNotEmpty)
+                      ..._contributions.map((contribution) {
+                        double balance = 0.0;
+                        try {
+                          if (contribution['balance'] is String) {
+                            balance = double.parse(contribution['balance']);
+                          } else {
+                            balance = (contribution['balance'] as num?)?.toDouble() ?? 0.0;
+                          }
+                        } catch (e) {
+                          balance = 0.0;
+                        }
+                        
+                        String interestRate = '';
+                        bool? isPositive;
+                        try {
+                          if (contribution['interest_rate'] != null) {
+                            double rate = 0.0;
+                            if (contribution['interest_rate'] is String) {
+                              rate = double.parse(contribution['interest_rate']);
+                            } else {
+                              rate = (contribution['interest_rate'] as num).toDouble();
+                            }
+                            interestRate = '${rate.toStringAsFixed(1)}% p.a.';
+                            isPositive = rate > 0 ? true : null;
+                          } else {
+                            interestRate = 'Imetulia';
+                            isPositive = null;
+                          }
+                        } catch (e) {
+                          interestRate = 'Imetulia';
+                          isPositive = null;
+                        }
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: _buildAssetCard(
+                            icon: Icons.account_balance_wallet,
+                            label: contribution['product_name']?.toString() ?? 'Michango',
+                            amount: _formatCurrency(balance),
+                            change: interestRate,
+                            isPositive: isPositive,
+                            color: Colors.purple,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => AccountTransactionsPage(
+                                    accountId: contribution['id'],
+                                    accountName: contribution['product_name']?.toString() ?? 'Michango',
+                                    accountType: 'contribution',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    
+                    // Michango ya Hisa (Shares)
+                    if (_shares.isNotEmpty)
+                      ..._shares.map((share) {
+                        double totalValue = 0.0;
+                        double shareBalance = 0.0;
+                        try {
+                          if (share['total_value'] is String) {
+                            totalValue = double.parse(share['total_value']);
+                          } else {
+                            totalValue = (share['total_value'] as num?)?.toDouble() ?? 0.0;
+                          }
+                          
+                          if (share['share_balance'] is String) {
+                            shareBalance = double.parse(share['share_balance']);
+                          } else {
+                            shareBalance = (share['share_balance'] as num?)?.toDouble() ?? 0.0;
+                          }
+                        } catch (e) {
+                          totalValue = 0.0;
+                          shareBalance = 0.0;
+                        }
+                        
+                        bool? isPositive;
+                        try {
+                          if (share['dividend_rate'] != null) {
+                            double rate = 0.0;
+                            if (share['dividend_rate'] is String) {
+                              rate = double.parse(share['dividend_rate']);
+                            } else {
+                              rate = (share['dividend_rate'] as num).toDouble();
+                            }
+                            isPositive = rate > 0 ? true : null;
+                          }
+                        } catch (e) {
+                          isPositive = null;
+                        }
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: _buildAssetCard(
+                            icon: Icons.show_chart,
+                            label: share['product_name']?.toString() ?? 'Hisa',
+                            amount: _formatCurrency(totalValue),
+                            change: '${shareBalance.toStringAsFixed(0)} hisa',
+                            isPositive: isPositive,
+                            color: Colors.blue,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => AccountTransactionsPage(
+                                    accountId: share['id'],
+                                    accountName: share['product_name']?.toString() ?? 'Hisa',
+                                    accountType: 'share',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    
+                    // Placeholder if no data
+                    if (_contributions.isEmpty && _shares.isEmpty)
+                      _buildAssetCard(
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'Hakuna Mali',
+                        amount: '0',
+                        change: 'Anza sasa',
+                        isPositive: null,
+                        color: Colors.grey,
+                      ),
+                  ],
+                ),
         ),
       ],
     );
@@ -609,76 +763,80 @@ class _HomePageState extends State<HomePage> {
     required String change,
     required bool? isPositive,
     required Color color,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      width: 150,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 20, color: color),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF111813).withOpacity(0.7),
-                ),
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                amount,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF111813),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  if (isPositive != null)
-                    Icon(
-                      isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                      size: 12,
-                      color: isPositive ? Colors.green : Colors.red,
-                    ),
-                  if (isPositive != null) const SizedBox(width: 2),
-                  Text(
-                    change,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: isPositive == null
-                          ? Colors.grey
-                          : (isPositive ? Colors.green : Colors.red),
-                    ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 250,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
-              ),
-            ],
-          ),
-        ],
+                  child: Icon(icon, size: 20, color: color),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF111813).withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  amount,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111813),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (isPositive != null)
+                      Icon(
+                        isPositive ? Icons.arrow_upward : Icons.arrow_downward,
+                        size: 12,
+                        color: isPositive ? Colors.green : Colors.red,
+                      ),
+                    if (isPositive != null) const SizedBox(width: 2),
+                    Text(
+                      change,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: isPositive == null
+                            ? Colors.grey
+                            : (isPositive ? Colors.green : Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

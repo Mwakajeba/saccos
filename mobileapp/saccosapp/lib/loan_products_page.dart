@@ -62,8 +62,19 @@ class _LoanProductsPageState extends State<LoanProductsPage> {
       print('Error type: ${e.runtimeType}');
       print('Error message: $e');
       print('======================');
+      
+      String errorMessage = 'Kuna tatizo, jaribu tena';
+      
+      if (e.toString().contains('TIMEOUT')) {
+        errorMessage = 'Seva inachukua muda mrefu. Jaribu tena';
+      } else if (e.toString().contains('NETWORK_ERROR')) {
+        errorMessage = 'Hakuna mtandao. Angalia muunganisho wako';
+      } else if (e.toString().contains('SERVER_ERROR')) {
+        errorMessage = 'Tatizo la seva. Jaribu tena baadaye';
+      }
+      
       setState(() {
-        _errorMessage = 'Hakuna mtandao. Angalia muunganisho wako';
+        _errorMessage = errorMessage;
         _isLoading = false;
       });
     }

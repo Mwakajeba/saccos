@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Loan;
 use App\Models\LoanProduct;
+use App\Models\ContributionAccount;
+use App\Models\ShareAccount;
+use App\Models\ShareDeposit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -448,5 +451,248 @@ class CustomerAuthController extends Controller
         }
 
         return $result;
+    }
+
+    /**
+     * Get customer contributions
+     */
+    public function contributions(Request $request)
+    {
+        try {
+            $customerId = $request->input('customer_id');
+
+            if (!$customerId) {
+                return response()->json([
+                    'message' => 'Customer ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get customer's contribution accounts with product details
+            $contributions = ContributionAccount::with(['contributionProduct', 'branch'])
+                ->where('customer_id', $customerId)
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($account) {
+                    return [
+                        'id' => $account->id,
+                        'account_number' => $account->account_number,
+                        'product_name' => $account->contributionProduct->product_name ?? '',
+                        'balance' => $account->balance,
+                        'status' => $account->status,
+                        'opening_date' => $account->opening_date,
+                        'branch' => $account->branch->name ?? '',
+                        'interest_rate' => $account->contributionProduct->interest ?? 0,
+                        'can_withdraw' => $account->contributionProduct->can_withdraw ?? false,
+                    ];
+                });
+
+            $totalBalance = $contributions->sum('balance');
+
+            return response()->json([
+                'status' => 200,
+                'contributions' => $contributions,
+                'total_balance' => $totalBalance,
+                'accounts_count' => $contributions->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get customer shares
+     */
+    public function shares(Request $request)
+    {
+        try {
+            $customerId = $request->input('customer_id');
+
+            if (!$customerId) {
+                return response()->json([
+                    'message' => 'Customer ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get customer's share accounts with product details
+            $shares = ShareAccount::with(['shareProduct', 'branch'])
+                ->where('customer_id', $customerId)
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($account) {
+                    $totalValue = $account->share_balance * $account->nominal_value;
+                    
+                    return [
+                        'id' => $account->id,
+                        'account_number' => $account->account_number,
+                        'certificate_number' => $account->certificate_number,
+                        'product_name' => $account->shareProduct->share_name ?? '',
+                        'share_balance' => $account->share_balance,
+                        'nominal_value' => $account->nominal_value,
+                        'total_value' => $totalValue,
+                        'status' => $account->status,
+                        'opening_date' => $account->opening_date,
+                        'last_transaction_date' => $account->last_transaction_date,
+                        'branch' => $account->branch->name ?? '',
+                        'dividend_rate' => $account->shareProduct->dividend_rate ?? 0,
+                    ];
+                });
+
+            $totalShares = $shares->sum('share_balance');
+            $totalValue = $shares->sum('total_value');
+
+            return response()->json([
+                'status' => 200,
+                'shares' => $shares,
+                'total_shares' => $totalShares,
+                'total_value' => $totalValue,
+                'accounts_count' => $shares->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get contribution account transactions
+     */
+    public function contributionTransactions(Request $request)
+    {
+        try {
+            $accountId = $request->input('account_id');
+
+            if (!$accountId) {
+                return response()->json([
+                    'message' => 'Account ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get contribution account
+            $account = ContributionAccount::find($accountId);
+            
+            if (!$account) {
+                return response()->json([
+                    'message' => 'Account not found',
+                    'status' => 404
+                ], 404);
+            }
+
+            // Get transactions from gl_transactions table
+            $transactions = DB::table('gl_transactions')
+                ->where('transaction_type', 'LIKE', '%contribution%')
+                ->where('transaction_id', $accountId)
+                ->orderBy('date', 'desc')
+                ->get()
+                ->map(function ($transaction) {
+                    return [
+                        'id' => $transaction->id,
+                        'date' => $transaction->date,
+                        'type' => $transaction->nature == 'credit' ? 'deposit' : 'withdrawal',
+                        'amount' => $transaction->amount,
+                        'reference' => 'GL-' . $transaction->id,
+                        'notes' => $transaction->description ?? '',
+                    ];
+                });
+
+            // Separate into deposits and withdrawals
+            $deposits = $transactions->where('type', 'deposit')->values();
+            $withdrawals = $transactions->where('type', 'withdrawal')->values();
+
+            return response()->json([
+                'status' => 200,
+                'deposits' => $deposits,
+                'withdrawals' => $withdrawals,
+                'total_transactions' => $transactions->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get share account transactions
+     */
+    public function shareTransactions(Request $request)
+    {
+        try {
+            $accountId = $request->input('account_id');
+
+            if (!$accountId) {
+                return response()->json([
+                    'message' => 'Account ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get deposits from share_deposits table
+            $deposits = ShareDeposit::where('share_account_id', $accountId)
+                ->orderBy('deposit_date', 'desc')
+                ->get()
+                ->map(function ($deposit) {
+                    return [
+                        'id' => $deposit->id,
+                        'date' => $deposit->deposit_date,
+                        'type' => 'deposit',
+                        'amount' => $deposit->deposit_amount,
+                        'shares' => $deposit->number_of_shares,
+                        'charge' => $deposit->charge_amount ?? 0,
+                        'total_amount' => $deposit->total_amount,
+                        'reference' => $deposit->transaction_reference ?? '',
+                        'notes' => $deposit->notes ?? '',
+                        'status' => $deposit->status ?? 'completed',
+                    ];
+                });
+
+            // Get withdrawals from share_withdrawals table
+            $withdrawals = DB::table('share_withdrawals')
+                ->where('share_account_id', $accountId)
+                ->orderBy('withdrawal_date', 'desc')
+                ->get()
+                ->map(function ($withdrawal) {
+                    return [
+                        'id' => $withdrawal->id,
+                        'date' => $withdrawal->withdrawal_date,
+                        'type' => 'withdrawal',
+                        'amount' => $withdrawal->withdrawal_amount ?? 0,
+                        'shares' => $withdrawal->number_of_shares ?? 0,
+                        'charge' => $withdrawal->charge_amount ?? 0,
+                        'total_amount' => $withdrawal->total_amount ?? 0,
+                        'reference' => $withdrawal->transaction_reference ?? '',
+                        'notes' => $withdrawal->notes ?? '',
+                        'status' => $withdrawal->status ?? 'completed',
+                    ];
+                });
+
+            return response()->json([
+                'status' => 200,
+                'deposits' => $deposits,
+                'withdrawals' => $withdrawals,
+                'total_transactions' => $deposits->count() + $withdrawals->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

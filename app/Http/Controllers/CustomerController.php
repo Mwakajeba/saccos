@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\DB;
-use Vinkla\Hashids\Facades\Hashids;
+use App\Helpers\HashidsHelper;
 use Yajra\DataTables\Facades\DataTables;
 
 set_time_limit(0);              // no limit for this request
@@ -108,78 +108,144 @@ class CustomerController extends Controller
     // Ajax endpoint for DataTables
     public function getCustomersData(Request $request)
     {
-        if ($request->ajax()) {
-            $branchId = auth()->user()->branch_id;
+        try {
+            if ($request->ajax()) {
+                $user = auth()->user();
+                $branchId = $user->branch_id;
+                
+                if (!$branchId) {
+                    return response()->json(['error' => 'User branch not found'], 400);
+                }
 
-            $customers = Customer::with(['branch', 'company', 'user', 'region', 'district'])
-                ->where('branch_id', $branchId)
-                ->select('customers.*');
+                // Check permissions once before the loop
+                $canView = $user->can('view customer profile');
+                $canEdit = $user->can('edit customer');
+                $canDelete = $user->can('delete customer');
 
-            // Filter by status if provided and not empty
-            if ($request->filled('status')) {
-                $customers->where('status', $request->status);
+                // Build query with eager loading to avoid N+1 queries
+                // Exclude large columns like photo, document, password to improve performance
+                $customers = Customer::with([
+                        'branch' => function($query) {
+                            $query->select('id', 'name');
+                        },
+                        'region' => function($query) {
+                            $query->select('id', 'name');
+                        },
+                        'district' => function($query) {
+                            $query->select('id', 'name');
+                        }
+                    ])
+                    ->where('branch_id', $branchId)
+                    ->select([
+                        'customers.id',
+                        'customers.customerNo',
+                        'customers.name',
+                        'customers.phone1',
+                        'customers.category',
+                        'customers.status',
+                        'customers.branch_id',
+                        'customers.region_id',
+                        'customers.district_id',
+                        'customers.sex',
+                        'customers.dateRegistered',
+                        'customers.created_at',
+                        'customers.updated_at'
+                    ]);
+
+                // Filter by status if provided and not empty
+                if ($request->filled('status')) {
+                    $customers->where('status', $request->status);
+                }
+
+                return DataTables::eloquent($customers)
+                    ->addColumn('avatar_name', function ($customer) {
+                        $isGuarantor = isset($customer->category) && strtolower($customer->category) === 'guarantor';
+                        $avatarClass = $isGuarantor ? 'bg-success' : 'bg-primary';
+                        $initial = strtoupper(substr($customer->name ?? '', 0, 1));
+
+                        return '<div class="d-flex align-items-center">
+                                    <div class="avatar avatar-sm ' . $avatarClass . ' rounded-circle me-2 d-flex align-items-center justify-content-center shadow" style="width:36px; height:36px;">
+                                        <span class="avatar-title text-white fw-bold" style="font-size:1.25rem;">' . $initial . '</span>
+                                    </div>
+                                    <div>
+                                        <div class="fw-bold">' . e($customer->name ?? '') . '</div>
+                                    </div>
+                                </div>';
+                    })
+                    ->addColumn('region_name', function ($customer) {
+                        try {
+                            return $customer->region ? $customer->region->name : '';
+                        } catch (\Exception $e) {
+                            return '';
+                        }
+                    })
+                    ->addColumn('district_name', function ($customer) {
+                        try {
+                            return $customer->district ? $customer->district->name : '';
+                        } catch (\Exception $e) {
+                            return '';
+                        }
+                    })
+                    ->addColumn('branch_name', function ($customer) {
+                        try {
+                            return $customer->branch ? $customer->branch->name : '';
+                        } catch (\Exception $e) {
+                            return '';
+                        }
+                    })
+                    ->addColumn('actions', function ($customer) use ($canView, $canEdit, $canDelete) {
+                        try {
+                            $actions = '';
+                            
+                            try {
+                                $encodedId = HashidsHelper::encode($customer->id);
+                            } catch (\RuntimeException $e) {
+                                \Log::error('Hashids encode error in actions column: ' . $e->getMessage());
+                                // Return error message if Hashids fails
+                                return '<div class="text-center text-danger">Error encoding ID</div>';
+                            }
+
+                            // View action
+                            if ($canView) {
+                                $actions .= '<a href="' . route('customers.show', $encodedId) . '" class="btn btn-sm btn-outline-info me-1" title="View"><i class="bx bx-show"></i> Show</a>';
+                            }
+
+                            // Edit action
+                            if ($canEdit) {
+                                $actions .= '<a href="' . route('customers.edit', $encodedId) . '" class="btn btn-sm btn-outline-primary me-1" title="Edit"><i class="bx bx-edit"></i> Edit</a>';
+                            }
+
+                            // Block/Unblock action
+                            if ($canEdit) {
+                                $status = $customer->status ?? 'active';
+                                $isActive = $status === 'active';
+                                $btnClass = $isActive ? 'btn-outline-warning' : 'btn-outline-success';
+                                $btnIcon = $isActive ? 'bx-block' : 'bx-check-circle';
+                                $btnText = $isActive ? 'Block' : 'Unblock';
+                                $actions .= '<button class="btn btn-sm ' . $btnClass . ' toggle-status-btn me-1" data-id="' . $encodedId . '" data-name="' . e($customer->name) . '" data-status="' . $status . '" title="' . $btnText . ' Customer"><i class="bx ' . $btnIcon . '"></i> ' . $btnText . '</button>';
+                            }
+
+                            // Delete action
+                            if ($canDelete) {
+                                $actions .= '<button class="btn btn-sm btn-outline-danger delete-btn" data-id="' . $encodedId . '" data-name="' . e($customer->name) . '" title="Delete"><i class="bx bx-trash"></i> Delete</button>';
+                            }
+
+                            return '<div class="text-center">' . $actions . '</div>';
+                        } catch (\Exception $e) {
+                            \Log::error('Error in actions column: ' . $e->getMessage());
+                            return '<div class="text-center text-danger">Error</div>';
+                        }
+                    })
+                    ->orderColumn('avatar_name', 'customers.name $1')
+                    ->rawColumns(['avatar_name', 'actions'])
+                    ->make(true);
             }
 
-            return DataTables::eloquent($customers)
-                ->addColumn('avatar_name', function ($customer) {
-                    $isGuarantor = isset($customer->category) && strtolower($customer->category) === 'guarantor';
-                    $avatarClass = $isGuarantor ? 'bg-success' : 'bg-primary';
-                    $initial = strtoupper(substr($customer->name, 0, 1));
-
-                    return '<div class="d-flex align-items-center">
-                                <div class="avatar avatar-sm ' . $avatarClass . ' rounded-circle me-2 d-flex align-items-center justify-content-center shadow" style="width:36px; height:36px;">
-                                    <span class="avatar-title text-white fw-bold" style="font-size:1.25rem;">' . $initial . '</span>
-                                </div>
-                                <div>
-                                    <div class="fw-bold">' . e($customer->name) . '</div>
-                                </div>
-                            </div>';
-                })
-                ->addColumn('region_name', function ($customer) {
-                    return $customer->region->name ?? '';
-                })
-                ->addColumn('district_name', function ($customer) {
-                    return $customer->district->name ?? '';
-                })
-                ->addColumn('branch_name', function ($customer) {
-                    return optional($customer->branch)->name ?? '';
-                })
-                ->addColumn('actions', function ($customer) {
-                    $actions = '';
-                    $encodedId = \Vinkla\Hashids\Facades\Hashids::encode($customer->id);
-
-                    // View action
-                    if (auth()->user()->can('view customer profile')) {
-                        $actions .= '<a href="' . route('customers.show', $encodedId) . '" class="btn btn-sm btn-outline-info me-1" title="View"><i class="bx bx-show"></i> Show</a>';
-                    }
-
-                    // Edit action
-                    if (auth()->user()->can('edit customer')) {
-                        $actions .= '<a href="' . route('customers.edit', $encodedId) . '" class="btn btn-sm btn-outline-primary me-1" title="Edit"><i class="bx bx-edit"></i> Edit</a>';
-                    }
-
-                    // Block/Unblock action
-                    if (auth()->user()->can('edit customer')) {
-                        $status = $customer->status ?? 'active';
-                        $isActive = $status === 'active';
-                        $btnClass = $isActive ? 'btn-outline-warning' : 'btn-outline-success';
-                        $btnIcon = $isActive ? 'bx-block' : 'bx-check-circle';
-                        $btnText = $isActive ? 'Block' : 'Unblock';
-                        $actions .= '<button class="btn btn-sm ' . $btnClass . ' toggle-status-btn me-1" data-id="' . $encodedId . '" data-name="' . e($customer->name) . '" data-status="' . $status . '" title="' . $btnText . ' Customer"><i class="bx ' . $btnIcon . '"></i> ' . $btnText . '</button>';
-                    }
-
-                    // Delete action
-                    if (auth()->user()->can('delete customer')) {
-                        $actions .= '<button class="btn btn-sm btn-outline-danger delete-btn" data-id="' . $encodedId . '" data-name="' . e($customer->name) . '" title="Delete"><i class="bx bx-trash"></i> Delete</button>';
-                    }
-
-                    return '<div class="text-center">' . $actions . '</div>';
-                })
-                ->rawColumns(['avatar_name', 'actions'])
-                ->make(true);
+            return response()->json(['error' => 'Invalid request'], 400);
+        } catch (\Exception $e) {
+            \Log::error('Error in getCustomersData: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json(['error' => 'An error occurred while loading customers data: ' . $e->getMessage()], 500);
         }
-
-        return response()->json(['error' => 'Invalid request'], 400);
     }
 
 
@@ -409,7 +475,8 @@ class CustomerController extends Controller
     // Display one customer
     public function show($encodedId)
     {
-        $id = Hashids::decode($encodedId)[0] ?? null;
+        $decoded = HashidsHelper::decode($encodedId);
+        $id = $decoded[0] ?? null;
 
         if (!$id) {
             abort(404);
@@ -423,7 +490,8 @@ class CustomerController extends Controller
     // Show form to edit a customer
     public function edit($encodedId)
     {
-        $id = \Vinkla\Hashids\Facades\Hashids::decode($encodedId)[0] ?? null;
+        $decoded = HashidsHelper::decode($encodedId);
+        $id = $decoded[0] ?? null;
         if (!$id) {
             abort(404);
         }
@@ -624,7 +692,8 @@ class CustomerController extends Controller
     // Delete customer
     public function destroy($id)
     {
-        $decoded = Hashids::decode($id)[0] ?? null;
+        $decodedArray = HashidsHelper::decode($id);
+        $decoded = $decodedArray[0] ?? null;
         try {
             $customer = Customer::findOrFail($decoded);
 
@@ -666,7 +735,7 @@ class CustomerController extends Controller
      */
     public function toggleStatus($encodedId)
     {
-        $decoded = Hashids::decode($encodedId);
+        $decoded = HashidsHelper::decode($encodedId);
         if (empty($decoded)) {
             return response()->json(['error' => 'Invalid customer ID'], 400);
         }
@@ -830,7 +899,7 @@ class CustomerController extends Controller
     {
         try {
             // Decode the customer ID
-            $decodedId = Hashids::decode($customerId);
+            $decodedId = HashidsHelper::decode($customerId);
             if (empty($decodedId)) {
                 return response()->json([
                     'success' => false,
@@ -915,7 +984,7 @@ class CustomerController extends Controller
     public function uploadDocuments(Request $request, $encodedCustomerId)
     {
         try {
-            $decoded = Hashids::decode($encodedCustomerId);
+            $decoded = HashidsHelper::decode($encodedCustomerId);
             if (empty($decoded)) {
                 return response()->json(['success' => false, 'message' => 'Invalid customer id'], 400);
             }
@@ -1036,7 +1105,7 @@ class CustomerController extends Controller
     public function deleteDocument(Request $request, $encodedCustomerId, $pivotId)
     {
         try {
-            $decoded = Hashids::decode($encodedCustomerId);
+            $decoded = HashidsHelper::decode($encodedCustomerId);
             if (empty($decoded)) {
                 return response()->json(['success' => false, 'message' => 'Invalid customer id'], 400);
             }
@@ -1075,7 +1144,7 @@ class CustomerController extends Controller
      */
     public function viewDocument($encodedCustomerId, $pivotId)
     {
-        $decoded = \Vinkla\Hashids\Facades\Hashids::decode($encodedCustomerId);
+        $decoded = HashidsHelper::decode($encodedCustomerId);
         if (empty($decoded)) {
             abort(404);
         }
@@ -1105,7 +1174,7 @@ class CustomerController extends Controller
      */
     public function downloadDocument($encodedCustomerId, $pivotId)
     {
-        $decoded = \Vinkla\Hashids\Facades\Hashids::decode($encodedCustomerId);
+        $decoded = HashidsHelper::decode($encodedCustomerId);
         if (empty($decoded)) {
             abort(404);
         }
@@ -1160,7 +1229,8 @@ class CustomerController extends Controller
      */
     public function storeNextOfKin(Request $request, $encodedCustomerId)
     {
-        $customerId = Hashids::decode($encodedCustomerId)[0] ?? null;
+        $decoded = HashidsHelper::decode($encodedCustomerId);
+        $customerId = $decoded[0] ?? null;
         
         if (!$customerId) {
             return response()->json(['error' => 'Customer not found'], 404);
@@ -1205,8 +1275,10 @@ class CustomerController extends Controller
      */
     public function updateNextOfKin(Request $request, $encodedCustomerId, $encodedNextOfKinId)
     {
-        $customerId = Hashids::decode($encodedCustomerId)[0] ?? null;
-        $nextOfKinId = Hashids::decode($encodedNextOfKinId)[0] ?? null;
+        $decodedCustomer = HashidsHelper::decode($encodedCustomerId);
+        $decodedNextOfKin = HashidsHelper::decode($encodedNextOfKinId);
+        $customerId = $decodedCustomer[0] ?? null;
+        $nextOfKinId = $decodedNextOfKin[0] ?? null;
         
         if (!$customerId || !$nextOfKinId) {
             return response()->json(['error' => 'Not found'], 404);
@@ -1243,8 +1315,10 @@ class CustomerController extends Controller
      */
     public function deleteNextOfKin($encodedCustomerId, $encodedNextOfKinId)
     {
-        $customerId = Hashids::decode($encodedCustomerId)[0] ?? null;
-        $nextOfKinId = Hashids::decode($encodedNextOfKinId)[0] ?? null;
+        $decodedCustomer = HashidsHelper::decode($encodedCustomerId);
+        $decodedNextOfKin = HashidsHelper::decode($encodedNextOfKinId);
+        $customerId = $decodedCustomer[0] ?? null;
+        $nextOfKinId = $decodedNextOfKin[0] ?? null;
         
         if (!$customerId || !$nextOfKinId) {
             return response()->json(['error' => 'Not found'], 404);
