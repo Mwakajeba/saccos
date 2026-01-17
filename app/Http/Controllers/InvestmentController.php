@@ -13,6 +13,9 @@ use App\Models\Branch;
 use App\Models\BankAccount;
 use App\Models\ChartAccount;
 use App\Models\AccountClass;
+use App\Models\GlTransaction;
+use App\Models\Payment;
+use App\Models\PaymentItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -688,6 +691,15 @@ class InvestmentController extends Controller
                 ->where('company_id', $user->company_id)
                 ->firstOrFail();
 
+            // Get bank account and validate investment account
+            $bankAccount = BankAccount::findOrFail($request->bank_account_id);
+            
+            if (!$fund->investment_account_id) {
+                return redirect()->back()
+                    ->with('error', 'Investment asset account is not configured for this fund.')
+                    ->withInput();
+            }
+
             // Validate SELL transactions don't exceed holdings
             if ($request->transaction_type === 'SELL' && $request->units > $holding->total_units) {
                 return redirect()->back()
@@ -715,6 +727,87 @@ class InvestmentController extends Controller
                 'company_id' => $user->company_id,
                 'branch_id' => $user->branch_id,
             ]);
+
+            // Create Payment record
+            $paymentDescription = $request->description ?: "UTT {$request->transaction_type} transaction - {$fund->name}";
+            $payment = Payment::create([
+                'reference' => $transaction->id,
+                'reference_type' => 'UTT Investment Transaction',
+                'reference_number' => $referenceNumber,
+                'date' => $request->trade_date,
+                'amount' => $request->total_cash_value,
+                'description' => $paymentDescription,
+                'user_id' => $user->id,
+                'bank_account_id' => $request->bank_account_id,
+                'branch_id' => $user->branch_id,
+                'approved' => false, // Will be approved when transaction is approved
+            ]);
+
+            // Create PaymentItem (investment asset account)
+            PaymentItem::create([
+                'payment_id' => $payment->id,
+                'chart_account_id' => $fund->investment_account_id,
+                'amount' => $request->total_cash_value,
+                'description' => $paymentDescription,
+            ]);
+
+            // Create GL Transactions
+            // For BUY/REINVESTMENT: Credit bank (money going out), Debit investment asset (investment increasing)
+            // For SELL: Debit bank (money coming in), Credit investment asset (investment decreasing)
+            if (in_array($request->transaction_type, ['BUY', 'REINVESTMENT'])) {
+                // Credit bank account (money going out)
+                GlTransaction::create([
+                    'chart_account_id' => $bankAccount->chart_account_id,
+                    'amount' => $request->total_cash_value,
+                    'nature' => 'credit',
+                    'transaction_id' => $transaction->id,
+                    'transaction_type' => 'UTT Investment Transaction',
+                    'date' => $request->trade_date,
+                    'description' => $paymentDescription,
+                    'branch_id' => $user->branch_id,
+                    'user_id' => $user->id,
+                ]);
+
+                // Debit investment asset account (investment increasing)
+                GlTransaction::create([
+                    'chart_account_id' => $fund->investment_account_id,
+                    'amount' => $request->total_cash_value,
+                    'nature' => 'debit',
+                    'transaction_id' => $transaction->id,
+                    'transaction_type' => 'UTT Investment Transaction',
+                    'date' => $request->trade_date,
+                    'description' => $paymentDescription,
+                    'branch_id' => $user->branch_id,
+                    'user_id' => $user->id,
+                ]);
+            } else {
+                // SELL transaction: Debit bank (money coming in), Credit investment asset (investment decreasing)
+                // Debit bank account (money coming in)
+                GlTransaction::create([
+                    'chart_account_id' => $bankAccount->chart_account_id,
+                    'amount' => $request->total_cash_value,
+                    'nature' => 'debit',
+                    'transaction_id' => $transaction->id,
+                    'transaction_type' => 'UTT Investment Transaction',
+                    'date' => $request->trade_date,
+                    'description' => $paymentDescription,
+                    'branch_id' => $user->branch_id,
+                    'user_id' => $user->id,
+                ]);
+
+                // Credit investment asset account (investment decreasing)
+                GlTransaction::create([
+                    'chart_account_id' => $fund->investment_account_id,
+                    'amount' => $request->total_cash_value,
+                    'nature' => 'credit',
+                    'transaction_id' => $transaction->id,
+                    'transaction_type' => 'UTT Investment Transaction',
+                    'date' => $request->trade_date,
+                    'description' => $paymentDescription,
+                    'branch_id' => $user->branch_id,
+                    'user_id' => $user->id,
+                ]);
+            }
 
             // Create cash flow record
             $flowDirection = in_array($request->transaction_type, ['BUY', 'REINVESTMENT']) ? 'OUT' : 'IN';
