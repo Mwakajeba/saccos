@@ -1257,7 +1257,7 @@ class LoanController extends Controller
     {
         $branchId = auth()->user()->branch_id;
         $customers = Customer::with('groups')
-            ->where('category', 'Borrower')
+            ->whereIn('category', ['Member', 'Borrower'])
             ->where('branch_id', $branchId)
             ->get();
         // Removed heavy debug dump of customers to avoid timeouts
@@ -2181,7 +2181,7 @@ class LoanController extends Controller
     public function applicationCreate()
     {
         $branchId = auth()->user()->branch_id;
-        $customers = Customer::where('category', 'borrower')
+        $customers = Customer::whereIn('category', ['Member', 'Borrower'])
             ->where('branch_id', $branchId)
             ->with('groups:id,name')
             ->select('id', 'name', 'phone1', 'customerNo', 'branch_id')
@@ -2401,7 +2401,7 @@ class LoanController extends Controller
         }
 
         $branchId = auth()->user()->branch_id;
-        $customers = Customer::where('category', 'borrower')
+        $customers = Customer::whereIn('category', ['Member', 'Borrower'])
             ->where('branch_id', $branchId)
             ->with('groups')
             ->get();
@@ -3039,7 +3039,7 @@ class LoanController extends Controller
         // Fetch all borrower customer numbers (scoped to the user's branch if present) with their groups
         $branchId = auth()->user()->branch_id ?? null;
         $customersQuery = \App\Models\Customer::with(['groups:id'])
-            ->where('category', 'Borrower');
+            ->whereIn('category', ['Member', 'Borrower']);
         if ($branchId) {
             $customersQuery->where('branch_id', $branchId);
         }
