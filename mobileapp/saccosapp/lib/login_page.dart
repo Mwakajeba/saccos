@@ -160,10 +160,12 @@ class _LoginPageState extends State<LoginPage> {
             color: const Color(0xFF13EC5B).withOpacity(0.1),
             borderRadius: BorderRadius.circular(16),
           ),
-          child: const Icon(
-            Icons.account_balance,
-            size: 40,
-            color: Color(0xFF13EC5B),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Image.asset(
+              'assets/icon/app_icon.png',
+              fit: BoxFit.contain,
+            ),
           ),
         ),
         const SizedBox(height: 16),

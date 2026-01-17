@@ -6,10 +6,10 @@ class ApiService {
   // For Linux/Windows/Mac desktop use: 127.0.0.1
   // For Android Emulator use: 10.0.2.2
   // For physical device/iOS use: 192.168.1.193 (your computer's IP)
-  static const String baseUrl = 'http://127.0.0.1:8001/api';
+  //static const String baseUrl = 'http://127.0.0.1:8001/api';
   //static const String baseUrl = 'http://10.0.2.2:8000/api'; // For Android Emulator
   //static const String baseUrl = 'http://192.168.1.193:8000/api'; // For physical device
-  //static const String baseUrl = 'https://dev.smartsoft.co.tz/api';
+  static const String baseUrl = 'https://epm.smartsoft.co.tz/api';
   
   // Login API
   static Future<Map<String, dynamic>> login(String username, String password) async {

@@ -167,7 +167,10 @@ $isEdit = isset($customer);
         <div class="col-md-6 mb-3">
             <label class="form-label">Category <span class="text-danger">*</span></label>
             <select name="category" class="form-select @error('category') is-invalid @enderror" required>
+                <option value="">Select Category</option>
                 <option value="Member" {{ old('category', $customer->category ?? 'Member') == 'Member' ? 'selected' : '' }}>Member</option>
+                <option value="Borrower" {{ old('category', $customer->category ?? '') == 'Borrower' ? 'selected' : '' }}>Borrower</option>
+                <option value="Guarantor" {{ old('category', $customer->category ?? '') == 'Guarantor' ? 'selected' : '' }}>Guarantor</option>
             </select>
             @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
