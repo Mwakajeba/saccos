@@ -6,9 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Loan;
 use App\Models\LoanProduct;
+use App\Models\ContributionAccount;
+use App\Models\ContributionProduct;
+use App\Models\ShareAccount;
+use App\Models\ShareDeposit;
+use App\Models\GlTransaction;
+use App\Models\Journal;
+use App\Models\CashCollateral;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CustomerAuthController extends Controller
 {
@@ -326,6 +334,7 @@ class CustomerAuthController extends Controller
                         'cash_collateral_type' => $product->cash_collateral_type,
                         'cash_collateral_value_type' => $product->cash_collateral_value_type,
                         'cash_collateral_value' => $product->cash_collateral_value ?? 0,
+                        'allowed_in_app' => $product->allowed_in_app ?? false,
                     ];
                 });
 
@@ -372,13 +381,25 @@ class CustomerAuthController extends Controller
             // Store new photo
             $photoPath = $request->file('photo')->store('photos', 'public');
             $customer->photo = $photoPath;
-            $customer->save();
+            $saved = $customer->save();
+
+            Log::info('Photo upload attempt', [
+                'customer_id' => $customer->id,
+                'photo_path' => $photoPath,
+                'saved' => $saved,
+                'customer_photo' => $customer->photo,
+            ]);
+
+            // Refresh customer to verify save
+            $customer->refresh();
 
             return response()->json([
                 'message' => 'Photo updated successfully',
                 'status' => 200,
                 'photo_url' => asset('storage/' . $photoPath),
                 'photo_path' => $photoPath,
+                'customer_id' => $customer->id,
+                'saved_photo' => $customer->photo,
             ], 200);
 
         } catch (\Exception $e) {
@@ -396,7 +417,7 @@ class CustomerAuthController extends Controller
     private function getLoansWithRepayments($customerId)
     {
         $loans = Loan::where('customer_id', $customerId)
-            ->with(['product', 'loanOfficer'])
+            ->with(['product', 'loanOfficer', 'schedule'])
             ->orderBy('id', 'desc')
             ->get();
 
@@ -424,6 +445,56 @@ class CustomerAuthController extends Controller
                     ];
                 });
 
+            // Get next unpaid schedule (only the first upcoming repayment)
+            $schedules = DB::table('loan_schedules')
+                ->where('loan_id', $loan->id)
+                ->where('customer_id', $customerId)
+                ->orderBy('due_date', 'asc')
+                ->get();
+            
+            $nextSchedule = null;
+            
+            \Log::info("Loan ID: {$loan->id}, Customer ID: {$customerId}, Schedules count: " . $schedules->count());
+            
+            foreach ($schedules as $schedule) {
+                $principal = (float)($schedule->principal ?? 0);
+                $interest = (float)($schedule->interest ?? 0);
+                $feeAmount = (float)($schedule->fee_amount ?? 0);
+                $penaltyAmount = (float)($schedule->penalty_amount ?? 0);
+                
+                $totalDue = $principal + $interest + $feeAmount + $penaltyAmount;
+                
+                // Get paid amount for this schedule
+                $paidAmount = (float)DB::table('repayments')
+                    ->where('loan_schedule_id', $schedule->id)
+                    ->sum(DB::raw('COALESCE(principal, 0) + COALESCE(interest, 0) + COALESCE(penalt_amount, 0) + COALESCE(fee_amount, 0)'));
+                
+                $remainingAmount = max(0, $totalDue - $paidAmount);
+                
+                \Log::info("Schedule ID: {$schedule->id}, Due Date: {$schedule->due_date}, Total Due: {$totalDue}, Paid: {$paidAmount}, Remaining: {$remainingAmount}");
+                
+                // Get the first schedule with remaining amount (next repayment)
+                if ($remainingAmount > 0.01) { // Use 0.01 to handle floating point precision
+                    $nextSchedule = [
+                        'id' => $schedule->id,
+                        'due_date' => $schedule->due_date,
+                        'amount' => round($remainingAmount, 2),
+                        'principal' => $principal,
+                        'interest' => $interest,
+                        'fee' => $feeAmount,
+                        'penalty' => $penaltyAmount,
+                        'total_due' => round($totalDue, 2),
+                        'paid_amount' => round($paidAmount, 2),
+                    ];
+                    \Log::info("Next schedule found: " . json_encode($nextSchedule));
+                    break; // Only get the first one
+                }
+            }
+            
+            if ($nextSchedule === null) {
+                \Log::info("No unpaid schedule found for loan ID: {$loan->id}");
+            }
+
             // Calculate totals
             $totalRepaid = $repayments->sum('amount');
             $totalDue = ($loan->amount_total ?? 0) - $totalRepaid;
@@ -442,11 +513,699 @@ class CustomerAuthController extends Controller
                 'product_name' => $loan->product->name ?? '',
                 'loan_officer' => $loan->loanOfficer->name ?? '',
                 'repayments' => $repayments,
+                'next_schedule' => $nextSchedule, // Only the next upcoming repayment
                 'total_repaid' => $totalRepaid,
                 'total_due' => $totalDue,
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * Get customer contributions
+     */
+    public function contributions(Request $request)
+    {
+        try {
+            $customerId = $request->input('customer_id');
+
+            if (!$customerId) {
+                return response()->json([
+                    'message' => 'Customer ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get customer's contribution accounts with product details
+            $contributions = ContributionAccount::with(['contributionProduct', 'branch'])
+                ->where('customer_id', $customerId)
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($account) {
+                    return [
+                        'id' => $account->id,
+                        'account_number' => $account->account_number,
+                        'product_name' => $account->contributionProduct->product_name ?? '',
+                        'balance' => $account->balance,
+                        'status' => $account->status,
+                        'opening_date' => $account->opening_date,
+                        'branch' => $account->branch->name ?? '',
+                        'interest_rate' => $account->contributionProduct->interest ?? 0,
+                        'can_withdraw' => $account->contributionProduct->can_withdraw ?? false,
+                    ];
+                });
+
+            $totalBalance = $contributions->sum('balance');
+
+            return response()->json([
+                'status' => 200,
+                'contributions' => $contributions,
+                'total_balance' => $totalBalance,
+                'accounts_count' => $contributions->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get customer shares
+     */
+    public function shares(Request $request)
+    {
+        try {
+            $customerId = $request->input('customer_id');
+
+            if (!$customerId) {
+                return response()->json([
+                    'message' => 'Customer ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get customer's share accounts with product details
+            $shares = ShareAccount::with(['shareProduct', 'branch'])
+                ->where('customer_id', $customerId)
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($account) {
+                    $totalValue = $account->share_balance * $account->nominal_value;
+                    
+                    return [
+                        'id' => $account->id,
+                        'account_number' => $account->account_number,
+                        'certificate_number' => $account->certificate_number,
+                        'product_name' => $account->shareProduct->share_name ?? '',
+                        'share_balance' => $account->share_balance,
+                        'nominal_value' => $account->nominal_value,
+                        'total_value' => $totalValue,
+                        'status' => $account->status,
+                        'opening_date' => $account->opening_date,
+                        'last_transaction_date' => $account->last_transaction_date,
+                        'branch' => $account->branch->name ?? '',
+                        'dividend_rate' => $account->shareProduct->dividend_rate ?? 0,
+                    ];
+                });
+
+            $totalShares = $shares->sum('share_balance');
+            $totalValue = $shares->sum('total_value');
+
+            return response()->json([
+                'status' => 200,
+                'shares' => $shares,
+                'total_shares' => $totalShares,
+                'total_value' => $totalValue,
+                'accounts_count' => $shares->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get contribution account transactions
+     * Uses the same logic as ContributionAccountController::getAccountTransactionsData
+     */
+    public function contributionTransactions(Request $request)
+    {
+        try {
+            $accountId = $request->input('account_id');
+
+            if (!$accountId) {
+                return response()->json([
+                    'message' => 'Account ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get contribution account
+            $account = ContributionAccount::find($accountId);
+            
+            if (!$account) {
+                return response()->json([
+                    'message' => 'Account not found',
+                    'status' => 404
+                ], 404);
+            }
+
+            $product = $account->contributionProduct;
+            if (!$product || !$product->liability_account_id) {
+                return response()->json([
+                    'message' => 'Product or liability account not configured',
+                    'status' => 400
+                ], 400);
+            }
+
+            $branchId = $account->branch_id;
+
+            // Build query for transactions - same logic as web version
+            $query = GlTransaction::where('chart_account_id', $product->liability_account_id)
+                ->where('customer_id', $account->customer_id)
+                ->where('branch_id', $branchId)
+                ->whereIn('transaction_type', ['contribution_deposit', 'contribution_withdrawal', 'contribution_transfer', 'journal']);
+
+            // Get date filters if provided
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+
+            if ($startDate) {
+                $query->whereDate('date', '>=', $startDate);
+            }
+            if ($endDate) {
+                $query->whereDate('date', '<=', $endDate);
+            }
+
+            $transactions = $query->orderBy('date', 'desc')
+                ->orderBy('id', 'desc')
+                ->get();
+
+            // Process transactions - separate credit (iliyoingia) and debit (iliyotoka)
+            $deposits = [];
+            $withdrawals = [];
+
+            foreach ($transactions as $transaction) {
+                // Generate transaction ID - same logic as web version
+                $trxId = '';
+                if ($transaction->transaction_type === 'journal') {
+                    $journal = Journal::find($transaction->transaction_id);
+                    $trxId = $journal ? $journal->reference : 'JRN-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+                } elseif ($transaction->transaction_type === 'contribution_transfer') {
+                    $journal = Journal::find($transaction->transaction_id);
+                    $trxId = $journal ? $journal->reference : 'CT-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+                } else {
+                    $prefix = $transaction->transaction_type === 'contribution_deposit' ? 'CD' : 'CW';
+                    $trxId = $prefix . '-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT);
+                }
+
+                $transactionData = [
+                    'id' => $transaction->id,
+                    'trx_id' => $trxId,
+                    'date' => $transaction->date->format('Y-m-d'),
+                    'amount' => (float) $transaction->amount,
+                    'reference' => $trxId,
+                    'notes' => $transaction->description ?? '',
+                    'type' => ucfirst(str_replace('_', ' ', $transaction->transaction_type)),
+                ];
+
+                // Credit = iliyoingia (money coming in)
+                // Debit = iliyotoka (money going out)
+                if ($transaction->nature === 'credit') {
+                    $deposits[] = $transactionData;
+                } else {
+                    $withdrawals[] = $transactionData;
+                }
+            }
+
+            return response()->json([
+                'status' => 200,
+                'deposits' => $deposits,
+                'withdrawals' => $withdrawals,
+                'total_transactions' => $transactions->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get share account transactions
+     */
+    public function shareTransactions(Request $request)
+    {
+        try {
+            $accountId = $request->input('account_id');
+
+            if (!$accountId) {
+                return response()->json([
+                    'message' => 'Account ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get deposits from share_deposits table
+            $deposits = ShareDeposit::where('share_account_id', $accountId)
+                ->orderBy('deposit_date', 'desc')
+                ->get()
+                ->map(function ($deposit) {
+                    return [
+                        'id' => $deposit->id,
+                        'date' => $deposit->deposit_date,
+                        'type' => 'deposit',
+                        'amount' => $deposit->deposit_amount,
+                        'shares' => $deposit->number_of_shares,
+                        'charge' => $deposit->charge_amount ?? 0,
+                        'total_amount' => $deposit->total_amount,
+                        'reference' => $deposit->transaction_reference ?? '',
+                        'notes' => $deposit->notes ?? '',
+                        'status' => $deposit->status ?? 'completed',
+                    ];
+                });
+
+            // Get withdrawals from share_withdrawals table
+            $withdrawals = DB::table('share_withdrawals')
+                ->where('share_account_id', $accountId)
+                ->orderBy('withdrawal_date', 'desc')
+                ->get()
+                ->map(function ($withdrawal) {
+                    return [
+                        'id' => $withdrawal->id,
+                        'date' => $withdrawal->withdrawal_date,
+                        'type' => 'withdrawal',
+                        'amount' => $withdrawal->withdrawal_amount ?? 0,
+                        'shares' => $withdrawal->number_of_shares ?? 0,
+                        'charge' => $withdrawal->charge_amount ?? 0,
+                        'total_amount' => $withdrawal->total_amount ?? 0,
+                        'reference' => $withdrawal->transaction_reference ?? '',
+                        'notes' => $withdrawal->notes ?? '',
+                        'status' => $withdrawal->status ?? 'completed',
+                    ];
+                });
+
+            return response()->json([
+                'status' => 200,
+                'deposits' => $deposits,
+                'withdrawals' => $withdrawals,
+                'total_transactions' => $deposits->count() + $withdrawals->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Submit loan application from mobile app
+     */
+    public function submitLoanApplication(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'product_id' => 'required|exists:loan_products,id',
+                'period' => 'required|integer|min:1',
+                'interest' => 'required|numeric|min:0',
+                'amount' => 'required|numeric|min:0',
+                'date_applied' => 'required|date|before_or_equal:today',
+                'customer_id' => 'required|exists:customers,id',
+                'group_id' => 'nullable|exists:groups,id',
+                'sector' => 'required|string',
+                'interest_cycle' => 'required|string|in:daily,weekly,monthly,quarterly,semi_annually,annually',
+            ]);
+
+            $product = LoanProduct::findOrFail($validated['product_id']);
+            $customer = Customer::findOrFail($validated['customer_id']);
+
+            // Check if product is active
+            if (!$product->is_active) {
+                return response()->json([
+                    'message' => 'Loan product is not active.',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Validate product limits
+            if ($validated['amount'] < $product->minimum_principal || $validated['amount'] > $product->maximum_principal) {
+                return response()->json([
+                    'message' => 'Loan amount must be between ' . number_format($product->minimum_principal, 2) . ' and ' . number_format($product->maximum_principal, 2) . '.',
+                    'status' => 400
+                ], 400);
+            }
+
+            if ($validated['interest'] < $product->minimum_interest_rate || $validated['interest'] > $product->maximum_interest_rate) {
+                return response()->json([
+                    'message' => 'Interest rate must be between ' . $product->minimum_interest_rate . '% and ' . $product->maximum_interest_rate . '%.',
+                    'status' => 400
+                ], 400);
+            }
+
+            if ($validated['period'] < $product->minimum_period || $validated['period'] > $product->maximum_period) {
+                return response()->json([
+                    'message' => 'Period must be between ' . $product->minimum_period . ' and ' . $product->maximum_period . ' months.',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Check cash collateral if required
+            if ($product->has_cash_collateral) {
+                $requiredCollateral = $product->cash_collateral_value_type === 'percentage'
+                    ? $customer->cash_collateral_balance * ($product->cash_collateral_value / 100)
+                    : $product->cash_collateral_value;
+
+                if ($requiredCollateral < $validated['amount']) {
+                    return response()->json([
+                        'message' => 'Member does not have enough collateral balance. Required: ' . number_format($requiredCollateral, 2),
+                        'status' => 400
+                    ], 400);
+                }
+            }
+
+            // Check maximum number of loans
+            if ($product->hasReachedMaxLoans($validated['customer_id'])) {
+                $maxLoans = $product->maximum_number_of_loans;
+                return response()->json([
+                    'message' => "You have reached the maximum number of loans ({$maxLoans}) for this product.",
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get customer's branch
+            $branchId = $customer->branch_id;
+            if (!$branchId) {
+                return response()->json([
+                    'message' => 'Customer branch not found.',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Get group_id from customer if not provided
+            $groupId = $validated['group_id'];
+            if (!$groupId) {
+                $groupMembership = DB::table('group_members')
+                    ->where('customer_id', $validated['customer_id'])
+                    ->first();
+                $groupId = $groupMembership->group_id ?? null;
+            }
+
+            DB::beginTransaction();
+
+            // Create loan application with 'applied' status
+            $loan = Loan::create([
+                'product_id' => $validated['product_id'],
+                'period' => $validated['period'],
+                'interest' => $validated['interest'],
+                'amount' => $validated['amount'],
+                'customer_id' => $validated['customer_id'],
+                'group_id' => $groupId,
+                'bank_account_id' => null, // Set to null for loan applications
+                'date_applied' => $validated['date_applied'],
+                'sector' => $validated['sector'],
+                'interest_cycle' => $validated['interest_cycle'],
+                'loan_officer_id' => null, // Will be set during approval
+                'branch_id' => $branchId,
+                'status' => 'applied', // Loan application status
+                'interest_amount' => 0, // Will be calculated below
+                'amount_total' => 0, // Will be calculated below
+                'first_repayment_date' => null,
+                'last_repayment_date' => null,
+                'disbursed_on' => null,
+                'top_up_id' => null
+            ]);
+
+            // Calculate interest amount
+            $interestAmount = $loan->calculateInterestAmount($validated['interest']);
+            $loan->update([
+                'interest_amount' => $interestAmount,
+                'amount_total' => $validated['amount'] + $interestAmount,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Loan application submitted successfully and awaiting approval.',
+                'status' => 200,
+                'loan' => [
+                    'id' => $loan->id,
+                    'loan_no' => $loan->loanNo,
+                    'amount' => $loan->amount,
+                    'total_amount' => $loan->amount_total,
+                    'status' => $loan->status,
+                ]
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'status' => 422,
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error submitting loan application: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to submit loan application: ' . $e->getMessage(),
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get complain categories for mobile app
+     */
+    public function getComplainCategories()
+    {
+        try {
+            $categories = \App\Models\ComplainCategory::where('id', '>', 0)
+                ->orderBy('priority', 'desc')
+                ->orderBy('name', 'asc')
+                ->get()
+                ->map(function ($category) {
+                    return [
+                        'id' => $category->id,
+                        'name' => $category->name,
+                        'description' => $category->description,
+                        'priority' => $category->priority,
+                    ];
+                });
+
+            return response()->json([
+                'status' => 200,
+                'categories' => $categories,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Submit complain from mobile app
+     */
+    public function submitComplain(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'customer_id' => 'required|exists:customers,id',
+                'complain_category_id' => 'required|exists:complain_categories,id',
+                'description' => 'required|string|min:10',
+            ]);
+
+            $customer = Customer::findOrFail($validated['customer_id']);
+            $branchId = $customer->branch_id;
+            $companyId = $customer->company_id ?? current_company_id();
+
+            $complain = \App\Models\Complain::create([
+                'customer_id' => $validated['customer_id'],
+                'complain_category_id' => $validated['complain_category_id'],
+                'description' => $validated['description'],
+                'status' => 'pending',
+                'branch_id' => $branchId,
+                'company_id' => $companyId,
+            ]);
+
+            return response()->json([
+                'message' => 'Complain submitted successfully.',
+                'status' => 200,
+                'complain' => [
+                    'id' => $complain->id,
+                    'status' => $complain->status,
+                ]
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'status' => 422,
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Error submitting complain: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to submit complain: ' . $e->getMessage(),
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get customer complains
+     */
+    public function getCustomerComplains(Request $request)
+    {
+        try {
+            $customerId = $request->input('customer_id');
+
+            if (!$customerId) {
+                return response()->json([
+                    'message' => 'Customer ID is required',
+                    'status' => 400
+                ], 400);
+            }
+
+            $complains = \App\Models\Complain::with(['category', 'respondedBy'])
+                ->where('customer_id', $customerId)
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($complain) {
+                    return [
+                        'id' => $complain->id,
+                        'category_name' => $complain->category->name ?? 'N/A',
+                        'description' => $complain->description,
+                        'status' => $complain->status,
+                        'response' => $complain->response,
+                        'responded_by' => $complain->respondedBy->name ?? null,
+                        'responded_at' => $complain->responded_at ? $complain->responded_at->format('Y-m-d H:i:s') : null,
+                        'created_at' => $complain->created_at->format('Y-m-d H:i:s'),
+                    ];
+                });
+
+            return response()->json([
+                'status' => 200,
+                'complains' => $complains,
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Error getting customer complains: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get customer next of kin
+     */
+    public function getNextOfKin(Request $request)
+    {
+        try {
+            $userId = $request->input('user_id');
+            
+            if (!$userId) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'User ID is required'
+                ], 400);
+            }
+
+            $customer = Customer::with('nextOfKin')->find($userId);
+            
+            if (!$customer) {
+                return response()->json([
+                    'status' => 404,
+                    'message' => 'Customer not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 200,
+                'nextOfKin' => $customer->nextOfKin ?? []
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching next of kin: ' . $e->getMessage());
+            return response()->json([
+                'status' => 500,
+                'message' => 'Server error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get active announcements for mobile app
+     */
+    public function getAnnouncements(Request $request)
+    {
+        try {
+            $customerId = $request->input('customer_id');
+            
+            if (!$customerId) {
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Customer ID is required'
+                ], 400);
+            }
+
+            $customer = Customer::find($customerId);
+            
+            if (!$customer) {
+                return response()->json([
+                    'status' => 404,
+                    'message' => 'Customer not found'
+                ], 404);
+            }
+
+            // Get active announcements for the customer's company
+            $announcements = \App\Models\Announcement::active()
+                ->where('company_id', $customer->company_id)
+                ->orderBy('order', 'asc')
+                ->orderBy('created_at', 'desc')
+                ->limit(10) // Limit to 10 most recent
+                ->get();
+            
+            Log::info('Announcements query', [
+                'customer_id' => $customerId,
+                'company_id' => $customer->company_id,
+                'count' => $announcements->count(),
+            ]);
+            
+            $mappedAnnouncements = $announcements->map(function ($announcement) {
+                // Map color name to Flutter Color
+                $colorMap = [
+                    'blue' => 0xFF0D6EFD,
+                    'green' => 0xFF198754,
+                    'orange' => 0xFFFD7E14,
+                    'red' => 0xFFDC3545,
+                    'purple' => 0xFF6F42C1,
+                    'yellow' => 0xFFFFC107,
+                ];
+                
+                return [
+                    'id' => $announcement->id,
+                    'title' => $announcement->title,
+                    'message' => $announcement->message,
+                    'icon' => $announcement->icon ?? 'info_outline',
+                    'color' => $colorMap[$announcement->color] ?? 0xFF0D6EFD,
+                    'image_url' => $announcement->image_url ?? null,
+                ];
+            });
+
+            return response()->json([
+                'status' => 200,
+                'announcements' => $mappedAnnouncements->values()->all(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Error getting announcements: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

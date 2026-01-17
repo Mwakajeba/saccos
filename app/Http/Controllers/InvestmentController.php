@@ -11,6 +11,8 @@ use App\Models\UTTReconciliation;
 use App\Models\Company;
 use App\Models\Branch;
 use App\Models\BankAccount;
+use App\Models\ChartAccount;
+use App\Models\AccountClass;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -67,18 +69,28 @@ class InvestmentController extends Controller
                     return $fund->expense_ratio ? number_format($fund->expense_ratio, 4) . '%' : 'N/A';
                 })
                 ->addColumn('actions', function ($fund) {
-                    $encodedId = Hashids::encode($fund->id);
-                    $actions = '';
+                    try {
+                        $encodedId = Hashids::encode($fund->id);
+                        $actions = '';
 
-                    if (auth()->user()->can('edit investment fund')) {
-                        $actions .= '<a href="' . route('investments.funds.edit', $encodedId) . '" class="btn btn-sm btn-outline-primary me-1" title="Edit"><i class="bx bx-edit"></i></a>';
-                    }
-
-                    if (auth()->user()->can('view investment fund')) {
+                        // Always show view button
                         $actions .= '<a href="' . route('investments.funds.show', $encodedId) . '" class="btn btn-sm btn-outline-info me-1" title="View"><i class="bx bx-show"></i></a>';
-                    }
 
-                    return '<div class="text-center">' . $actions . '</div>';
+                        // Always show edit button
+                        $actions .= '<a href="' . route('investments.funds.edit', $encodedId) . '" class="btn btn-sm btn-outline-primary me-1" title="Edit"><i class="bx bx-edit"></i></a>';
+
+                        // Show close/activate button based on status
+                        if ($fund->status === 'Active') {
+                            $actions .= '<button class="btn btn-sm btn-outline-danger close-fund-btn me-1" data-id="' . $encodedId . '" title="Close Fund"><i class="bx bx-x-circle"></i></button>';
+                        } else {
+                            $actions .= '<button class="btn btn-sm btn-outline-success activate-fund-btn me-1" data-id="' . $encodedId . '" title="Activate Fund"><i class="bx bx-check-circle"></i></button>';
+                        }
+
+                        return '<div class="text-center">' . $actions . '</div>';
+                    } catch (\Exception $e) {
+                        \Log::error('Error creating actions: ' . $e->getMessage());
+                        return '<div class="text-center">-</div>';
+                    }
                 })
                 ->rawColumns(['status_badge', 'horizon_badge', 'actions'])
                 ->make(true);
@@ -93,9 +105,38 @@ class InvestmentController extends Controller
     public function fundsCreate()
     {
         $user = auth()->user();
-        $branches = Branch::where('company_id', $user->company_id)->get();
+        $companyId = $user->company_id;
+        $branches = Branch::where('company_id', $companyId)->get();
         
-        return view('investments.funds.create', compact('branches'));
+        // Get chart accounts by account class
+        $assetAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($companyId) {
+                $query->where('company_id', $companyId)
+                    ->whereHas('accountClass', function ($q) {
+                        $q->where('name', 'LIKE', '%Asset%');
+                    });
+            })
+            ->orderBy('account_code')
+            ->get();
+        
+        $incomeAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($companyId) {
+                $query->where('company_id', $companyId)
+                    ->whereHas('accountClass', function ($q) {
+                        $q->whereIn('name', ['Income', 'Revenue']);
+                    });
+            })
+            ->orderBy('account_code')
+            ->get();
+        
+        $expenseAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($companyId) {
+                $query->where('company_id', $companyId)
+                    ->whereHas('accountClass', function ($q) {
+                        $q->where('name', 'LIKE', '%Expense%');
+                    });
+            })
+            ->orderBy('account_code')
+            ->get();
+        
+        return view('investments.funds.create', compact('branches', 'assetAccounts', 'incomeAccounts', 'expenseAccounts'));
     }
 
     /**
@@ -112,6 +153,9 @@ class InvestmentController extends Controller
             'status' => 'required|in:Active,Closed',
             'branch_id' => 'nullable|exists:branches,id',
             'notes' => 'nullable|string',
+            'investment_account_id' => 'nullable|exists:chart_accounts,id',
+            'income_account_id' => 'nullable|exists:chart_accounts,id',
+            'loss_account_id' => 'nullable|exists:chart_accounts,id',
         ]);
 
         if ($validator->fails()) {
@@ -135,6 +179,9 @@ class InvestmentController extends Controller
                 'created_by' => $user->id,
                 'updated_by' => $user->id,
                 'notes' => $request->notes,
+                'investment_account_id' => $request->investment_account_id,
+                'income_account_id' => $request->income_account_id,
+                'loss_account_id' => $request->loss_account_id,
             ]);
 
             // Create initial holding record
@@ -189,9 +236,38 @@ class InvestmentController extends Controller
 
         $fund = UTTFund::findOrFail($decoded[0]);
         $user = auth()->user();
-        $branches = Branch::where('company_id', $user->company_id)->get();
-
-        return view('investments.funds.edit', compact('fund', 'branches'));
+        $companyId = $user->company_id;
+        $branches = Branch::where('company_id', $companyId)->get();
+        
+        // Get chart accounts by account class
+        $assetAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($companyId) {
+                $query->where('company_id', $companyId)
+                    ->whereHas('accountClass', function ($q) {
+                        $q->where('name', 'LIKE', '%Asset%');
+                    });
+            })
+            ->orderBy('account_code')
+            ->get();
+        
+        $incomeAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($companyId) {
+                $query->where('company_id', $companyId)
+                    ->whereHas('accountClass', function ($q) {
+                        $q->whereIn('name', ['Income', 'Revenue']);
+                    });
+            })
+            ->orderBy('account_code')
+            ->get();
+        
+        $expenseAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($companyId) {
+                $query->where('company_id', $companyId)
+                    ->whereHas('accountClass', function ($q) {
+                        $q->where('name', 'LIKE', '%Expense%');
+                    });
+            })
+            ->orderBy('account_code')
+            ->get();
+        
+        return view('investments.funds.edit', compact('fund', 'branches', 'assetAccounts', 'incomeAccounts', 'expenseAccounts'));
     }
 
     /**
@@ -216,6 +292,9 @@ class InvestmentController extends Controller
             'status' => 'required|in:Active,Closed',
             'branch_id' => 'nullable|exists:branches,id',
             'notes' => 'nullable|string',
+            'investment_account_id' => 'nullable|exists:chart_accounts,id',
+            'income_account_id' => 'nullable|exists:chart_accounts,id',
+            'loss_account_id' => 'nullable|exists:chart_accounts,id',
         ]);
 
         if ($validator->fails()) {
@@ -237,6 +316,9 @@ class InvestmentController extends Controller
                 'branch_id' => $request->branch_id,
                 'updated_by' => $user->id,
                 'notes' => $request->notes,
+                'investment_account_id' => $request->investment_account_id,
+                'income_account_id' => $request->income_account_id,
+                'loss_account_id' => $request->loss_account_id,
             ]);
 
             return redirect()->route('investments.funds.index')
@@ -245,6 +327,41 @@ class InvestmentController extends Controller
             return redirect()->back()
                 ->with('error', 'Failed to update fund: ' . $e->getMessage())
                 ->withInput();
+        }
+    }
+
+    /**
+     * Toggle fund status (Active/Closed)
+     */
+    public function fundsToggleStatus(Request $request, $encodedId)
+    {
+        $decoded = Hashids::decode($encodedId);
+        if (empty($decoded)) {
+            return response()->json(['error' => 'Invalid fund ID'], 400);
+        }
+
+        try {
+            $fund = UTTFund::findOrFail($decoded[0]);
+            $user = auth()->user();
+
+            // Toggle status
+            $newStatus = $fund->status === 'Active' ? 'Closed' : 'Active';
+            
+            $fund->update([
+                'status' => $newStatus,
+                'updated_by' => $user->id,
+            ]);
+
+            $message = $newStatus === 'Closed' ? 'Fund closed successfully' : 'Fund activated successfully';
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'new_status' => $newStatus
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error toggling fund status: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to toggle fund status: ' . $e->getMessage()], 500);
         }
     }
 
@@ -263,45 +380,96 @@ class InvestmentController extends Controller
      */
     public function getHoldingsData(Request $request)
     {
-        if ($request->ajax()) {
-            $user = auth()->user();
-            $companyId = $user->company_id;
+        try {
+            if ($request->ajax()) {
+                $user = auth()->user();
+                $companyId = $user->company_id;
 
-            $holdings = SaccoUTTHolding::with(['uttFund', 'company'])
-                ->where('company_id', $companyId)
-                ->select('sacco_utt_holdings.*');
+                // Use a query builder with joins to get latest NAV efficiently
+                $holdings = SaccoUTTHolding::with(['uttFund'])
+                    ->where('sacco_utt_holdings.company_id', $companyId)
+                    ->select('sacco_utt_holdings.*');
 
-            return DataTables::eloquent($holdings)
-                ->addColumn('fund_name', function ($holding) {
-                    return $holding->uttFund->fund_name ?? 'N/A';
-                })
-                ->addColumn('fund_code', function ($holding) {
-                    return $holding->uttFund->fund_code ?? 'N/A';
-                })
-                ->addColumn('total_units_formatted', function ($holding) {
-                    return number_format($holding->total_units, 4);
-                })
-                ->addColumn('average_cost_formatted', function ($holding) {
-                    return number_format($holding->average_acquisition_cost, 4);
-                })
-                ->addColumn('current_nav', function ($holding) {
-                    $latestNav = $holding->uttFund->navPrices()->latest('nav_date')->first();
-                    return $latestNav ? number_format($latestNav->nav_per_unit, 4) : 'N/A';
-                })
-                ->addColumn('current_value', function ($holding) {
-                    $value = $holding->getCurrentValue();
-                    return number_format($value, 2);
-                })
-                ->addColumn('unrealized_gain', function ($holding) {
-                    $gain = $holding->getUnrealizedGain();
-                    $badge = $gain >= 0 ? 'success' : 'danger';
-                    return '<span class="badge bg-' . $badge . '">' . number_format($gain, 2) . '</span>';
-                })
-                ->rawColumns(['unrealized_gain'])
-                ->make(true);
+                return DataTables::eloquent($holdings)
+                    ->addColumn('fund_name', function ($holding) {
+                        return $holding->uttFund->fund_name ?? 'N/A';
+                    })
+                    ->addColumn('fund_code', function ($holding) {
+                        return $holding->uttFund->fund_code ?? 'N/A';
+                    })
+                    ->addColumn('total_units_formatted', function ($holding) {
+                        return number_format($holding->total_units ?? 0, 4);
+                    })
+                    ->addColumn('average_cost_formatted', function ($holding) {
+                        return number_format($holding->average_acquisition_cost ?? 0, 4);
+                    })
+                    ->addColumn('current_nav', function ($holding) {
+                        try {
+                            if (!$holding->uttFund) {
+                                return 'N/A';
+                            }
+                            // Use a simple query with limit to get latest NAV
+                            $latestNav = UTTNavPrice::where('utt_fund_id', $holding->uttFund->id)
+                                ->orderBy('nav_date', 'desc')
+                                ->limit(1)
+                                ->value('nav_per_unit');
+                            return $latestNav ? number_format($latestNav, 4) : 'N/A';
+                        } catch (\Exception $e) {
+                            \Log::error('Error getting current NAV: ' . $e->getMessage());
+                            return 'N/A';
+                        }
+                    })
+                    ->addColumn('current_value', function ($holding) {
+                        try {
+                            if (!$holding->uttFund) {
+                                return number_format(0, 2);
+                            }
+                            $latestNav = UTTNavPrice::where('utt_fund_id', $holding->uttFund->id)
+                                ->orderBy('nav_date', 'desc')
+                                ->limit(1)
+                                ->value('nav_per_unit');
+                            if (!$latestNav) {
+                                return number_format(0, 2);
+                            }
+                            $value = ($holding->total_units ?? 0) * $latestNav;
+                            return number_format($value, 2);
+                        } catch (\Exception $e) {
+                            \Log::error('Error calculating current value: ' . $e->getMessage());
+                            return number_format(0, 2);
+                        }
+                    })
+                    ->addColumn('unrealized_gain', function ($holding) {
+                        try {
+                            if (!$holding->uttFund) {
+                                return '<span class="badge bg-secondary">0.00</span>';
+                            }
+                            $latestNav = UTTNavPrice::where('utt_fund_id', $holding->uttFund->id)
+                                ->orderBy('nav_date', 'desc')
+                                ->limit(1)
+                                ->value('nav_per_unit');
+                            if (!$latestNav) {
+                                return '<span class="badge bg-secondary">0.00</span>';
+                            }
+                            $currentValue = ($holding->total_units ?? 0) * $latestNav;
+                            $costBasis = ($holding->total_units ?? 0) * ($holding->average_acquisition_cost ?? 0);
+                            $gain = $currentValue - $costBasis;
+                            $badge = $gain >= 0 ? 'success' : 'danger';
+                            return '<span class="badge bg-' . $badge . '">' . number_format($gain, 2) . '</span>';
+                        } catch (\Exception $e) {
+                            \Log::error('Error calculating unrealized gain: ' . $e->getMessage());
+                            return '<span class="badge bg-secondary">0.00</span>';
+                        }
+                    })
+                    ->rawColumns(['unrealized_gain'])
+                    ->make(true);
+            }
+
+            return response()->json(['error' => 'Invalid request'], 400);
+        } catch (\Exception $e) {
+            \Log::error('Error loading holdings data: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            return response()->json(['error' => 'Failed to load holdings data: ' . $e->getMessage()], 500);
         }
-
-        return response()->json(['error' => 'Invalid request'], 400);
     }
 
     // ==================== TRANSACTIONS MANAGEMENT ====================
@@ -319,90 +487,148 @@ class InvestmentController extends Controller
      */
     public function getTransactionsData(Request $request)
     {
-        if ($request->ajax()) {
-            $user = auth()->user();
-            $companyId = $user->company_id;
+        try {
+            if ($request->ajax()) {
+                $user = auth()->user();
+                $companyId = $user->company_id;
 
-            $transactions = UTTTransaction::with(['uttFund', 'maker', 'checker'])
-                ->where('company_id', $companyId)
-                ->select('utt_transactions.*');
+                $transactions = UTTTransaction::with(['uttFund', 'maker', 'checker'])
+                    ->where('utt_transactions.company_id', $companyId)
+                    ->select('utt_transactions.*');
 
-            if ($request->filled('status')) {
-                $transactions->where('status', $request->status);
+                if ($request->filled('status')) {
+                    $transactions->where('utt_transactions.status', $request->status);
+                }
+
+                if ($request->filled('type')) {
+                    $transactions->where('utt_transactions.transaction_type', $request->type);
+                }
+
+                return DataTables::eloquent($transactions)
+                    ->addColumn('fund_name', function ($transaction) {
+                        try {
+                            return $transaction->uttFund->fund_name ?? 'N/A';
+                        } catch (\Exception $e) {
+                            \Log::error('Error getting fund name: ' . $e->getMessage());
+                            return 'N/A';
+                        }
+                    })
+                    ->addColumn('type_badge', function ($transaction) {
+                        try {
+                            $badges = [
+                                'BUY' => 'success',
+                                'SELL' => 'danger',
+                                'REINVESTMENT' => 'info',
+                            ];
+                            $badge = $badges[$transaction->transaction_type] ?? 'secondary';
+                            return '<span class="badge bg-' . $badge . '">' . e($transaction->transaction_type ?? 'N/A') . '</span>';
+                        } catch (\Exception $e) {
+                            \Log::error('Error creating type badge: ' . $e->getMessage());
+                            return '<span class="badge bg-secondary">N/A</span>';
+                        }
+                    })
+                    ->editColumn('trade_date', function ($transaction) {
+                        try {
+                            return $transaction->trade_date ? Carbon::parse($transaction->trade_date)->format('M d, Y') : 'N/A';
+                        } catch (\Exception $e) {
+                            \Log::error('Error formatting trade date: ' . $e->getMessage());
+                            return 'N/A';
+                        }
+                    })
+                    ->addColumn('status_badge', function ($transaction) {
+                        try {
+                            $badges = [
+                                'PENDING' => 'warning',
+                                'APPROVED' => 'info',
+                                'SETTLED' => 'success',
+                                'CANCELLED' => 'danger',
+                            ];
+                            $badge = $badges[$transaction->status] ?? 'secondary';
+                            return '<span class="badge bg-' . $badge . '">' . e($transaction->status ?? 'N/A') . '</span>';
+                        } catch (\Exception $e) {
+                            \Log::error('Error creating status badge: ' . $e->getMessage());
+                            return '<span class="badge bg-secondary">N/A</span>';
+                        }
+                    })
+                    ->addColumn('units_formatted', function ($transaction) {
+                        try {
+                            return number_format($transaction->units ?? 0, 4);
+                        } catch (\Exception $e) {
+                            \Log::error('Error formatting units: ' . $e->getMessage());
+                            return '0.0000';
+                        }
+                    })
+                    ->addColumn('nav_formatted', function ($transaction) {
+                        try {
+                            return number_format($transaction->nav_per_unit ?? 0, 4);
+                        } catch (\Exception $e) {
+                            \Log::error('Error formatting NAV: ' . $e->getMessage());
+                            return '0.0000';
+                        }
+                    })
+                    ->addColumn('cash_value_formatted', function ($transaction) {
+                        try {
+                            return number_format($transaction->total_cash_value ?? 0, 2);
+                        } catch (\Exception $e) {
+                            \Log::error('Error formatting cash value: ' . $e->getMessage());
+                            return '0.00';
+                        }
+                    })
+                    ->addColumn('maker_name', function ($transaction) {
+                        try {
+                            return $transaction->maker->name ?? 'N/A';
+                        } catch (\Exception $e) {
+                            \Log::error('Error getting maker name: ' . $e->getMessage());
+                            return 'N/A';
+                        }
+                    })
+                    ->addColumn('checker_name', function ($transaction) {
+                        try {
+                            return $transaction->checker->name ?? 'N/A';
+                        } catch (\Exception $e) {
+                            \Log::error('Error getting checker name: ' . $e->getMessage());
+                            return 'N/A';
+                        }
+                    })
+                    ->addColumn('actions', function ($transaction) {
+                        try {
+                            $encodedId = Hashids::encode($transaction->id);
+                            $actions = '';
+
+                            // Always show view button
+                            $actions .= '<a href="' . route('investments.transactions.show', $encodedId) . '" class="btn btn-sm btn-outline-info me-1" title="View"><i class="bx bx-show"></i></a>';
+
+                            // Show approve button if transaction can be approved (permission check is optional)
+                            if ($transaction->canBeApproved()) {
+                                $actions .= '<button class="btn btn-sm btn-outline-success approve-btn me-1" data-id="' . $encodedId . '" title="Approve"><i class="bx bx-check"></i></button>';
+                            }
+
+                            // Show settle button if transaction can be settled
+                            if ($transaction->canBeSettled()) {
+                                $actions .= '<button class="btn btn-sm btn-outline-primary settle-btn me-1" data-id="' . $encodedId . '" title="Settle"><i class="bx bx-check-circle"></i></button>';
+                            }
+
+                            // Show cancel button if transaction can be cancelled
+                            if ($transaction->canBeCancelled()) {
+                                $actions .= '<button class="btn btn-sm btn-outline-danger cancel-btn me-1" data-id="' . $encodedId . '" title="Cancel"><i class="bx bx-x"></i></button>';
+                            }
+
+                            return '<div class="text-center">' . $actions . '</div>';
+                        } catch (\Exception $e) {
+                            \Log::error('Error creating actions: ' . $e->getMessage());
+                            return '<div class="text-center">-</div>';
+                        }
+                    })
+                    ->rawColumns(['type_badge', 'status_badge', 'actions'])
+                    ->make(true);
             }
 
-            if ($request->filled('type')) {
-                $transactions->where('transaction_type', $request->type);
-            }
-
-            return DataTables::eloquent($transactions)
-                ->addColumn('fund_name', function ($transaction) {
-                    return $transaction->uttFund->fund_name ?? 'N/A';
-                })
-                ->addColumn('type_badge', function ($transaction) {
-                    $badges = [
-                        'BUY' => 'success',
-                        'SELL' => 'danger',
-                        'REINVESTMENT' => 'info',
-                    ];
-                    $badge = $badges[$transaction->transaction_type] ?? 'secondary';
-                    return '<span class="badge bg-' . $badge . '">' . e($transaction->transaction_type) . '</span>';
-                })
-                ->editColumn('trade_date', function ($transaction) {
-                    return $transaction->trade_date ? Carbon::parse($transaction->trade_date)->format('M d, Y') : 'N/A';
-                })
-                ->addColumn('status_badge', function ($transaction) {
-                    $badges = [
-                        'PENDING' => 'warning',
-                        'APPROVED' => 'info',
-                        'SETTLED' => 'success',
-                        'CANCELLED' => 'danger',
-                    ];
-                    $badge = $badges[$transaction->status] ?? 'secondary';
-                    return '<span class="badge bg-' . $badge . '">' . e($transaction->status) . '</span>';
-                })
-                ->addColumn('units_formatted', function ($transaction) {
-                    return number_format($transaction->units, 4);
-                })
-                ->addColumn('nav_formatted', function ($transaction) {
-                    return number_format($transaction->nav_per_unit, 4);
-                })
-                ->addColumn('cash_value_formatted', function ($transaction) {
-                    return number_format($transaction->total_cash_value, 2);
-                })
-                ->addColumn('maker_name', function ($transaction) {
-                    return $transaction->maker->name ?? 'N/A';
-                })
-                ->addColumn('checker_name', function ($transaction) {
-                    return $transaction->checker->name ?? 'N/A';
-                })
-                ->addColumn('actions', function ($transaction) {
-                    $encodedId = Hashids::encode($transaction->id);
-                    $actions = '';
-
-                    if (auth()->user()->can('view investment transaction')) {
-                        $actions .= '<a href="' . route('investments.transactions.show', $encodedId) . '" class="btn btn-sm btn-outline-info me-1" title="View"><i class="bx bx-show"></i></a>';
-                    }
-
-                    if ($transaction->canBeApproved() && auth()->user()->can('approve investment transaction')) {
-                        $actions .= '<button class="btn btn-sm btn-outline-success approve-btn me-1" data-id="' . $encodedId . '" title="Approve"><i class="bx bx-check"></i></button>';
-                    }
-
-                    if ($transaction->canBeSettled() && auth()->user()->can('settle investment transaction')) {
-                        $actions .= '<button class="btn btn-sm btn-outline-primary settle-btn me-1" data-id="' . $encodedId . '" title="Settle"><i class="bx bx-check-circle"></i></button>';
-                    }
-
-                    if ($transaction->canBeCancelled() && auth()->user()->can('cancel investment transaction')) {
-                        $actions .= '<button class="btn btn-sm btn-outline-danger cancel-btn me-1" data-id="' . $encodedId . '" title="Cancel"><i class="bx bx-x"></i></button>';
-                    }
-
-                    return '<div class="text-center">' . $actions . '</div>';
-                })
-                ->rawColumns(['type_badge', 'status_badge', 'actions'])
-                ->make(true);
+            return response()->json(['error' => 'Invalid request'], 400);
+        } catch (\Exception $e) {
+            \Log::error('Error loading transactions data: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            return response()->json(['error' => 'Failed to load transactions data: ' . $e->getMessage()], 500);
         }
-
-        return response()->json(['error' => 'Invalid request'], 400);
     }
 
     /**
@@ -417,8 +643,13 @@ class InvestmentController extends Controller
             ->where('status', 'Active')
             ->get();
         
-        $bankAccounts = BankAccount::where('company_id', $companyId)
-            ->where('status', 'active')
+        // Bank accounts are linked to companies through chart_account -> account_class_group
+        $bankAccounts = BankAccount::whereHas('chartAccount.accountClassGroup', function ($query) use ($companyId) {
+                $query->where('company_id', $companyId);
+            })
+            ->with('chartAccount')
+            ->select('id', 'name', 'account_number', 'chart_account_id')
+            ->orderBy('name')
             ->get();
 
         return view('investments.transactions.create', compact('funds', 'bankAccounts'));
@@ -531,7 +762,9 @@ class InvestmentController extends Controller
         $transaction = UTTTransaction::with(['uttFund', 'saccoUTTHolding', 'maker', 'checker', 'cashFlows'])
             ->findOrFail($decoded[0]);
 
-        return view('investments.transactions.show', compact('transaction'));
+        $encodedId = Hashids::encode($transaction->id);
+
+        return view('investments.transactions.show', compact('transaction', 'encodedId'));
     }
 
     /**
@@ -554,7 +787,8 @@ class InvestmentController extends Controller
             }
 
             $user = auth()->user();
-            if ($transaction->maker_id === $user->id) {
+            // Allow super-admin to approve their own transactions, but prevent others
+            if ($transaction->maker_id === $user->id && !$user->hasRole('super-admin')) {
                 return response()->json(['error' => 'You cannot approve your own transaction'], 400);
             }
 

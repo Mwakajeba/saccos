@@ -35,6 +35,14 @@ class MenuSeeder extends Seeder
                 ],
                 'hiddenRoutes' => ['customers.edit', 'customers.destroy', 'customers.show'],
             ],
+
+            'Complains' => [
+                'icon' => 'bx bx-message-square-dots',
+                'visibleRoutes' => [
+                    ['name' => 'Complains', 'route' => 'complains.index'],
+                ],
+                'hiddenRoutes' => ['complains.data', 'complains.show', 'complains.edit', 'complains.update'],
+            ],
             'Accounting' => [
                 'icon' => 'bx bx-calculator',
                 'visibleRoutes' => [

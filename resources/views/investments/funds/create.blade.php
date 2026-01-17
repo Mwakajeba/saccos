@@ -108,6 +108,59 @@
                         <textarea class="form-control" id="notes" name="notes" rows="3">{{ old('notes') }}</textarea>
                     </div>
 
+                    <!-- Chart Accounts Section -->
+                    <div class="card border-info mt-4">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0"><i class="bx bx-book-open me-2"></i>Chart Accounts Configuration</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="investment_account_id" class="form-label">UTT Investment (Asset) <span class="text-danger">*</span></label>
+                                        <select class="form-select select2-single" id="investment_account_id" name="investment_account_id" required>
+                                            <option value="">Select Asset Account</option>
+                                            @foreach($assetAccounts as $account)
+                                                <option value="{{ $account->id }}" {{ old('investment_account_id') == $account->id ? 'selected' : '' }}>
+                                                    {{ $account->account_code }} - {{ $account->account_name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <small class="form-text text-muted">Asset account for UTT investments</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="income_account_id" class="form-label">UTT Investment Income <span class="text-danger">*</span></label>
+                                        <select class="form-select select2-single" id="income_account_id" name="income_account_id" required>
+                                            <option value="">Select Income Account</option>
+                                            @foreach($incomeAccounts as $account)
+                                                <option value="{{ $account->id }}" {{ old('income_account_id') == $account->id ? 'selected' : '' }}>
+                                                    {{ $account->account_code }} - {{ $account->account_name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <small class="form-text text-muted">Income account for UTT investment gains</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="loss_account_id" class="form-label">UTT Investment Loss (Expense) <span class="text-danger">*</span></label>
+                                        <select class="form-select select2-single" id="loss_account_id" name="loss_account_id" required>
+                                            <option value="">Select Expense Account</option>
+                                            @foreach($expenseAccounts as $account)
+                                                <option value="{{ $account->id }}" {{ old('loss_account_id') == $account->id ? 'selected' : '' }}>
+                                                    {{ $account->account_code }} - {{ $account->account_name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <small class="form-text text-muted">Expense account for UTT investment losses</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="d-flex justify-content-end gap-2">
                         <a href="{{ route('investments.funds.index') }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-primary">
@@ -121,3 +174,20 @@
 </div>
 @endsection
 
+@push('scripts')
+<script>
+    $(document).ready(function() {
+        // Initialize Select2 for chart account dropdowns
+        if (typeof $ !== 'undefined' && $.fn.select2) {
+            $('#investment_account_id, #income_account_id, #loss_account_id').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: function() {
+                    return $(this).find('option:first').text();
+                },
+                allowClear: true
+            });
+        }
+    });
+</script>
+@endpush

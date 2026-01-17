@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Vinkla\Hashids\Facades\Hashids;
+use App\Helpers\HashidsHelper;
 use Yajra\DataTables\Facades\DataTables;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -132,22 +133,27 @@ class ShareDepositController extends Controller
                     return $badges[$deposit->status] ?? '<span class="badge bg-secondary">Unknown</span>';
                 })
                 ->addColumn('actions', function ($deposit) {
-                    $actions = '';
-                    $encodedId = Hashids::encode($deposit->id);
+                    try {
+                        $actions = '';
+                        $encodedId = HashidsHelper::encode($deposit->id);
 
-                    // View action
-                    $actions .= '<a href="' . route('shares.deposits.show', $encodedId) . '" class="btn btn-sm btn-info me-1" title="View"><i class="bx bx-show"></i></a>';
+                        // View action
+                        $actions .= '<a href="' . route('shares.deposits.show', $encodedId) . '" class="btn btn-sm btn-info me-1" title="View"><i class="bx bx-show"></i></a>';
 
-                    // Edit action
-                    $actions .= '<a href="' . route('shares.deposits.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
+                        // Edit action
+                        $actions .= '<a href="' . route('shares.deposits.edit', $encodedId) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bx bx-edit"></i></a>';
 
-                    // Change status action
-                    $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" data-name="Deposit #' . $deposit->id . '" data-status="' . e($deposit->status) . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
+                        // Change status action
+                        $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" data-name="Deposit #' . $deposit->id . '" data-status="' . e($deposit->status) . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
 
-                    // Delete action
-                    $actions .= '<button class="btn btn-sm btn-danger delete-btn" data-id="' . $encodedId . '" data-name="Deposit #' . $deposit->id . '" title="Delete"><i class="bx bx-trash"></i></button>';
+                        // Delete action
+                        $actions .= '<button class="btn btn-sm btn-danger delete-btn" data-id="' . $encodedId . '" data-name="Deposit #' . $deposit->id . '" title="Delete"><i class="bx bx-trash"></i></button>';
 
-                    return '<div class="text-center d-flex justify-content-center gap-1">' . $actions . '</div>';
+                        return '<div class="text-center d-flex justify-content-center gap-1">' . $actions . '</div>';
+                    } catch (\Exception $e) {
+                        Log::error('Hashids encode error in actions column: ' . $e->getMessage());
+                        return '<div class="text-center text-danger">Error</div>';
+                    }
                 })
                 ->rawColumns(['status_badge', 'actions'])
                 ->make(true);
@@ -334,6 +340,11 @@ class ShareDepositController extends Controller
      */
     public function show($id)
     {
+        $decoded = HashidsHelper::decode($id);
+        if (empty($decoded)) {
+            abort(404);
+        }
+        
         $deposit = ShareDeposit::with([
             'shareAccount.customer',
             'shareAccount.shareProduct',
@@ -342,7 +353,7 @@ class ShareDepositController extends Controller
             'company',
             'createdBy',
             'updatedBy'
-        ])->findOrFail(Hashids::decode($id)[0]);
+        ])->findOrFail($decoded[0]);
 
         return view('shares.deposits.show', compact('deposit'));
     }
@@ -352,7 +363,12 @@ class ShareDepositController extends Controller
      */
     public function edit($id)
     {
-        $deposit = ShareDeposit::with(['shareAccount.shareProduct'])->findOrFail(Hashids::decode($id)[0]);
+        $decoded = HashidsHelper::decode($id);
+        if (empty($decoded)) {
+            abort(404);
+        }
+        
+        $deposit = ShareDeposit::with(['shareAccount.shareProduct'])->findOrFail($decoded[0]);
         
         // Get active share accounts
         $shareAccounts = ShareAccount::with(['customer', 'shareProduct'])
@@ -371,7 +387,12 @@ class ShareDepositController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $deposit = ShareDeposit::with(['shareAccount.shareProduct'])->findOrFail(Hashids::decode($id)[0]);
+        $decoded = HashidsHelper::decode($id);
+        if (empty($decoded)) {
+            abort(404);
+        }
+        
+        $deposit = ShareDeposit::with(['shareAccount.shareProduct'])->findOrFail($decoded[0]);
 
         $validator = Validator::make($request->all(), [
             'share_account_id' => 'required|exists:share_accounts,id',
@@ -519,7 +540,12 @@ class ShareDepositController extends Controller
     public function destroy($id)
     {
         try {
-            $deposit = ShareDeposit::with('shareAccount')->findOrFail(Hashids::decode($id)[0]);
+            $decoded = HashidsHelper::decode($id);
+            if (empty($decoded)) {
+                abort(404);
+            }
+            
+            $deposit = ShareDeposit::with('shareAccount')->findOrFail($decoded[0]);
 
             DB::beginTransaction();
 
@@ -1103,6 +1129,8 @@ class ShareDepositController extends Controller
                     \App\Models\OpeningBalanceLog::create([
                         'type' => 'share',
                         'customer_id' => $customerId,
+                        'contribution_account_id' => null,
+                        'contribution_product_id' => null, // Not needed for share type
                         'share_account_id' => $shareAccount->id,
                         'share_product_id' => $shareProduct->id,
                         'amount' => $totalAmount,
@@ -1155,7 +1183,7 @@ class ShareDepositController extends Controller
      */
     public function changeStatus(Request $request, $encodedId)
     {
-        $decoded = Hashids::decode($encodedId);
+        $decoded = HashidsHelper::decode($encodedId);
         if (empty($decoded)) {
             return response()->json(['error' => 'Share deposit not found.'], 404);
         }

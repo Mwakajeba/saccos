@@ -254,6 +254,8 @@ class BulkShareOpeningBalanceJob implements ShouldQueue
                         OpeningBalanceLog::create([
                             'type' => 'share',
                             'customer_id' => $shareAccount->customer_id,
+                            'contribution_account_id' => null,
+                            'contribution_product_id' => null, // Not needed for share type
                             'share_account_id' => $shareAccount->id,
                             'share_product_id' => $this->shareProductId,
                             'amount' => $totalAmount,

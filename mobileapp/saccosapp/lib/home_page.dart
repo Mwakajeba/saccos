@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'login_page.dart';
 import 'loan_application_page.dart';
@@ -5,8 +6,12 @@ import 'profile_page.dart';
 import 'loans_page.dart';
 import 'loan_products_page.dart';
 import 'models/user_session.dart';
-import 'deposit_accounts_page.dart';
 import 'loan_calculator_page.dart';
+import 'contributions_page.dart';
+import 'shares_page.dart';
+import 'services/api_service.dart';
+import 'account_transactions_page.dart';
+import 'complain_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,6 +23,143 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   bool _isBalanceVisible = true;
+  List<dynamic> _contributions = [];
+  List<dynamic> _shares = [];
+  List<dynamic> _announcements = [];
+  bool _isLoadingAssets = true;
+  final PageController _matangazoPageController = PageController();
+  int _currentMatangazoPage = 0;
+  Timer? _matangazoTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAssets();
+    _matangazoPageController.addListener(() {
+      if (mounted) {
+        setState(() {
+          _currentMatangazoPage = _matangazoPageController.page?.round() ?? 0;
+        });
+      }
+    });
+    _startAutoSlide();
+  }
+
+  void _startAutoSlide() {
+    _matangazoTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (mounted && _matangazoPageController.hasClients) {
+        final count = _announcements.isNotEmpty ? _announcements.length : 3;
+        if (count > 0) {
+          final nextPage = (_currentMatangazoPage + 1) % count;
+          _matangazoPageController.animateToPage(
+            nextPage,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      }
+    });
+  }
+
+  void _resetAutoSlide() {
+    _matangazoTimer?.cancel();
+    _startAutoSlide();
+  }
+
+  @override
+  void dispose() {
+    _matangazoTimer?.cancel();
+    _matangazoPageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAssets() async {
+    setState(() {
+      _isLoadingAssets = true;
+    });
+
+    try {
+      final userId = UserSession.instance.userId;
+      if (userId != null) {
+        final contributionsResponse = await ApiService.getContributions(userId);
+        final sharesResponse = await ApiService.getShares(userId);
+        
+        // Load announcements
+        try {
+          final announcementsResponse = await ApiService.getAnnouncements(userId.toString());
+          print('=== ANNOUNCEMENTS API RESPONSE ===');
+          print('Status: ${announcementsResponse['status']}');
+          print('Announcements count: ${announcementsResponse['announcements']?.length ?? 0}');
+          print('Response: ${announcementsResponse.toString()}');
+          print('==================================');
+          
+          if (announcementsResponse['status'] == 200) {
+            final fetchedAnnouncements = announcementsResponse['announcements'] ?? [];
+            if (fetchedAnnouncements.isNotEmpty) {
+              _announcements = fetchedAnnouncements;
+              print('Loaded ${_announcements.length} announcements from backend');
+            } else {
+              print('No announcements found, using defaults');
+              _announcements = _getDefaultAnnouncements();
+            }
+          } else {
+            print('API returned status ${announcementsResponse['status']}, using defaults');
+            _announcements = _getDefaultAnnouncements();
+          }
+        } catch (announcementError) {
+          print('Error loading announcements: $announcementError');
+          _announcements = _getDefaultAnnouncements();
+        }
+
+        setState(() {
+          if (contributionsResponse['status'] == 200) {
+            _contributions = contributionsResponse['contributions'] ?? [];
+          }
+          if (sharesResponse['status'] == 200) {
+            _shares = sharesResponse['shares'] ?? [];
+          }
+          _isLoadingAssets = false;
+        });
+      } else {
+        setState(() {
+          _announcements = _getDefaultAnnouncements();
+          _isLoadingAssets = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading assets: $e');
+      setState(() {
+        _announcements = _getDefaultAnnouncements();
+        _isLoadingAssets = false;
+      });
+    }
+  }
+
+  List<dynamic> _getDefaultAnnouncements() {
+    return [
+      {
+        'title': 'Habari za SACCOS',
+        'message': 'Tunapenda kuwakumbusha wanachama wetu kuwa malipo ya mikopo yanapaswa kufanyika kwa wakati.',
+        'icon': 'info_outline',
+        'color': 0xFF0D6EFD, // Blue
+        'image_url': null,
+      },
+      {
+        'title': 'Mkopo Mpya',
+        'message': 'Sasa unaweza kuomba mkopo mpya kupitia programu hii. Bofya "Omba Mkopo" kuanza.',
+        'icon': 'credit_card',
+        'color': 0xFF198754, // Green
+        'image_url': null,
+      },
+      {
+        'title': 'Malalamiko',
+        'message': 'Kama una malalamiko yoyote, tafadhali wasilisha kupitia sehemu ya "Malalamiko" kwenye menyu.',
+        'icon': 'feedback',
+        'color': 0xFFFD7E14, // Orange
+        'image_url': null,
+      },
+    ];
+  }
 
   String _formatCurrency(double amount) {
     return amount.toStringAsFixed(0).replaceAllMapped(
@@ -32,7 +174,9 @@ class _HomePageState extends State<HomePage> {
     
     double total = 0.0;
     for (var loan in loans) {
-      if (loan['status'] != 'rejected' && loan['status'] != 'cancelled') {
+      final status = (loan['status'] as String?)?.toLowerCase() ?? '';
+      // Only count active/disbursed loans (outstanding loans)
+      if (status == 'active' || status == 'disbursed') {
         total += (loan['total_due'] as num?)?.toDouble() ?? 0.0;
       }
     }
@@ -94,6 +238,7 @@ class _HomePageState extends State<HomePage> {
                       floating: true,
                       pinned: true,
                       elevation: 0,
+                      automaticallyImplyLeading: false,
                       backgroundColor: Colors.white.withOpacity(0.7),
                       flexibleSpace: ClipRRect(
                         child: Container(
@@ -118,7 +263,7 @@ class _HomePageState extends State<HomePage> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text(
-                                    'VisionApp',
+                                    'SmartFinanceApp',
                                     style: TextStyle(
                                       fontSize: 20,
                                       fontWeight: FontWeight.w800,
@@ -174,9 +319,58 @@ class _HomePageState extends State<HomePage> {
                                                 builder: (context) => const ProfilePage(),
                                               ),
                                             );
+                                          } else if (value == 'omba_mkopo') {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (context) => const LoanApplicationPage(),
+                                              ),
+                                            );
+                                          } else if (value == 'kikokoto') {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (context) => const LoanCalculatorPage(),
+                                              ),
+                                            );
+                                          } else if (value == 'bidhaa') {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (context) => const LoanProductsPage(),
+                                              ),
+                                            );
                                           }
                                         },
                                         itemBuilder: (BuildContext context) => [
+                                          const PopupMenuItem<String>(
+                                            value: 'omba_mkopo',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.request_quote_outlined, size: 20),
+                                                SizedBox(width: 12),
+                                                Text('Omba Mkopo'),
+                                              ],
+                                            ),
+                                          ),
+                                          const PopupMenuItem<String>(
+                                            value: 'kikokoto',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.calculate_outlined, size: 20),
+                                                SizedBox(width: 12),
+                                                Text('Kikokoto'),
+                                              ],
+                                            ),
+                                          ),
+                                          const PopupMenuItem<String>(
+                                            value: 'bidhaa',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.shopping_bag_outlined, size: 20),
+                                                SizedBox(width: 12),
+                                                Text('Bidhaa'),
+                                              ],
+                                            ),
+                                          ),
+                                          const PopupMenuDivider(),
                                           const PopupMenuItem<String>(
                                             value: 'settings',
                                             child: Row(
@@ -229,8 +423,6 @@ class _HomePageState extends State<HomePage> {
                           // Total Balance Card
                           _buildBalanceCard(),
                           const SizedBox(height: 8),
-                          // Quick Actions
-                          _buildQuickActions(),
                           const SizedBox(height: 8),
                           // Asset Summary
                           _buildAssetSummary(),
@@ -238,8 +430,8 @@ class _HomePageState extends State<HomePage> {
                           // Loan Status
                           _buildLoanStatus(),
                           const SizedBox(height: 8),
-                          // Recent Transactions
-                          _buildRecentTransactions(),
+                          // Matangazo Slider
+                          _buildMatangazoSlider(),
                           const SizedBox(height: 100),
                         ],
                       ),
@@ -447,18 +639,6 @@ class _HomePageState extends State<HomePage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _buildActionButton(
-            icon: Icons.account_balance_wallet_outlined,
-            label: 'Amana\nDhamana',
-            isPrimary: true,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const DepositAccountsPage(),
-                ),
-              );
-            },
-          ),
-          _buildActionButton(
             icon: Icons.request_quote_outlined,
             label: 'Omba\nMkopo',
             onTap: () {
@@ -554,7 +734,7 @@ class _HomePageState extends State<HomePage> {
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            'Mchanganuo wa Mali',
+            'Michango na Hisa',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -565,38 +745,146 @@ class _HomePageState extends State<HomePage> {
         const SizedBox(height: 12),
         SizedBox(
           height: 130,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              _buildAssetCard(
-                icon: Icons.donut_small,
-                label: 'Hisa',
-                amount: '500,000',
-                change: '+5%',
-                isPositive: true,
-                color: Colors.blue,
-              ),
-              const SizedBox(width: 16),
-              _buildAssetCard(
-                icon: Icons.savings_outlined,
-                label: 'Amana',
-                amount: '450,000',
-                change: 'Imetulia',
-                isPositive: null,
-                color: Colors.purple,
-              ),
-              const SizedBox(width: 16),
-              _buildAssetCard(
-                icon: Icons.account_balance_outlined,
-                label: 'Akiba',
-                amount: '200,000',
-                change: '+2%',
-                isPositive: true,
-                color: Colors.amber,
-              ),
-            ],
-          ),
+          child: _isLoadingAssets
+              ? const Center(
+                  child: CircularProgressIndicator(),
+                )
+              : ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    // Michango (Contributions)
+                    if (_contributions.isNotEmpty)
+                      ..._contributions.map((contribution) {
+                        double balance = 0.0;
+                        try {
+                          if (contribution['balance'] is String) {
+                            balance = double.parse(contribution['balance']);
+                          } else {
+                            balance = (contribution['balance'] as num?)?.toDouble() ?? 0.0;
+                          }
+                        } catch (e) {
+                          balance = 0.0;
+                        }
+                        
+                        String interestRate = '';
+                        bool? isPositive;
+                        try {
+                          if (contribution['interest_rate'] != null) {
+                            double rate = 0.0;
+                            if (contribution['interest_rate'] is String) {
+                              rate = double.parse(contribution['interest_rate']);
+                            } else {
+                              rate = (contribution['interest_rate'] as num).toDouble();
+                            }
+                            interestRate = '${rate.toStringAsFixed(1)}% p.a.';
+                            isPositive = rate > 0 ? true : null;
+                          } else {
+                            interestRate = 'Imetulia';
+                            isPositive = null;
+                          }
+                        } catch (e) {
+                          interestRate = 'Imetulia';
+                          isPositive = null;
+                        }
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: _buildAssetCard(
+                            icon: Icons.account_balance_wallet,
+                            label: contribution['product_name']?.toString() ?? 'Michango',
+                            amount: _formatCurrency(balance),
+                            change: interestRate,
+                            isPositive: isPositive,
+                            color: Colors.purple,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => AccountTransactionsPage(
+                                    accountId: contribution['id'],
+                                    accountName: contribution['product_name']?.toString() ?? 'Michango',
+                                    accountType: 'contribution',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    
+                    // Michango ya Hisa (Shares)
+                    if (_shares.isNotEmpty)
+                      ..._shares.map((share) {
+                        double totalValue = 0.0;
+                        double shareBalance = 0.0;
+                        try {
+                          if (share['total_value'] is String) {
+                            totalValue = double.parse(share['total_value']);
+                          } else {
+                            totalValue = (share['total_value'] as num?)?.toDouble() ?? 0.0;
+                          }
+                          
+                          if (share['share_balance'] is String) {
+                            shareBalance = double.parse(share['share_balance']);
+                          } else {
+                            shareBalance = (share['share_balance'] as num?)?.toDouble() ?? 0.0;
+                          }
+                        } catch (e) {
+                          totalValue = 0.0;
+                          shareBalance = 0.0;
+                        }
+                        
+                        bool? isPositive;
+                        try {
+                          if (share['dividend_rate'] != null) {
+                            double rate = 0.0;
+                            if (share['dividend_rate'] is String) {
+                              rate = double.parse(share['dividend_rate']);
+                            } else {
+                              rate = (share['dividend_rate'] as num).toDouble();
+                            }
+                            isPositive = rate > 0 ? true : null;
+                          }
+                        } catch (e) {
+                          isPositive = null;
+                        }
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: _buildAssetCard(
+                            icon: Icons.show_chart,
+                            label: share['product_name']?.toString() ?? 'Hisa',
+                            amount: _formatCurrency(totalValue),
+                            change: '${shareBalance.toStringAsFixed(0)} hisa',
+                            isPositive: isPositive,
+                            color: Colors.blue,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => AccountTransactionsPage(
+                                    accountId: share['id'],
+                                    accountName: share['product_name']?.toString() ?? 'Hisa',
+                                    accountType: 'share',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    
+                    // Placeholder if no data
+                    if (_contributions.isEmpty && _shares.isEmpty)
+                      _buildAssetCard(
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'Hakuna Mali',
+                        amount: '0',
+                        change: 'Anza sasa',
+                        isPositive: null,
+                        color: Colors.grey,
+                      ),
+                  ],
+                ),
         ),
       ],
     );
@@ -609,76 +897,80 @@ class _HomePageState extends State<HomePage> {
     required String change,
     required bool? isPositive,
     required Color color,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      width: 150,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 20, color: color),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF111813).withOpacity(0.7),
-                ),
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                amount,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF111813),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  if (isPositive != null)
-                    Icon(
-                      isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                      size: 12,
-                      color: isPositive ? Colors.green : Colors.red,
-                    ),
-                  if (isPositive != null) const SizedBox(width: 2),
-                  Text(
-                    change,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: isPositive == null
-                          ? Colors.grey
-                          : (isPositive ? Colors.green : Colors.red),
-                    ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 250,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
-              ),
-            ],
-          ),
-        ],
+                  child: Icon(icon, size: 20, color: color),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF111813).withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  amount,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111813),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (isPositive != null)
+                      Icon(
+                        isPositive ? Icons.arrow_upward : Icons.arrow_downward,
+                        size: 12,
+                        color: isPositive ? Colors.green : Colors.red,
+                      ),
+                    if (isPositive != null) const SizedBox(width: 2),
+                    Text(
+                      change,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: isPositive == null
+                            ? Colors.grey
+                            : (isPositive ? Colors.green : Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -881,54 +1173,274 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildRecentTransactions() {
+  Widget _buildMatangazoSlider() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'Matangazo',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF111813),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 200,
+            child: _announcements.isEmpty
+                ? const Center(child: Text('Hakuna matangazo kwa sasa'))
+                : PageView.builder(
+                    controller: _matangazoPageController,
+                    itemCount: _announcements.length,
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currentMatangazoPage = index;
+                      });
+                      // Reset auto-slide timer when user manually swipes
+                      _resetAutoSlide();
+                    },
+                    itemBuilder: (context, index) {
+                      return _buildMatangazoCard(index);
+                    },
+                  ),
+          ),
+          const SizedBox(height: 8),
+          // Page Indicators
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(3, (index) {
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: index == _currentMatangazoPage
+                      ? const Color(0xFF13EC5B)
+                      : Colors.grey.shade300,
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMatangazoCard(int index) {
+    if (index >= _announcements.length) {
+      return const SizedBox.shrink();
+    }
+
+    final announcement = _announcements[index];
+    
+    // Map icon string to IconData
+    IconData getIconData(String iconName) {
+      switch (iconName) {
+        case 'info_outline':
+          return Icons.info_outline;
+        case 'credit_card':
+          return Icons.credit_card;
+        case 'feedback':
+          return Icons.feedback;
+        case 'notifications':
+          return Icons.notifications;
+        case 'campaign':
+          return Icons.campaign;
+        case 'announcement':
+          return Icons.announcement;
+        default:
+          return Icons.info_outline;
+      }
+    }
+    
+    final iconData = getIconData(announcement['icon'] ?? 'info_outline');
+    // Handle color - it might be int or String from JSON
+    final colorValue = announcement['color'] ?? 0xFF0D6EFD;
+    final color = Color(colorValue is int ? colorValue : int.tryParse(colorValue.toString()) ?? 0xFF0D6EFD);
+    final imageUrl = announcement['image_url'];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color.withOpacity(0.1),
+                color.withOpacity(0.05),
+              ],
+            ),
+            border: Border.all(
+              color: color.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Miamala',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF111813),
+              // Image Section - 110px height, full width
+              Container(
+                height: 110,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Background Image
+                    imageUrl != null && imageUrl.toString().isNotEmpty
+                        ? Image.network(
+                            imageUrl.toString(),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              // Fallback to gradient if image fails
+                              return Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      color.withOpacity(0.3),
+                                      color.withOpacity(0.1),
+                                    ],
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    iconData,
+                                    color: color.withOpacity(0.5),
+                                    size: 40,
+                                  ),
+                                ),
+                              );
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: color.withOpacity(0.1),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    value: loadingProgress.expectedTotalBytes != null
+                                        ? loadingProgress.cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
+                                        : null,
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  color.withOpacity(0.3),
+                                  color.withOpacity(0.1),
+                                ],
+                              ),
+                            ),
+                            child: Center(
+                              child: Icon(
+                                iconData,
+                                color: color.withOpacity(0.5),
+                                size: 40,
+                              ),
+                            ),
+                          ),
+                    // Overlay gradient for better text readability
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            color.withOpacity(0.1),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              TextButton(
-                onPressed: () {},
-                child: const Text(
-                  'Ona yote',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF13EC5B),
+              // Content Section
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(
+                              iconData,
+                              color: color,
+                              size: 16,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              announcement['title'] ?? '',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF111813),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Expanded(
+                        child: Text(
+                          announcement['message'] ?? '',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                            height: 1.3,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildTransactionItem(
-            icon: Icons.arrow_downward,
-            title: 'Malipo ya Mkopo',
-            time: 'Leo, 10:30 AM',
-            amount: '- TZS 50,000',
-            isPositive: false,
-            iconColor: Colors.green,
-          ),
-          const SizedBox(height: 12),
-          _buildTransactionItem(
-            icon: Icons.arrow_upward,
-            title: 'Weka Akiba',
-            time: 'Jana, 04:15 PM',
-            amount: '+ TZS 20,000',
-            isPositive: true,
-            iconColor: Colors.green,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1019,7 +1531,7 @@ class _HomePageState extends State<HomePage> {
               _buildNavItem(Icons.home, 'Nyumbani', 0, filled: true),
               _buildNavItem(Icons.credit_score_outlined, 'Mikopo', 1),
               const SizedBox(width: 56), // Space for FAB
-              _buildNavItem(Icons.payments_outlined, 'Michango', 2),
+              _buildNavItem(Icons.feedback_outlined, 'Malalamiko', 2),
               _buildNavItem(Icons.person_outline, 'Wasifu', 3),
             ],
           ),
@@ -1040,6 +1552,12 @@ class _HomePageState extends State<HomePage> {
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => const LoansPage(),
+            ),
+          );
+        } else if (index == 2) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const ComplainPage(),
             ),
           );
         } else if (index == 3) {

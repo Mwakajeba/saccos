@@ -30,6 +30,7 @@ use App\Http\Controllers\Accounting\FeeController;
 use App\Http\Controllers\Accounting\PenaltyController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\ComplainController;
 use App\Http\Controllers\LoanProductController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupMemberController;
@@ -77,6 +78,16 @@ Route::post('/api/customer/loans', [\App\Http\Controllers\Api\CustomerAuthContro
 Route::post('/api/customer/group-members', [\App\Http\Controllers\Api\CustomerAuthController::class, 'groupMembers']);
 Route::get('/api/customer/loan-products', [\App\Http\Controllers\Api\CustomerAuthController::class, 'loanProducts']);
 Route::post('/api/customer/update-photo', [\App\Http\Controllers\Api\CustomerAuthController::class, 'updatePhoto']);
+Route::post('/api/customer/contributions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'contributions']);
+Route::post('/api/customer/shares', [\App\Http\Controllers\Api\CustomerAuthController::class, 'shares']);
+Route::post('/api/customer/contribution-transactions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'contributionTransactions']);
+Route::post('/api/customer/share-transactions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'shareTransactions']);
+Route::post('/api/customer/loan-application', [\App\Http\Controllers\Api\CustomerAuthController::class, 'submitLoanApplication']);
+Route::get('/api/customer/complain-categories', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getComplainCategories']);
+Route::post('/api/customer/complain', [\App\Http\Controllers\Api\CustomerAuthController::class, 'submitComplain']);
+Route::post('/api/customer/complains', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getCustomerComplains']);
+Route::post('/api/customer/next-of-kin', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getNextOfKin']);
+Route::post('/api/customer/announcements', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getAnnouncements']);
 
 Route::post('/receipts/store', [\App\Http\Controllers\ReceiptController::class, 'store'])->name('receipts.store');
 
@@ -156,9 +167,16 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::get('opening-balance/download-template', [\App\Http\Controllers\ShareAccountController::class, 'downloadOpeningBalanceTemplate'])->name('opening-balance.download-template');
     Route::post('opening-balance/import', [\App\Http\Controllers\ShareAccountController::class, 'importOpeningBalance'])->name('opening-balance.import');
     
-    Route::get('/deposits', function () {
-        return view('shares.deposits.index');
-    })->name('deposits.index');
+    // Share Deposits Routes (data route must come BEFORE resource to avoid route conflicts)
+    Route::get('deposits/data', [\App\Http\Controllers\ShareDepositController::class, 'getShareDepositsData'])->name('deposits.data');
+    Route::get('deposits/export', [\App\Http\Controllers\ShareDepositController::class, 'export'])->name('deposits.export');
+    Route::get('deposits/import', [\App\Http\Controllers\ShareDepositController::class, 'import'])->name('deposits.import');
+    Route::post('deposits/import', [\App\Http\Controllers\ShareDepositController::class, 'importStore'])->name('deposits.import.store');
+    Route::get('deposits/download-template', [\App\Http\Controllers\ShareDepositController::class, 'downloadTemplate'])->name('deposits.download-template');
+    Route::post('deposits/import-opening-balance', [\App\Http\Controllers\ShareDepositController::class, 'importOpeningBalance'])->name('deposits.import-opening-balance');
+    Route::get('deposits/download-opening-balance-template', [\App\Http\Controllers\ShareDepositController::class, 'downloadOpeningBalanceTemplate'])->name('deposits.download-opening-balance-template');
+    Route::post('deposits/{id}/change-status', [\App\Http\Controllers\ShareDepositController::class, 'changeStatus'])->name('deposits.change-status');
+    Route::resource('deposits', \App\Http\Controllers\ShareDepositController::class);
     
     Route::get('/withdrawals', function () {
         return view('shares.withdrawals.index');
@@ -328,6 +346,12 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     
     //Journal References settings
     Route::resource('journal-references', \App\Http\Controllers\JournalReferenceController::class);
+    
+    //Complain Categories settings
+    Route::resource('complain-categories', \App\Http\Controllers\Settings\ComplainCategoryController::class);
+    
+    //Announcements settings
+    Route::resource('announcements', \App\Http\Controllers\Settings\AnnouncementController::class);
 
     Route::get('/', [SettingsController::class, 'index'])->name('index');
 
@@ -916,6 +940,18 @@ Route::middleware(['auth'])->group(function () {
 
 ////////////////////////////////////////////// END CUSTOMER MANAGEMENT ///////////////////////////////////////////
 
+////////////////////////////////////////////// COMPLAINS MANAGEMENT ///////////////////////////////////////////
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('complains', [ComplainController::class, 'index'])->name('complains.index');
+    Route::get('complains/data', [ComplainController::class, 'getComplainsData'])->name('complains.data');
+    Route::get('complains/{encodedId}', [ComplainController::class, 'show'])->name('complains.show');
+    Route::get('complains/{encodedId}/edit', [ComplainController::class, 'edit'])->name('complains.edit');
+    Route::put('complains/{encodedId}', [ComplainController::class, 'update'])->name('complains.update');
+});
+
+////////////////////////////////////////////// END COMPLAINS MANAGEMENT ///////////////////////////////////////////
+
 //////////////////////////////////////////////////// CONTRIBUTIONS //////////////////////////////////////////////////////////////
 
 Route::get('/contributions', [ContributionController::class, 'index'])->name('contributions.index')->middleware('auth');
@@ -967,6 +1003,7 @@ Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(
     Route::get('/funds/{encodedId}', [InvestmentController::class, 'fundsShow'])->name('funds.show');
     Route::get('/funds/{encodedId}/edit', [InvestmentController::class, 'fundsEdit'])->name('funds.edit');
     Route::put('/funds/{encodedId}', [InvestmentController::class, 'fundsUpdate'])->name('funds.update');
+    Route::post('/funds/{encodedId}/toggle-status', [InvestmentController::class, 'fundsToggleStatus'])->name('funds.toggle-status');
     
     // Holdings Management
     Route::get('/holdings', [InvestmentController::class, 'holdingsIndex'])->name('holdings.index');
@@ -1258,6 +1295,39 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/emails/microfinances', [EmailController::class, 'getMicrofinances'])->name('emails.microfinances');
     Route::post('/emails/send', [EmailController::class, 'sendBulkEmails'])->name('emails.send');
     Route::post('/emails/test', [EmailController::class, 'testEmail'])->name('emails.test');
+});
+
+// Lab Test Workflow Routes
+Route::middleware(['auth'])->prefix('consultations')->name('consultations.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\ConsultationController::class, 'index'])->name('index');
+    Route::get('/create', [\App\Http\Controllers\ConsultationController::class, 'create'])->name('create');
+    Route::post('/', [\App\Http\Controllers\ConsultationController::class, 'store'])->name('store');
+    Route::get('/{encodedId}', [\App\Http\Controllers\ConsultationController::class, 'show'])->name('show');
+    Route::get('/{encodedId}/edit', [\App\Http\Controllers\ConsultationController::class, 'edit'])->name('edit');
+    Route::put('/{encodedId}', [\App\Http\Controllers\ConsultationController::class, 'update'])->name('update');
+    Route::delete('/{encodedId}', [\App\Http\Controllers\ConsultationController::class, 'destroy'])->name('destroy');
+});
+
+Route::middleware(['auth'])->prefix('lab-tests')->name('lab-tests.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\LabTestController::class, 'index'])->name('index');
+    Route::get('/create/{consultationEncodedId}', [\App\Http\Controllers\LabTestController::class, 'create'])->name('create');
+    Route::post('/store/{consultationEncodedId}', [\App\Http\Controllers\LabTestController::class, 'store'])->name('store');
+    Route::get('/{encodedId}', [\App\Http\Controllers\LabTestController::class, 'show'])->name('show');
+    Route::post('/{encodedId}/review', [\App\Http\Controllers\LabTestController::class, 'review'])->name('review');
+    Route::post('/{encodedId}/take-test', [\App\Http\Controllers\LabTestController::class, 'takeTest'])->name('take-test');
+    Route::post('/{encodedId}/submit-results', [\App\Http\Controllers\LabTestController::class, 'submitResults'])->name('submit-results');
+    Route::post('/{encodedId}/send-to-doctor', [\App\Http\Controllers\LabTestController::class, 'sendToDoctor'])->name('send-to-doctor');
+    Route::get('/{encodedId}/view-results', [\App\Http\Controllers\LabTestController::class, 'viewResults'])->name('view-results');
+});
+
+Route::middleware(['auth'])->prefix('lab-test-bills')->name('lab-test-bills.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\LabTestBillController::class, 'index'])->name('index');
+    Route::get('/{encodedId}', [\App\Http\Controllers\LabTestBillController::class, 'show'])->name('show');
+    Route::post('/{encodedId}/process-payment', [\App\Http\Controllers\LabTestBillController::class, 'processPayment'])->name('process-payment');
+});
+
+Route::middleware(['auth'])->prefix('lab-test-results')->name('lab-test-results.')->group(function () {
+    Route::get('/{encodedId}/download', [\App\Http\Controllers\LabTestResultController::class, 'download'])->name('download');
 });
 
 Route::post('/logout', function () {

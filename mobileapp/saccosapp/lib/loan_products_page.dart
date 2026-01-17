@@ -3,6 +3,7 @@ import 'loan_application_page.dart';
 import 'home_page.dart';
 import 'loans_page.dart';
 import 'profile_page.dart';
+import 'complain_page.dart';
 import 'services/api_service.dart';
 
 class LoanProductsPage extends StatefulWidget {
@@ -62,8 +63,19 @@ class _LoanProductsPageState extends State<LoanProductsPage> {
       print('Error type: ${e.runtimeType}');
       print('Error message: $e');
       print('======================');
+      
+      String errorMessage = 'Kuna tatizo, jaribu tena';
+      
+      if (e.toString().contains('TIMEOUT')) {
+        errorMessage = 'Seva inachukua muda mrefu. Jaribu tena';
+      } else if (e.toString().contains('NETWORK_ERROR')) {
+        errorMessage = 'Hakuna mtandao. Angalia muunganisho wako';
+      } else if (e.toString().contains('SERVER_ERROR')) {
+        errorMessage = 'Tatizo la seva. Jaribu tena baadaye';
+      }
+      
       setState(() {
-        _errorMessage = 'Hakuna mtandao. Angalia muunganisho wako';
+        _errorMessage = errorMessage;
         _isLoading = false;
       });
     }
@@ -1524,7 +1536,7 @@ class _LoanProductsPageState extends State<LoanProductsPage> {
               _buildNavItem(Icons.home, 'Nyumbani', 0, filled: true),
               _buildNavItem(Icons.credit_score_outlined, 'Mikopo', 1),
               const SizedBox(width: 56), // Space for FAB
-              _buildNavItem(Icons.payments_outlined, 'Michango', 2),
+              _buildNavItem(Icons.feedback_outlined, 'Malalamiko', 2),
               _buildNavItem(Icons.person_outline, 'Wasifu', 3),
             ],
           ),
@@ -1553,6 +1565,13 @@ class _LoanProductsPageState extends State<LoanProductsPage> {
             context,
             MaterialPageRoute(
               builder: (context) => const LoansPage(),
+            ),
+          );
+        } else if (index == 2) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ComplainPage(),
             ),
           );
         } else if (index == 3) {

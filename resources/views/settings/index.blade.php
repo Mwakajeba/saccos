@@ -396,6 +396,42 @@
                                 </div>
                             </div>
 
+                            <!-- Complain Categories -->
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-orange">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-message-square-dots fs-1 text-orange"></i>
+                                        </div>
+                                        <h5 class="card-title">Complain Categories</h5>
+                                        <p class="card-text">
+                                            Manage complain categories with descriptions and priority levels (low, medium, high).
+                                        </p>
+                                        <a href="{{ route('settings.complain-categories.index') }}" class="btn btn-orange">
+                                            <i class="bx bx-list-ul me-1"></i> Manage Categories
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Announcements -->
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-primary">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-bullhorn fs-1 text-primary"></i>
+                                        </div>
+                                        <h5 class="card-title">Announcements</h5>
+                                        <p class="card-text">
+                                            Create and manage announcements that appear in the mobile app. Post notices, updates, and important information.
+                                        </p>
+                                        <a href="{{ route('settings.announcements.index') }}" class="btn btn-primary">
+                                            <i class="bx bx-list-ul me-1"></i> Manage Announcements
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
                             @endcan
                         </div>
                     </div>

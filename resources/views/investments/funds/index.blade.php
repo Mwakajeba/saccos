@@ -189,6 +189,72 @@
 
         // Set initial active filter
         $('.filter-card[data-status=""]').addClass('border-primary border-2');
+
+        // Close fund button
+        $(document).on('click', '.close-fund-btn', function() {
+            var fundId = $(this).data('id');
+            Swal.fire({
+                title: 'Close Fund?',
+                text: 'Are you sure you want to close this fund?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, Close',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '{{ route("investments.funds.toggle-status", ":id") }}'.replace(':id', fundId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            Swal.fire('Success!', response.message, 'success').then(() => {
+                                table.ajax.reload(null, false);
+                            });
+                        },
+                        error: function(xhr) {
+                            Swal.fire('Error!', xhr.responseJSON?.error || 'Failed to close fund', 'error');
+                        }
+                    });
+                }
+            });
+        });
+
+        // Activate fund button
+        $(document).on('click', '.activate-fund-btn', function() {
+            var fundId = $(this).data('id');
+            Swal.fire({
+                title: 'Activate Fund?',
+                text: 'Are you sure you want to activate this fund?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, Activate',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '{{ route("investments.funds.toggle-status", ":id") }}'.replace(':id', fundId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            Swal.fire('Success!', response.message, 'success').then(() => {
+                                table.ajax.reload(null, false);
+                            });
+                        },
+                        error: function(xhr) {
+                            Swal.fire('Error!', xhr.responseJSON?.error || 'Failed to activate fund', 'error');
+                        }
+                    });
+                }
+            });
+        });
     });
 </script>
 @endpush

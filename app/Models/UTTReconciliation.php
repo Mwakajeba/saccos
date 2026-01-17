@@ -11,6 +11,8 @@ class UTTReconciliation extends Model
 {
     use HasFactory, SoftDeletes, LogsActivity;
 
+    protected $table = 'utt_reconciliations';
+
     protected $fillable = [
         'utt_fund_id',
         'sacco_utt_holding_id',

@@ -223,6 +223,17 @@ $(document).ready(function() {
             </div>
         `;
         $('#lineItemsContainer').append(newLineItem);
+        
+        // Initialize Select2 for the newly added dropdown
+        setTimeout(function() {
+            $('#lineItemsContainer .debit-account.select2-single').last().select2({
+                placeholder: 'Select account',
+                allowClear: true,
+                width: '100%',
+                theme: 'bootstrap-5'
+            });
+        }, 100);
+        
         lineItemIndex++;
         updateRemoveButtons();
     });

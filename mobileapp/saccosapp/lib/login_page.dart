@@ -161,7 +161,7 @@ class _LoginPageState extends State<LoginPage> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: const Icon(
-            Icons.savings_outlined,
+            Icons.account_balance,
             size: 40,
             color: Color(0xFF13EC5B),
           ),
@@ -486,37 +486,6 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildFooter() {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'Huna akaunti?',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF61896F),
-              ),
-            ),
-            const SizedBox(width: 6),
-            TextButton(
-              onPressed: () {},
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text(
-                'Jisajili',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF13EC5B),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
         // Security Indicator
         Opacity(
           opacity: 0.6,

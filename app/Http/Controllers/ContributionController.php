@@ -16,6 +16,8 @@ use App\Models\GlTransaction;
 use App\Models\Customer;
 use App\Models\Receipt;
 use App\Models\ReceiptItem;
+use App\Models\Payment;
+use App\Models\PaymentItem;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
 

@@ -76,7 +76,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               onTap: () async {
-                Navigator.pop(context);
+                final navigator = Navigator.of(context);
+                navigator.pop();
                 final XFile? image = await _picker.pickImage(
                   source: ImageSource.camera,
                   maxWidth: 800,
@@ -97,20 +98,24 @@ class _ProfilePageState extends State<ProfilePage> {
                         File(image.path),
                       );
                       
-                      if (mounted && result['status'] == 200) {
+                      if (mounted) {
                         // Update photo URL in session
-                        UserSession.instance.photoUrl = result['photo_url'];
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Picha imehifadhiwa kwenye server!'),
-                            backgroundColor: Color(0xFF13EC5B),
-                          ),
-                        );
+                        if (result['status'] == 200) {
+                          UserSession.instance.photoUrl = result['photo_url'];
+                          
+                          if (mounted && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Picha imehifadhiwa kwenye server!'),
+                                backgroundColor: Color(0xFF13EC5B),
+                              ),
+                            );
+                          }
+                        }
                       }
                     }
                   } catch (e) {
-                    if (mounted) {
+                    if (mounted && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Picha imehifadhiwa kwenye simu, lakini kuna tatizo la mtandao: ${e.toString()}'),
@@ -150,7 +155,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               onTap: () async {
-                Navigator.pop(context);
+                final navigator = Navigator.of(context);
+                navigator.pop();
                 final XFile? image = await _picker.pickImage(
                   source: ImageSource.gallery,
                   maxWidth: 800,
@@ -171,20 +177,24 @@ class _ProfilePageState extends State<ProfilePage> {
                         File(image.path),
                       );
                       
-                      if (mounted && result['status'] == 200) {
+                      if (mounted) {
                         // Update photo URL in session
-                        UserSession.instance.photoUrl = result['photo_url'];
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Picha imehifadhiwa kwenye server!'),
-                            backgroundColor: Color(0xFF13EC5B),
-                          ),
-                        );
+                        if (result['status'] == 200) {
+                          UserSession.instance.photoUrl = result['photo_url'];
+                          
+                          if (mounted && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Picha imehifadhiwa kwenye server!'),
+                                backgroundColor: Color(0xFF13EC5B),
+                              ),
+                            );
+                          }
+                        }
                       }
                     }
                   } catch (e) {
-                    if (mounted) {
+                    if (mounted && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Picha imehifadhiwa kwenye simu, lakini kuna tatizo la mtandao: ${e.toString()}'),
@@ -207,8 +217,8 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8F6),
-      body: SafeArea(
+        backgroundColor: const Color(0xFFF6F8F6),
+        body: SafeArea(
         bottom: false,
         child: Center(
           child: Container(
@@ -238,11 +248,13 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Row(
                         children: [
                           IconButton(
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
                             icon: const Icon(
-                              Icons.arrow_back_ios_new,
+                              Icons.arrow_back,
                               color: Color(0xFF111813),
-                              size: 20,
+                              size: 24,
                             ),
                           ),
                           const Expanded(
@@ -515,7 +527,37 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: Icons.fingerprint,
                   label: 'Namba ya Mtumiaji',
                   value: UserSession.instance.userId?.toString() ?? 'Haijawekwa',
-                  showDivider: false,
+                  showDivider: true,
+                ),
+                // Next of Kin Button
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showNextOfKinModal(context),
+                      icon: const Icon(
+                        Icons.family_restroom,
+                        size: 20,
+                        color: Color(0xFF13EC5B),
+                      ),
+                      label: const Text(
+                        'Angalia Taarifa za Warithi',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF13EC5B),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF13EC5B), width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -605,6 +647,258 @@ class _ProfilePageState extends State<ProfilePage> {
           height: 1.5,
         ),
       ),
+    );
+  }
+
+  Future<void> _showNextOfKinModal(BuildContext context) async {
+    try {
+      final userId = UserSession.instance.userId;
+      if (userId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tafadhali ingia tena'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF13EC5B)),
+          ),
+        ),
+      );
+
+      final response = await ApiService.getNextOfKin(userId.toString());
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+
+      final nextOfKinList = response['nextOfKin'] as List<dynamic>? ?? [];
+
+      if (nextOfKinList.isEmpty) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Taarifa za Warithi'),
+            content: const Text('Hakuna taarifa za jamaa wa karibu zilizowekwa.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Sawa'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      // Show modal with next of kin details
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 600),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF13EC5B).withOpacity(0.1),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF13EC5B).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.family_restroom,
+                          color: Color(0xFF13EC5B),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Taarifa za Jamaa wa Karibu',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF111813),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                        color: Colors.grey.shade600,
+                      ),
+                    ],
+                  ),
+                ),
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: nextOfKinList.map((kin) => _buildNextOfKinCard(kin)).toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading if still open
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Kuna tatizo: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildNextOfKinCard(Map<String, dynamic> kin) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF13EC5B).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.person,
+                  color: Color(0xFF13EC5B),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      kin['name'] ?? 'Haijawekwa',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111813),
+                      ),
+                    ),
+                    if (kin['relationship'] != null)
+                      Text(
+                        kin['relationship'],
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (kin['phone'] != null) ...[
+            _buildKinDetailRow(Icons.call, 'Simu', kin['phone']),
+            const SizedBox(height: 8),
+          ],
+          if (kin['email'] != null) ...[
+            _buildKinDetailRow(Icons.email, 'Barua Pepe', kin['email']),
+            const SizedBox(height: 8),
+          ],
+          if (kin['address'] != null) ...[
+            _buildKinDetailRow(Icons.location_on, 'Anwani', kin['address']),
+            const SizedBox(height: 8),
+          ],
+          if (kin['id_number'] != null) ...[
+            _buildKinDetailRow(Icons.badge, 'Namba ya Kitambulisho', kin['id_number']),
+            const SizedBox(height: 8),
+          ],
+          if (kin['date_of_birth'] != null) ...[
+            _buildKinDetailRow(Icons.calendar_today, 'Tarehe ya Kuzaliwa', kin['date_of_birth']),
+            const SizedBox(height: 8),
+          ],
+          if (kin['gender'] != null) ...[
+            _buildKinDetailRow(
+              Icons.person_outline,
+              'Jinsia',
+              kin['gender'] == 'M' ? 'Mwanaume' : 'Mwanamke',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKinDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: Colors.grey.shade600),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade700,
+                fontFamily: 'Roboto', // Add default font family
+              ),
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

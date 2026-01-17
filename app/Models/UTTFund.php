@@ -6,10 +6,13 @@ use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UTTFund extends Model
 {
     use HasFactory, SoftDeletes, LogsActivity;
+
+    protected $table = 'utt_funds';
 
     protected $fillable = [
         'fund_name',
@@ -23,6 +26,9 @@ class UTTFund extends Model
         'created_by',
         'updated_by',
         'notes',
+        'investment_account_id',
+        'income_account_id',
+        'loss_account_id',
     ];
 
     protected $casts = [
@@ -73,6 +79,22 @@ class UTTFund extends Model
     public function reconciliations()
     {
         return $this->hasMany(UTTReconciliation::class, 'utt_fund_id');
+    }
+
+    // Chart Account Relationships
+    public function investmentAccount()
+    {
+        return $this->belongsTo(ChartAccount::class, 'investment_account_id');
+    }
+
+    public function incomeAccount()
+    {
+        return $this->belongsTo(ChartAccount::class, 'income_account_id');
+    }
+
+    public function lossAccount()
+    {
+        return $this->belongsTo(ChartAccount::class, 'loss_account_id');
     }
 
     // Scopes
