@@ -3,7 +3,9 @@ import 'loan_application_page.dart';
 import 'home_page.dart';
 import 'profile_page.dart';
 import 'loan_repayments_page.dart';
+import 'complain_page.dart';
 import 'models/user_session.dart';
+import 'services/api_service.dart';
 
 class LoansPage extends StatefulWidget {
   const LoansPage({super.key});
@@ -15,6 +17,7 @@ class LoansPage extends StatefulWidget {
 class _LoansPageState extends State<LoansPage> {
   int _selectedTab = 0;
   int _selectedNavIndex = 1;
+  bool _isLoading = false;
 
   String _formatCurrency(double amount) {
     return amount.toStringAsFixed(0).replaceAllMapped(
@@ -23,23 +26,80 @@ class _LoansPageState extends State<LoansPage> {
     );
   }
 
+  Future<void> _refreshLoans() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userId = UserSession.instance.userId;
+      if (userId == null) {
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final response = await ApiService.getLoans(userId);
+      if (response['status'] == 200) {
+        final loans = response['loans'] ?? [];
+        UserSession.instance.loans = loans;
+        setState(() {
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error refreshing loans: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   List<dynamic> _getFilteredLoans() {
     final loans = UserSession.instance.loans;
-    if (loans == null) return [];
+    if (loans == null || loans.isEmpty) {
+      print('=== NO LOANS IN SESSION ===');
+      print('Loans is null: ${loans == null}');
+      print('Loans length: ${loans?.length ?? 0}');
+      return [];
+    }
+    
+    print('=== FILTERING LOANS ===');
+    print('Total loans: ${loans.length}');
+    print('Selected tab: $_selectedTab');
+    
+    // Print all loan statuses for debugging
+    for (var i = 0; i < loans.length; i++) {
+      print('Loan $i status: ${loans[i]['status']}');
+    }
     
     if (_selectedTab == 1) {
       // Historia - show completed/rejected loans
-      return loans.where((loan) => 
-        loan['status'] == 'complete' || 
-        loan['status'] == 'rejected'
-      ).toList();
+      // Handle both 'complete' and 'completed' status
+      final filtered = loans.where((loan) {
+        final status = (loan['status'] as String?)?.toLowerCase() ?? '';
+        return status == 'complete' || 
+               status == 'completed' || 
+               status == 'rejected';
+      }).toList();
+      print('Historia loans: ${filtered.length}');
+      return filtered;
     }
     
-    // Orodha Yote - show active loans
-    return loans.where((loan) => 
-      loan['status'] != 'complete' && 
-      loan['status'] != 'rejected'
-    ).toList();
+    // Orodha Yote - show active/ongoing loans (not completed/rejected)
+    final filtered = loans.where((loan) {
+      final status = (loan['status'] as String?)?.toLowerCase() ?? '';
+      return status != 'complete' && 
+             status != 'completed' && 
+             status != 'rejected';
+    }).toList();
+    print('Orodha Yote loans: ${filtered.length}');
+    return filtered;
   }
 
   @override
@@ -105,12 +165,32 @@ class _LoansPageState extends State<LoansPage> {
                               letterSpacing: -0.3,
                             ),
                           ),
-                          IconButton(
-                            onPressed: () {},
-                            icon: const Icon(
-                              Icons.help_outline,
-                              color: Color(0xFF111813),
-                            ),
+                          Row(
+                            children: [
+                              IconButton(
+                                onPressed: _refreshLoans,
+                                icon: _isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF111813)),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.refresh,
+                                        color: Color(0xFF111813),
+                                      ),
+                              ),
+                              IconButton(
+                                onPressed: () {},
+                                icon: const Icon(
+                                  Icons.help_outline,
+                                  color: Color(0xFF111813),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -279,17 +359,20 @@ class _LoansPageState extends State<LoansPage> {
     );
   }
 
+  @override
+  void initState() {
+    super.initState();
+    // Refresh loans when page loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshLoans();
+    });
+  }
+
   Widget _buildLoansList() {
     final loans = _getFilteredLoans();
     
-    print('=== LOANS DATA ===');
-    print('Total loans: ${loans.length}');
-    for (var i = 0; i < loans.length; i++) {
-      print('Loan $i: ${loans[i]}');
-    }
-    print('==================');
-    
     if (loans.isEmpty) {
+      final allLoans = UserSession.instance.loans ?? [];
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -303,7 +386,7 @@ class _LoansPageState extends State<LoansPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Hakuna mikopo',
+                allLoans.isEmpty ? 'Hakuna mikopo' : 'Hakuna mikopo katika kategoria hii',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -312,12 +395,26 @@ class _LoansPageState extends State<LoansPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Bonyeza kifungo cha + kuomba mkopo',
+                allLoans.isEmpty 
+                    ? 'Bonyeza kifungo cha + kuomba mkopo'
+                    : 'Jumla ya mikopo: ${allLoans.length}',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey.shade500,
                 ),
               ),
+              if (allLoans.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _refreshLoans,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Onyesha Yote'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF13EC5B),
+                    foregroundColor: const Color(0xFF052E16),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -349,8 +446,10 @@ class _LoansPageState extends State<LoansPage> {
         Color? buttonTextColor;
         bool isCompleted = false;
         
-        switch (loan['status']) {
+        final loanStatus = (loan['status'] as String?)?.toLowerCase() ?? '';
+        switch (loanStatus) {
           case 'pending':
+          case 'applied':
             status = 'Imeombwa';
             statusColor = Colors.orange;
             buttonText = 'Angalia Hali';
@@ -358,6 +457,8 @@ class _LoansPageState extends State<LoansPage> {
             buttonTextColor = Colors.grey.shade700;
             break;
           case 'approved':
+          case 'checked':
+          case 'authorized':
             status = 'Imeidhinishwa';
             statusColor = Colors.blue;
             buttonText = 'Angalia Hali';
@@ -373,6 +474,7 @@ class _LoansPageState extends State<LoansPage> {
             isCompleted = true;
             break;
           case 'complete':
+          case 'completed':
             status = 'Imeisha';
             statusColor = Colors.grey;
             buttonText = 'Cheti';
@@ -380,6 +482,8 @@ class _LoansPageState extends State<LoansPage> {
             buttonTextColor = const Color(0xFF111813);
             isCompleted = true;
             break;
+          case 'active':
+          case 'disbursed':
           default:
             status = 'Inaendelea';
         }
@@ -1259,7 +1363,7 @@ class _LoansPageState extends State<LoansPage> {
               _buildNavItem(Icons.home, 'Nyumbani', 0),
               _buildNavItem(Icons.credit_score_outlined, 'Mikopo', 1),
               const SizedBox(width: 56), // Space for FAB
-              _buildNavItem(Icons.payments_outlined, 'Michango', 2),
+              _buildNavItem(Icons.feedback_outlined, 'Malalamiko', 2),
               _buildNavItem(Icons.person_outline, 'Wasifu', 3),
             ],
           ),
@@ -1276,6 +1380,12 @@ class _LoansPageState extends State<LoansPage> {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => const HomePage(),
+            ),
+          );
+        } else if (index == 2) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const ComplainPage(),
             ),
           );
         } else if (index == 3) {

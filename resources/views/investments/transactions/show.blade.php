@@ -124,9 +124,153 @@
                         @endif
                     </div>
                 </div>
+
+                <!-- Action Buttons -->
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">Actions</h5>
+                        <div class="d-grid gap-2">
+                            @if($transaction->canBeApproved())
+                                <button type="button" class="btn btn-success approve-btn" data-id="{{ $encodedId }}">
+                                    <i class="bx bx-check me-1"></i> Approve Transaction
+                                </button>
+                            @endif
+
+                            @if($transaction->canBeSettled())
+                                <button type="button" class="btn btn-primary settle-btn" data-id="{{ $encodedId }}">
+                                    <i class="bx bx-check-circle me-1"></i> Settle Transaction
+                                </button>
+                            @endif
+
+                            @if($transaction->canBeCancelled())
+                                <button type="button" class="btn btn-danger cancel-btn" data-id="{{ $encodedId }}">
+                                    <i class="bx bx-x me-1"></i> Cancel Transaction
+                                </button>
+                            @endif
+
+                            @if(!$transaction->canBeApproved() && !$transaction->canBeSettled() && !$transaction->canBeCancelled())
+                                <p class="text-muted text-center mb-0">No actions available for this transaction</p>
+                            @endif
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 @endsection
 
+@push('scripts')
+<script>
+    $(document).ready(function() {
+        // Approve transaction
+        $(document).on('click', '.approve-btn', function() {
+            var transactionId = $(this).data('id');
+            Swal.fire({
+                title: 'Approve Transaction?',
+                text: 'Are you sure you want to approve this transaction?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, Approve',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '{{ route("investments.transactions.approve", ":id") }}'.replace(':id', transactionId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            Swal.fire('Success!', response.message, 'success').then(() => {
+                                location.reload();
+                            });
+                        },
+                        error: function(xhr) {
+                            Swal.fire('Error!', xhr.responseJSON?.error || 'Failed to approve transaction', 'error');
+                        }
+                    });
+                }
+            });
+        });
+
+        // Settle transaction
+        $(document).on('click', '.settle-btn', function() {
+            var transactionId = $(this).data('id');
+            Swal.fire({
+                title: 'Settle Transaction?',
+                text: 'This will update the holdings. Are you sure?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#007bff',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, Settle',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '{{ route("investments.transactions.settle", ":id") }}'.replace(':id', transactionId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            Swal.fire('Success!', response.message, 'success').then(() => {
+                                location.reload();
+                            });
+                        },
+                        error: function(xhr) {
+                            Swal.fire('Error!', xhr.responseJSON?.error || 'Failed to settle transaction', 'error');
+                        }
+                    });
+                }
+            });
+        });
+
+        // Cancel transaction
+        $(document).on('click', '.cancel-btn', function() {
+            var transactionId = $(this).data('id');
+            Swal.fire({
+                title: 'Cancel Transaction?',
+                input: 'textarea',
+                inputLabel: 'Reason for cancellation',
+                inputPlaceholder: 'Enter cancellation reason...',
+                inputAttributes: {
+                    'aria-label': 'Enter cancellation reason'
+                },
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, Cancel',
+                cancelButtonText: 'Cancel',
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'Please provide a cancellation reason';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '{{ route("investments.transactions.cancel", ":id") }}'.replace(':id', transactionId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            rejection_reason: result.value
+                        },
+                        success: function(response) {
+                            Swal.fire('Success!', response.message, 'success').then(() => {
+                                location.reload();
+                            });
+                        },
+                        error: function(xhr) {
+                            Swal.fire('Error!', xhr.responseJSON?.error || 'Failed to cancel transaction', 'error');
+                        }
+                    });
+                }
+            });
+        });
+    });
+</script>
+@endpush

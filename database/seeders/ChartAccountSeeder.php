@@ -304,6 +304,39 @@ class ChartAccountSeeder extends Seeder
                 'cash_flow_category_id' => 1,
                 'equity_category_id' => null,
             ],
+
+            // UTT Investment (Asset) - Other Receivables (Group: 1300)
+            [
+                'account_code' => '1400',
+                'account_name' => 'UTT Investment',
+                'account_class_group_id' => $otherReceivablesGroupId,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+
+            // UTT Investment Income - Other Income (Group: 4100)
+            [
+                'account_code' => '4200',
+                'account_name' => 'UTT Investment Income',
+                'account_class_group_id' => $otherIncomeGroupId,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+
+            // UTT Investment Loss (Expense) - Operating Expenses (Group: 5100)
+            [
+                'account_code' => '5500',
+                'account_name' => 'UTT Investment Loss',
+                'account_class_group_id' => $operatingExpensesGroupId,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
         ];
 
         foreach ($accounts as $account) {

@@ -155,6 +155,7 @@ class LoanProductController extends Controller
             'penalty_id.*' => 'nullable|exists:penalties,id',
             'repayment_order' => 'nullable',
             'allow_push_to_ess' => 'nullable|boolean',
+            'allowed_in_app' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -210,6 +211,7 @@ class LoanProductController extends Controller
         try {
             $data = $request->all();
             $data['allow_push_to_ess'] = $request->has('allow_push_to_ess');
+            $data['allowed_in_app'] = $request->has('allowed_in_app');
             $data['has_cash_collateral'] = $request->has('has_cash_collateral');
             $data['has_approval_levels'] = $request->has('has_approval_levels');
 
@@ -422,6 +424,7 @@ class LoanProductController extends Controller
             'penalty_id.*' => 'nullable|exists:penalties,id',
             'repayment_order' => 'nullable',
             'allow_push_to_ess' => 'nullable|boolean',
+            'allowed_in_app' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -477,6 +480,7 @@ class LoanProductController extends Controller
         try {
             $data = $request->all();
             $data['allow_push_to_ess'] = $request->has('allow_push_to_ess');
+            $data['allowed_in_app'] = $request->has('allowed_in_app');
             $data['has_cash_collateral'] = $request->has('has_cash_collateral');
             $data['has_approval_levels'] = $request->has('has_approval_levels');
 

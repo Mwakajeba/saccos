@@ -3,6 +3,7 @@ import 'loan_application_page.dart';
 import 'home_page.dart';
 import 'loans_page.dart';
 import 'profile_page.dart';
+import 'complain_page.dart';
 import 'services/api_service.dart';
 
 class LoanProductsPage extends StatefulWidget {
@@ -1535,7 +1536,7 @@ class _LoanProductsPageState extends State<LoanProductsPage> {
               _buildNavItem(Icons.home, 'Nyumbani', 0, filled: true),
               _buildNavItem(Icons.credit_score_outlined, 'Mikopo', 1),
               const SizedBox(width: 56), // Space for FAB
-              _buildNavItem(Icons.payments_outlined, 'Michango', 2),
+              _buildNavItem(Icons.feedback_outlined, 'Malalamiko', 2),
               _buildNavItem(Icons.person_outline, 'Wasifu', 3),
             ],
           ),
@@ -1564,6 +1565,13 @@ class _LoanProductsPageState extends State<LoanProductsPage> {
             context,
             MaterialPageRoute(
               builder: (context) => const LoansPage(),
+            ),
+          );
+        } else if (index == 2) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ComplainPage(),
             ),
           );
         } else if (index == 3) {

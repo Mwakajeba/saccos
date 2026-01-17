@@ -10,6 +10,8 @@ class UTTNavPrice extends Model
 {
     use HasFactory, LogsActivity;
 
+    protected $table = 'utt_nav_prices';
+
     protected $fillable = [
         'utt_fund_id',
         'nav_date',

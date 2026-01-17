@@ -30,6 +30,7 @@ use App\Http\Controllers\Accounting\FeeController;
 use App\Http\Controllers\Accounting\PenaltyController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\ComplainController;
 use App\Http\Controllers\LoanProductController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupMemberController;
@@ -81,6 +82,12 @@ Route::post('/api/customer/contributions', [\App\Http\Controllers\Api\CustomerAu
 Route::post('/api/customer/shares', [\App\Http\Controllers\Api\CustomerAuthController::class, 'shares']);
 Route::post('/api/customer/contribution-transactions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'contributionTransactions']);
 Route::post('/api/customer/share-transactions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'shareTransactions']);
+Route::post('/api/customer/loan-application', [\App\Http\Controllers\Api\CustomerAuthController::class, 'submitLoanApplication']);
+Route::get('/api/customer/complain-categories', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getComplainCategories']);
+Route::post('/api/customer/complain', [\App\Http\Controllers\Api\CustomerAuthController::class, 'submitComplain']);
+Route::post('/api/customer/complains', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getCustomerComplains']);
+Route::post('/api/customer/next-of-kin', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getNextOfKin']);
+Route::post('/api/customer/announcements', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getAnnouncements']);
 
 Route::post('/receipts/store', [\App\Http\Controllers\ReceiptController::class, 'store'])->name('receipts.store');
 
@@ -339,6 +346,12 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     
     //Journal References settings
     Route::resource('journal-references', \App\Http\Controllers\JournalReferenceController::class);
+    
+    //Complain Categories settings
+    Route::resource('complain-categories', \App\Http\Controllers\Settings\ComplainCategoryController::class);
+    
+    //Announcements settings
+    Route::resource('announcements', \App\Http\Controllers\Settings\AnnouncementController::class);
 
     Route::get('/', [SettingsController::class, 'index'])->name('index');
 
@@ -927,6 +940,18 @@ Route::middleware(['auth'])->group(function () {
 
 ////////////////////////////////////////////// END CUSTOMER MANAGEMENT ///////////////////////////////////////////
 
+////////////////////////////////////////////// COMPLAINS MANAGEMENT ///////////////////////////////////////////
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('complains', [ComplainController::class, 'index'])->name('complains.index');
+    Route::get('complains/data', [ComplainController::class, 'getComplainsData'])->name('complains.data');
+    Route::get('complains/{encodedId}', [ComplainController::class, 'show'])->name('complains.show');
+    Route::get('complains/{encodedId}/edit', [ComplainController::class, 'edit'])->name('complains.edit');
+    Route::put('complains/{encodedId}', [ComplainController::class, 'update'])->name('complains.update');
+});
+
+////////////////////////////////////////////// END COMPLAINS MANAGEMENT ///////////////////////////////////////////
+
 //////////////////////////////////////////////////// CONTRIBUTIONS //////////////////////////////////////////////////////////////
 
 Route::get('/contributions', [ContributionController::class, 'index'])->name('contributions.index')->middleware('auth');
@@ -978,6 +1003,7 @@ Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(
     Route::get('/funds/{encodedId}', [InvestmentController::class, 'fundsShow'])->name('funds.show');
     Route::get('/funds/{encodedId}/edit', [InvestmentController::class, 'fundsEdit'])->name('funds.edit');
     Route::put('/funds/{encodedId}', [InvestmentController::class, 'fundsUpdate'])->name('funds.update');
+    Route::post('/funds/{encodedId}/toggle-status', [InvestmentController::class, 'fundsToggleStatus'])->name('funds.toggle-status');
     
     // Holdings Management
     Route::get('/holdings', [InvestmentController::class, 'holdingsIndex'])->name('holdings.index');

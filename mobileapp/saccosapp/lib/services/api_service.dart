@@ -6,7 +6,7 @@ class ApiService {
   // For Linux/Windows/Mac desktop use: 127.0.0.1
   // For Android Emulator use: 10.0.2.2
   // For physical device/iOS use: 192.168.1.193 (your computer's IP)
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  static const String baseUrl = 'http://127.0.0.1:8001/api';
   //static const String baseUrl = 'http://10.0.2.2:8000/api'; // For Android Emulator
   //static const String baseUrl = 'http://192.168.1.193:8000/api'; // For physical device
   //static const String baseUrl = 'https://dev.smartsoft.co.tz/api';
@@ -366,6 +366,227 @@ class ApiService {
     } on http.ClientException {
       throw Exception('NETWORK_ERROR');
     } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Submit loan application
+  static Future<Map<String, dynamic>> submitLoanApplication(Map<String, dynamic> applicationData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/loan-application'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(applicationData),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 400 || response.statusCode == 422) {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Tatizo katika kuwasilisha ombi la mkopo');
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Get complain categories
+  static Future<Map<String, dynamic>> getComplainCategories() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/customer/complain-categories'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Submit complain
+  static Future<Map<String, dynamic>> submitComplain(Map<String, dynamic> complainData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/complain'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(complainData),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 400 || response.statusCode == 422) {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Tatizo katika kuwasilisha malalamiko');
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Get customer complains
+  static Future<Map<String, dynamic>> getCustomerComplains(int customerId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/complains'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'customer_id': customerId,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Get Next of Kin
+  static Future<Map<String, dynamic>> getNextOfKin(String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/next-of-kin'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'user_id': userId,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Get Announcements
+  static Future<Map<String, dynamic>> getAnnouncements(String customerId) async {
+    try {
+      print('=== CALLING ANNOUNCEMENTS API ===');
+      print('URL: $baseUrl/customer/announcements');
+      print('Customer ID: $customerId');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/announcements'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'customer_id': customerId,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          print('=== ANNOUNCEMENTS API TIMEOUT ===');
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      print('=== ANNOUNCEMENTS API RESPONSE ===');
+      print('Status Code: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+      print('===================================');
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        return decoded;
+      } else {
+        print('=== ANNOUNCEMENTS API ERROR ===');
+        print('Status: ${response.statusCode}');
+        print('Body: ${response.body}');
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException catch (e) {
+      print('=== ANNOUNCEMENTS API CLIENT EXCEPTION ===');
+      print('Error: $e');
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      print('=== ANNOUNCEMENTS API EXCEPTION ===');
+      print('Error: $e');
       if (e.toString().contains('Exception:')) {
         rethrow;
       }

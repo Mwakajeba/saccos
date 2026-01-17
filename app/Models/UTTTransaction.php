@@ -11,6 +11,8 @@ class UTTTransaction extends Model
 {
     use HasFactory, SoftDeletes, LogsActivity;
 
+    protected $table = 'utt_transactions';
+
     protected $fillable = [
         'utt_fund_id',
         'sacco_utt_holding_id',

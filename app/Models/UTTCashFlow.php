@@ -11,6 +11,8 @@ class UTTCashFlow extends Model
 {
     use HasFactory, SoftDeletes, LogsActivity;
 
+    protected $table = 'utt_cash_flows';
+
     protected $fillable = [
         'utt_fund_id',
         'utt_transaction_id',

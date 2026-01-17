@@ -42,6 +42,7 @@ class LoanProduct extends Model
         'is_active',
         'penalt_deduction_criteria',
         'allow_push_to_ess',
+        'allowed_in_app',
     ];
 
     public function incomeProvisionAccount(): BelongsTo

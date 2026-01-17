@@ -11,6 +11,8 @@ class SaccoUTTHolding extends Model
 {
     use HasFactory, SoftDeletes, LogsActivity;
 
+    protected $table = 'sacco_utt_holdings';
+
     protected $fillable = [
         'utt_fund_id',
         'company_id',

@@ -52,11 +52,30 @@ class _LoanRepaymentsPageState extends State<LoanRepaymentsPage> {
     final double totalRepaid = _parseValue(widget.loanData['total_repaid']);
     final double totalDue = _parseValue(widget.loanData['total_due']);
     final List<dynamic> repayments = widget.loanData['repayments'] ?? [];
+    final nextScheduleData = widget.loanData['next_schedule']; // Only the next upcoming repayment
     final String productName = widget.loanData['product_name'] ?? 'Mkopo';
     final String loanNo = widget.loanData['loan_no'] ?? '';
     final String lastRepaymentDate = widget.loanData['last_repayment_date'] ?? '';
     
     double percentage = totalAmount > 0 ? (totalRepaid / totalAmount * 100) : 0;
+    
+    // Check if next_schedule exists and has data
+    final hasNextSchedule = nextScheduleData != null && 
+                           nextScheduleData is Map && 
+                           nextScheduleData.isNotEmpty &&
+                           nextScheduleData['due_date'] != null;
+    
+    // Get next upcoming repayment from schedule
+    final nextDueDate = hasNextSchedule ? (nextScheduleData['due_date'] ?? '') : '';
+    final nextAmount = hasNextSchedule ? _parseValue(nextScheduleData['amount']) : 0.0;
+    
+    // Debug print
+    print('=== NEXT SCHEDULE DEBUG ===');
+    print('nextScheduleData: $nextScheduleData');
+    print('hasNextSchedule: $hasNextSchedule');
+    print('nextDueDate: $nextDueDate');
+    print('nextAmount: $nextAmount');
+    print('==========================');
     
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8F6),
@@ -74,21 +93,14 @@ class _LoanRepaymentsPageState extends State<LoanRepaymentsPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.05),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.arrow_back_ios_new,
-                            size: 20,
-                            color: Color(0xFF111813),
-                          ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: Color(0xFF111813),
                         ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                       const Text(
                         'Historia ya Mkopo',
@@ -365,6 +377,61 @@ class _LoanRepaymentsPageState extends State<LoanRepaymentsPage> {
                             );
                           }).toList(),
                         const SizedBox(height: 20),
+                        // Next Upcoming Repayment from Schedule (only one)
+                        if (hasNextSchedule) ...[
+                          const Text(
+                            'Marejesho Yanayofuta',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF111813),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFDBE6DF)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _formatDate(nextDueDate),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF111813),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Tarehe ya malipo',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  'TZS ${_formatAmount(nextAmount)}',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF13EC5B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         // Info Alert
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -384,7 +451,9 @@ class _LoanRepaymentsPageState extends State<LoanRepaymentsPage> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Marejesho yanayofuata yanatakiwa kulipwa kabla ya tarehe 12 Septemba kuepuka faini.',
+                                  nextDueDate.isNotEmpty
+                                      ? 'Marejesho yanayofuata yanatakiwa kulipwa kabla ya tarehe ${_formatDate(nextDueDate)} kuepuka faini.'
+                                      : 'Hakuna marejesho yanayofuta kwa sasa.',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.blue.shade800,

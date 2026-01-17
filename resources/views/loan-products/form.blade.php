@@ -214,6 +214,16 @@
                 <label class="form-check-label" for="allow_push_to_ess">Allow Push to ESS</label>
             </div>
         </div>
+        
+        <!-- Allowed in App Application -->
+        <div class="col-md-6 mb-3">
+            <div class="form-check">
+                <input type="checkbox" name="allowed_in_app" id="allowed_in_app" class="form-check-input"
+                    value="1" {{ old('allowed_in_app', $loanProduct->allowed_in_app ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="allowed_in_app">Allowed in App Application</label>
+                <small class="form-text text-muted d-block">Allow customers to apply for loans using this product through the mobile app</small>
+            </div>
+        </div>
 
         <!-- Contributions Configuration -->
         <div class="col-12">
