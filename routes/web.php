@@ -1298,7 +1298,9 @@ Route::middleware(['auth'])->group(function () {
 });
 
 
-Route::post('/logout', function () {
+Route::post('/logout', function (\Illuminate\Http\Request $request) {
     Auth::logout();
-    return redirect('/')->with('success', 'You are successfully logout.');
-})->middleware('auth');
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+    return redirect('/')->with('success', 'You have been successfully logged out.');
+})->middleware('auth')->name('logout');

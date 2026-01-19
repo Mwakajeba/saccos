@@ -75,6 +75,7 @@ class LoanProduct extends Model
         'penalty_ids' => 'array',
         'is_active' => 'boolean',
         'allow_push_to_ess' => 'boolean',
+        'allowed_in_app' => 'boolean',
     ];
 
 

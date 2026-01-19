@@ -539,15 +539,8 @@ $roleName = Auth::user()->roles->first() ? ucfirst(Auth::user()->roles->first()-
                         <div class="dropdown-divider mb-0"></div>
                     </li>
                     <li>
-                        <a class="dropdown-item" href="#"
-                            onclick="event.preventDefault(); 
-                                var form = document.getElementById('logout-form');
-                                var metaToken = document.querySelector('meta[name=\"csrf-token\"]')?.getAttribute('content');
-                                if (metaToken) {
-                                    form.querySelector('input[name=\"_token\"]').value = metaToken;
-                                }
-                                form.submit();">
-                            <i class='bx bx-log-out-circle'></i><span> Logout
+                        <a class="dropdown-item" href="#" id="logout-link">
+                            <i class='bx bx-log-out-circle'></i><span> Logout</span>
                         </a>
                     </li>
                 </ul>
@@ -1256,28 +1249,26 @@ $roleName = Auth::user()->roles->first() ? ucfirst(Auth::user()->roles->first()-
     </style>
 
 </header>
-<form id="logout-form" action="{{ url('/logout') }}" method="POST" style="display: none;">
+<form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
     @csrf
-    <input type="hidden" name="_token" id="logout-csrf-token" value="{{ csrf_token() }}">
 </form>
 <script>
-    // Update logout form CSRF token when meta tag is updated
+    // Handle logout link click
     document.addEventListener('DOMContentLoaded', function() {
-        var observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'attributes' && mutation.attributeName === 'content') {
-                    var metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-                    var logoutToken = document.getElementById('logout-csrf-token');
-                    if (metaToken && logoutToken) {
-                        logoutToken.value = metaToken;
-                    }
-                }
-            });
-        });
+        var logoutLink = document.getElementById('logout-link');
+        var logoutForm = document.getElementById('logout-form');
         
-        var metaTag = document.querySelector('meta[name="csrf-token"]');
-        if (metaTag) {
-            observer.observe(metaTag, { attributes: true });
+        if (logoutLink && logoutForm) {
+            logoutLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('Logout clicked, submitting form...');
+                logoutForm.submit();
+            });
+        } else {
+            console.error('Logout link or form not found', {
+                logoutLink: !!logoutLink,
+                logoutForm: !!logoutForm
+            });
         }
     });
 </script>

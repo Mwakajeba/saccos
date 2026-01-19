@@ -209,8 +209,10 @@
         </div>
         <div class="col-md-6 mb-3">
             <div class="form-check">
+                <input type="hidden" name="allow_push_to_ess" value="0" id="allow_push_to_ess_hidden">
                 <input type="checkbox" name="allow_push_to_ess" id="allow_push_to_ess" class="form-check-input"
-                    value="1" {{ old('allow_push_to_ess', $loanProduct->allow_push_to_ess ?? false) ? 'checked' : '' }}>
+                    value="1" {{ old('allow_push_to_ess', $loanProduct->allow_push_to_ess ?? false) ? 'checked' : '' }}
+                    onchange="document.getElementById('allow_push_to_ess_hidden').disabled = this.checked;">
                 <label class="form-check-label" for="allow_push_to_ess">Allow Push to ESS</label>
             </div>
         </div>
@@ -218,8 +220,10 @@
         <!-- Allowed in App Application -->
         <div class="col-md-6 mb-3">
             <div class="form-check">
+                <input type="hidden" name="allowed_in_app" value="0" id="allowed_in_app_hidden">
                 <input type="checkbox" name="allowed_in_app" id="allowed_in_app" class="form-check-input"
-                    value="1" {{ old('allowed_in_app', $loanProduct->allowed_in_app ?? false) ? 'checked' : '' }}>
+                    value="1" {{ (old('allowed_in_app', isset($loanProduct) ? (bool)$loanProduct->allowed_in_app : false)) ? 'checked' : '' }}
+                    onchange="document.getElementById('allowed_in_app_hidden').disabled = this.checked;">
                 <label class="form-check-label" for="allowed_in_app">Allowed in App Application</label>
                 <small class="form-text text-muted d-block">Allow customers to apply for loans using this product through the mobile app</small>
             </div>
@@ -854,6 +858,38 @@
 @push('scripts')
     <script>
         function handleSubmit(form) {
+            // CRITICAL: Handle checkboxes FIRST before any other logic
+            // Unchecked checkboxes don't send any value, so we must add hidden inputs
+            const checkboxes = ['allowed_in_app', 'allow_push_to_ess', 'has_cash_collateral', 'has_approval_levels', 'has_top_up', 'has_contribution', 'has_share'];
+            checkboxes.forEach(name => {
+                // Remove any existing hidden inputs for this checkbox to avoid duplicates
+                const existingHidden = form.querySelectorAll(`input[name="${name}"][type="hidden"]`);
+                existingHidden.forEach(h => h.remove());
+                
+                const checkbox = form.querySelector(`input[name="${name}"][type="checkbox"]`);
+                if (checkbox) {
+                    if (!checkbox.checked) {
+                        // Add hidden input with value 0 if checkbox is unchecked
+                        const hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = name;
+                        hidden.value = '0';
+                        // Insert before the checkbox to ensure it's processed
+                        checkbox.parentNode.insertBefore(hidden, checkbox);
+                    }
+                    // If checked, the checkbox itself will send value="1"
+                }
+            });
+            
+            // Debug: Log what we're sending
+            const formData = new FormData(form);
+            console.log('Form submission - checkbox values:', {
+                allowed_in_app: formData.get('allowed_in_app') || 'NOT SET',
+                allow_push_to_ess: formData.get('allow_push_to_ess') || 'NOT SET',
+                all_allowed_in_app: formData.getAll('allowed_in_app'),
+                all_allow_push_to_ess: formData.getAll('allow_push_to_ess')
+            });
+
             // Prevent multiple submissions
             if (form.dataset.submitted === "true") return false;
             form.dataset.submitted = "true";

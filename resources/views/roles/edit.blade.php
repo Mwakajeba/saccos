@@ -1,10 +1,6 @@
 <div class="modal-header">
     <h5 class="modal-title">Edit Role: {{ ucfirst($role->name) }}</h5>
 </div>
-<form id="editRoleForm" method="POST" action="{{ route('roles.update', $role) }}">
-    @csrf
-    <input type="hidden" name="_method" value="PUT">
-    <div class="modal-body">
         <div class="mb-3">
             <p class="text-muted">Update the role details and permissions below.</p>
         </div>
@@ -59,12 +55,6 @@
                 @endforeach
             </div>
         </div>
-    </div>
-    <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="submit" class="btn btn-primary">Update Role</button>
-    </div>
-</form>
 
 <script>
 $(document).ready(function() {
