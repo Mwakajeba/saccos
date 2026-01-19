@@ -210,10 +210,11 @@ class LoanProductController extends Controller
         DB::beginTransaction();
         try {
             $data = $request->all();
-            $data['allow_push_to_ess'] = $request->has('allow_push_to_ess');
-            $data['allowed_in_app'] = $request->has('allowed_in_app');
-            $data['has_cash_collateral'] = $request->has('has_cash_collateral');
-            $data['has_approval_levels'] = $request->has('has_approval_levels');
+            // Handle checkboxes - JavaScript ensures unchecked boxes send "0", checked boxes send "1"
+            $data['allow_push_to_ess'] = ($request->input('allow_push_to_ess') == '1') ? true : false;
+            $data['allowed_in_app'] = ($request->input('allowed_in_app') == '1') ? true : false;
+            $data['has_cash_collateral'] = ($request->input('has_cash_collateral') == '1') ? true : false;
+            $data['has_approval_levels'] = ($request->input('has_approval_levels') == '1') ? true : false;
 
             // Handle fees_ids - map from fees_id array to fees_ids
             if ($request->has('fees_id')) {
@@ -389,6 +390,12 @@ class LoanProductController extends Controller
 
         $loanProduct = LoanProduct::findOrFail($decoded[0]);
 
+        // Log initial state
+        \Log::info('LoanProduct Update - Starting', [
+            'product_id' => $loanProduct->id,
+            'current_allowed_in_app' => $loanProduct->allowed_in_app,
+        ]);
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:loan_products,name,' . $loanProduct->id,
             'product_type' => 'required|string|max:100',
@@ -478,11 +485,41 @@ class LoanProductController extends Controller
 
         DB::beginTransaction();
         try {
+            // Log all request data for debugging
+            \Log::info('LoanProduct Update - Request Data', [
+                'product_id' => $loanProduct->id,
+                'all_request' => $request->all(),
+                'allowed_in_app_raw' => $request->input('allowed_in_app'),
+                'allowed_in_app_type' => gettype($request->input('allowed_in_app')),
+                'allow_push_to_ess_raw' => $request->input('allow_push_to_ess'),
+                'has_cash_collateral_raw' => $request->input('has_cash_collateral'),
+                'has_approval_levels_raw' => $request->input('has_approval_levels'),
+            ]);
+
             $data = $request->all();
-            $data['allow_push_to_ess'] = $request->has('allow_push_to_ess');
-            $data['allowed_in_app'] = $request->has('allowed_in_app');
-            $data['has_cash_collateral'] = $request->has('has_cash_collateral');
-            $data['has_approval_levels'] = $request->has('has_approval_levels');
+            
+            // Handle checkboxes - JavaScript ensures unchecked boxes send "0", checked boxes send "1"
+            $allowPushToEssValue = $request->input('allow_push_to_ess');
+            $data['allow_push_to_ess'] = ($allowPushToEssValue == '1') ? true : false;
+            
+            $allowedInAppValue = $request->input('allowed_in_app');
+            $data['allowed_in_app'] = ($allowedInAppValue == '1') ? true : false;
+            
+            $hasCashCollateralValue = $request->input('has_cash_collateral');
+            $data['has_cash_collateral'] = ($hasCashCollateralValue == '1') ? true : false;
+            
+            $hasApprovalLevelsValue = $request->input('has_approval_levels');
+            $data['has_approval_levels'] = ($hasApprovalLevelsValue == '1') ? true : false;
+
+            // Log processed checkbox values
+            \Log::info('LoanProduct Update - Processed Checkbox Values', [
+                'product_id' => $loanProduct->id,
+                'allowed_in_app_input' => $allowedInAppValue,
+                'allowed_in_app_processed' => $data['allowed_in_app'],
+                'allow_push_to_ess_processed' => $data['allow_push_to_ess'],
+                'has_cash_collateral_processed' => $data['has_cash_collateral'],
+                'has_approval_levels_processed' => $data['has_approval_levels'],
+            ]);
 
             // Handle fees_ids - map from fees_id array to fees_ids
             if ($request->has('fees_id')) {
@@ -515,7 +552,30 @@ class LoanProductController extends Controller
                 ? implode(',', $approvalLevels)
                 : null;
 
+            // Log data before update
+            \Log::info('LoanProduct Update - Data Before Update', [
+                'product_id' => $loanProduct->id,
+                'allowed_in_app_in_data' => $data['allowed_in_app'] ?? 'NOT SET',
+                'allowed_in_app_type' => gettype($data['allowed_in_app'] ?? null),
+                'allow_push_to_ess_in_data' => $data['allow_push_to_ess'] ?? 'NOT SET',
+                'current_allowed_in_app' => $loanProduct->allowed_in_app,
+                'current_allowed_in_app_type' => gettype($loanProduct->allowed_in_app),
+                'data_keys' => array_keys($data),
+                'fillable_fields' => $loanProduct->getFillable(),
+            ]);
+
             $loanProduct->update($data);
+
+            // Log after update - refresh to get latest values
+            $loanProduct->refresh();
+            \Log::info('LoanProduct Update - After Update', [
+                'product_id' => $loanProduct->id,
+                'allowed_in_app_after' => $loanProduct->allowed_in_app,
+                'allowed_in_app_after_type' => gettype($loanProduct->allowed_in_app),
+                'allow_push_to_ess_after' => $loanProduct->allow_push_to_ess,
+                'has_cash_collateral_after' => $loanProduct->has_cash_collateral,
+                'has_approval_levels_after' => $loanProduct->has_approval_levels,
+            ]);
 
             DB::commit();
 
@@ -524,6 +584,14 @@ class LoanProductController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
+            \Log::error('LoanProduct Update - Exception', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all(),
+                'product_id' => $loanProduct->id ?? 'N/A',
+            ]);
             return redirect()->back()
                 ->with('error', 'Error updating loan product: ' . $e->getMessage())
                 ->withInput();

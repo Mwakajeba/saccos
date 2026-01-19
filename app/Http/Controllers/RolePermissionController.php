@@ -7,9 +7,8 @@ use App\Models\Role;
 use App\Models\Permission;
 use App\Models\User;
 use App\Models\Menu;
+use App\Models\PermissionGroup;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
-use Spatie\Permission\PermissionRegistrar;
 
 class RolePermissionController extends Controller
 {
@@ -36,10 +35,18 @@ class RolePermissionController extends Controller
 
     public function store(Request $request)
     {
+        // Log incoming request data for debugging
+        \Log::info('Role creation request received', [
+            'request_data' => $request->all(),
+            'has_permissions' => $request->has('permissions'),
+            'permissions_data' => $request->input('permissions'),
+            'permissions_count' => $request->has('permissions') ? count($request->input('permissions', [])) : 0
+        ]);
+
         $request->validate([
             'name' => 'required|string|max:255|unique:roles,name',
             'description' => 'nullable|string|max:500',
-            'permissions' => 'array',
+            'permissions' => 'nullable|array',
             'permissions.*' => 'exists:permissions,id',
         ]);
 
@@ -51,17 +58,44 @@ class RolePermissionController extends Controller
                 'description' => $request->description,
             ]);
 
-            if ($request->has('permissions')) {
+            \Log::info('Role created', ['role_id' => $role->id, 'role_name' => $role->name]);
+
+            if ($request->has('permissions') && is_array($request->permissions) && count($request->permissions) > 0) {
                 $permissions = Permission::whereIn('id', $request->permissions)->get();
+                \Log::info('Permissions found to assign', [
+                    'permission_ids' => $request->permissions,
+                    'permissions_found' => $permissions->count(),
+                    'permission_names' => $permissions->pluck('name')->toArray()
+                ]);
                 $role->syncPermissions($permissions);
+                \Log::info('Permissions synced to role', ['role_id' => $role->id]);
+            } else {
+                \Log::warning('No permissions provided or invalid format', [
+                    'has_permissions' => $request->has('permissions'),
+                    'is_array' => $request->has('permissions') ? is_array($request->permissions) : false,
+                    'count' => $request->has('permissions') ? count($request->input('permissions', [])) : 0
+                ]);
             }
+
+            // Verify permissions were saved
+            $savedPermissions = $role->permissions()->get();
+            \Log::info('Permissions after save', [
+                'role_id' => $role->id,
+                'saved_permissions_count' => $savedPermissions->count(),
+                'saved_permission_names' => $savedPermissions->pluck('name')->toArray()
+            ]);
 
             DB::commit();
 
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'Role created successfully!'
+                    'message' => 'Role created successfully!',
+                    'debug' => [
+                        'role_id' => $role->id,
+                        'permissions_received' => count($request->input('permissions', [])),
+                        'permissions_saved' => $savedPermissions->count()
+                    ]
                 ]);
             }
 
@@ -70,6 +104,12 @@ class RolePermissionController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Failed to create role', [
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             if ($request->wantsJson()) {
                 return response()->json([
@@ -101,6 +141,17 @@ class RolePermissionController extends Controller
 
     public function update(Request $request, Role $role)
     {
+        // Log incoming request data for debugging
+        \Log::info('Role update request received', [
+            'role_id' => $role->id,
+            'role_name' => $role->name,
+            'request_data' => $request->all(),
+            'has_permissions' => $request->has('permissions'),
+            'permissions_data' => $request->input('permissions'),
+            'permissions_count' => $request->has('permissions') ? count($request->input('permissions', [])) : 0,
+            'current_permissions_count' => $role->permissions->count()
+        ]);
+
         $request->validate([
             'name' => 'required|string|max:255|unique:roles,name,' . $role->id,
             'description' => 'nullable|string|max:500',
@@ -117,15 +168,37 @@ class RolePermissionController extends Controller
                 'description' => $request->description,
             ]);
 
+            \Log::info('Role basic info updated', ['role_id' => $role->id]);
+
             // Handle permissions - if no permissions are selected, sync with empty collection
-            if ($request->has('permissions') && is_array($request->permissions)) {
+            if ($request->has('permissions') && is_array($request->permissions) && count($request->permissions) > 0) {
                 $permissions = Permission::whereIn('id', $request->permissions)->get();
+                \Log::info('Permissions to sync', [
+                    'permission_ids' => $request->permissions,
+                    'permissions_found' => $permissions->count(),
+                    'permission_names' => $permissions->pluck('name')->toArray()
+                ]);
             } else {
                 $permissions = collect();
+                \Log::warning('No permissions to sync or clearing all permissions', [
+                    'has_permissions' => $request->has('permissions'),
+                    'is_array' => $request->has('permissions') ? is_array($request->permissions) : false,
+                    'count' => $request->has('permissions') ? count($request->input('permissions', [])) : 0
+                ]);
             }
 
             // Sync permissions (this will add new ones and remove old ones)
             $role->syncPermissions($permissions);
+            \Log::info('Permissions synced', ['role_id' => $role->id]);
+
+            // Verify permissions were saved
+            $role->load('permissions');
+            $savedPermissions = $role->permissions;
+            \Log::info('Permissions after update', [
+                'role_id' => $role->id,
+                'saved_permissions_count' => $savedPermissions->count(),
+                'saved_permission_names' => $savedPermissions->pluck('name')->toArray()
+            ]);
 
             DB::commit();
 
@@ -135,8 +208,9 @@ class RolePermissionController extends Controller
                     'message' => 'Role updated successfully!',
                     'debug' => [
                         'role_id' => $role->id,
-                        'permissions_count' => $permissions->count(),
-                        'permissions' => $permissions->pluck('name')->toArray()
+                        'permissions_received' => count($request->input('permissions', [])),
+                        'permissions_saved' => $savedPermissions->count(),
+                        'permission_names' => $savedPermissions->pluck('name')->toArray()
                     ]
                 ]);
             }
@@ -146,6 +220,13 @@ class RolePermissionController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Failed to update role', [
+                'role_id' => $role->id,
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             if ($request->wantsJson()) {
                 return response()->json([
@@ -258,56 +339,21 @@ class RolePermissionController extends Controller
 
     public function createPermission(Request $request)
     {
-        // Normalize inputs to avoid false duplicates
-        $normalizedName = strtolower(trim((string) $request->input('name')));
-        $guardName = $request->input('guard_name', 'web');
-        $request->merge([
-            'name' => $normalizedName,
-            'guard_name' => $guardName,
-        ]);
-
-        // If already exists, return idempotent success to avoid blocking UX with 422
-        $existing = Permission::where('name', $normalizedName)
-            ->where('guard_name', $guardName)
-            ->first();
-        if ($existing) {
-            // Clear cached permissions so UI reflects latest list
-            app(PermissionRegistrar::class)->forgetCachedPermissions();
-
-            if ($request->wantsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Permission already exists.',
-                    'permission' => $existing,
-                ]);
-            }
-            return back()->with('success', 'Permission already exists.');
-        }
-
         $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('permissions', 'name')->where(function ($query) use ($guardName) {
-                    return $query->where('guard_name', $guardName);
-                }),
-            ],
+            'name' => 'required|string|max:255|unique:permissions,name',
             'permission_group_id' => 'nullable|exists:permission_groups,id',
             'description' => 'nullable|string|max:500',
-            'guard_name' => 'required|string|max:255',
         ]);
 
         try {
             $permission = Permission::create([
-                'name' => $normalizedName,
-                'guard_name' => $guardName,
+                'name' => strtolower($request->name),
                 'description' => $request->description,
                 'permission_group_id' => $request->permission_group_id,
             ]);
 
-            // Clear cached permissions so UI fetches the new one
-            app(PermissionRegistrar::class)->forgetCachedPermissions();
+            // Store group information in a custom field or use the name pattern
+            // For now, we'll use the group to organize permissions in the UI
 
             if ($request->wantsJson()) {
                 return response()->json([
@@ -350,21 +396,28 @@ class RolePermissionController extends Controller
     {
         // Get all permissions with their permission groups
         $permissions = Permission::with('permissionGroup')->get();
-        
-        $groups = [
-            'dashboard' => [],
-            'settings' => [],
-            'customers' => [],
-            'loan_management' => [],
-            'cash_collaterals' => [],
-            'accounting' => [],
-            'reports' => [],
-            'chat' => [],
-        ];
+
+        // $groups = [
+        //     'dashboard' => [],
+        //     'settings' => [],
+        //     'customers' => [],
+        //     'inventory' => [],
+        //     'purchases' => [],
+        //     'sales' => [],
+        //     'cash_deposits' => [],
+        //     'accounting' => [],
+        //     'reports' => [],
+        //     // 'chat' => [],
+        // ];
+        $groups = PermissionGroup::all()->keyBy('name')->mapWithKeys(function ($group) {
+            return [$group->name => []];
+        })->toArray();
+
+        info('Permission groups fetched from database', ['groups' => array_keys($groups)]);
 
         foreach ($permissions as $permission) {
             $groupName = $permission->permissionGroup ? $permission->permissionGroup->name : null;
-            
+
             if ($groupName && isset($groups[$groupName])) {
                 $groups[$groupName][] = $permission;
             } else {
@@ -380,14 +433,34 @@ class RolePermissionController extends Controller
     /**
      * Group permissions by category based on their stored group or names (fallback method)
      */
+    /**
+     * Check if user has menu access via role (backward compatibility)
+     */
+    private function hasMenuAccessViaRoleCheck($user, $menu, $checkChildren = true)
+    {
+        $userRoleIds = $user->roles->pluck('id')->toArray();
+        if (empty($userRoleIds)) {
+            return false;
+        }
+        
+        $userMenuIds = DB::table('menu_role')
+            ->whereIn('role_id', $userRoleIds)
+            ->pluck('menu_id')
+            ->unique();
+        
+        return $userMenuIds->contains($menu->id);
+    }
+
     private function groupPermissions($permissions)
     {
         $groups = [
             'dashboard' => [],
             'settings' => [],
             'customers' => [],
-            'loan_management' => [],
-            'cash_collaterals' => [],
+            'inventory' => [],
+            'purchases' => [],
+            'sales' => [],
+            'cash_deposits' => [],
             'accounting' => [],
             'reports' => [],
             'chat' => [],
@@ -403,52 +476,26 @@ class RolePermissionController extends Controller
             // Fallback to name-based grouping for existing permissions without group
             $name = strtolower($permission->name);
 
-            if (str_contains($name, 'dashboard') || str_contains($name, 'statistic') || str_contains($name, 'kpi') || str_contains($name, 'analytics')) {
+            if (str_contains($name, 'dashboard') || str_contains($name, 'home')) {
                 $groups['dashboard'][] = $permission;
-            } elseif (
-                str_contains($name, 'setting') || str_contains($name, 'backup') ||
-                str_contains($name, 'configuration') || str_contains($name, 'role') ||
-                str_contains($name, 'permission') || str_contains($name, 'user') ||
-                str_contains($name, 'staff') || str_contains($name, 'company') ||
-                str_contains($name, 'branch')
-            ) {
+            } elseif (str_contains($name, 'setting') || str_contains($name, 'config')) {
                 $groups['settings'][] = $permission;
             } elseif (str_contains($name, 'customer')) {
                 $groups['customers'][] = $permission;
-            } elseif (
-                str_contains($name, 'loan') || str_contains($name, 'group') ||
-                str_contains($name, 'guarantor') || str_contains($name, 'disburse')
-            ) {
-                $groups['loan_management'][] = $permission;
-            } elseif (str_contains($name, 'cash collateral')) {
-                $groups['cash_collaterals'][] = $permission;
-            } elseif (
-                str_contains($name, 'accounting') || str_contains($name, 'journal') ||
-                str_contains($name, 'bank') || str_contains($name, 'ledger') ||
-                str_contains($name, 'financial') || str_contains($name, 'chart account') ||
-                str_contains($name, 'supplier') || str_contains($name, 'voucher') ||
-                str_contains($name, 'reconciliation') || str_contains($name, 'bill purchase') ||
-                str_contains($name, 'budget') || str_contains($name, 'fee') ||
-                str_contains($name, 'penalty') || str_contains($name, 'transaction')
-            ) {
+            } elseif (str_contains($name, 'inventory') || str_contains($name, 'item') || str_contains($name, 'category') || str_contains($name, 'movement')) {
+                $groups['inventory'][] = $permission;
+            } elseif (str_contains($name, 'purchase') || str_contains($name, 'supplier') || str_contains($name, 'bill')) {
+                $groups['purchases'][] = $permission;
+            } elseif (str_contains($name, 'sale') || str_contains($name, 'invoice') || str_contains($name, 'proforma') || str_contains($name, 'delivery') || str_contains($name, 'credit_note')) {
+                $groups['sales'][] = $permission;
+            } elseif (str_contains($name, 'cash_deposit') || str_contains($name, 'deposit')) {
+                $groups['cash_deposits'][] = $permission;
+            } elseif (str_contains($name, 'account') || str_contains($name, 'journal') || str_contains($name, 'payment') || str_contains($name, 'receipt') || str_contains($name, 'bank') || str_contains($name, 'fee') || str_contains($name, 'penalty') || str_contains($name, 'budget')) {
                 $groups['accounting'][] = $permission;
-            } elseif (
-                str_contains($name, 'report') || str_contains($name, 'audit') ||
-                str_contains($name, 'compliance') || str_contains($name, 'portfolio') ||
-                str_contains($name, 'delinquency') || str_contains($name, 'statement')
-            ) {
+            } elseif (str_contains($name, 'report')) {
                 $groups['reports'][] = $permission;
             } elseif (str_contains($name, 'chat') || str_contains($name, 'message')) {
                 $groups['chat'][] = $permission;
-            } elseif (str_contains($name, 'ai') || str_contains($name, 'assistant')) {
-                $groups['settings'][] = $permission; // AI assistant is part of settings
-            } elseif (str_contains($name, 'collection') || str_contains($name, 'payment') || str_contains($name, 'receipt')) {
-                $groups['accounting'][] = $permission; // Collections are part of accounting
-            } elseif (str_contains($name, 'menu')) {
-                $groups['settings'][] = $permission; // Menu management is part of settings
-            } else {
-                // Default to settings for any unmatched permissions
-                $groups['settings'][] = $permission;
             }
         }
 
@@ -480,9 +527,87 @@ class RolePermissionController extends Controller
             }
         ]);
 
-        $allMenus = Menu::with('children')
-            ->whereNull('parent_id')
-            ->get();
+        $user = auth()->user();
+        
+        // If user is super-admin, show all menus
+        // Otherwise, show only menus that the user has permission to access
+        if ($user->hasRole('super-admin')) {
+            $allMenus = Menu::with('children')
+                ->whereNull('parent_id')
+                ->get();
+        } else {
+            // Get menu IDs assigned to user's roles via menu_role
+            // User can only assign menus that are assigned to their own role(s)
+            $userRoleIds = $user->roles->pluck('id')->toArray();
+            $userMenuIds = DB::table('menu_role')
+                ->whereIn('role_id', $userRoleIds)
+                ->pluck('menu_id')
+                ->unique();
+
+            // Exclude menus that are already assigned to the target role
+            // We only want to show menus that this role DOESN'T have yet
+            $roleMenuIds = $role->menus->pluck('id')->toArray();
+            $availableMenuIds = $userMenuIds->diff($roleMenuIds);
+            
+            if ($availableMenuIds->isEmpty()) {
+                // No new menus the user can assign to this role
+                $allMenus = collect();
+            } else {
+                // Get ONLY parent menus that are directly available to assign
+                $directParentMenuIds = Menu::whereIn('id', $availableMenuIds)
+                        ->whereNull('parent_id')
+                        ->pluck('id');
+                    
+                // Get child menus that are directly available to assign
+                $assignedChildMenuIds = Menu::whereIn('id', $availableMenuIds)
+                        ->whereNotNull('parent_id')
+                        ->pluck('id');
+                    
+                    // Get parent IDs of assigned children (to show parent structure for assigned children)
+                    $parentIdsFromAssignedChildren = Menu::whereIn('id', $assignedChildMenuIds)
+                        ->whereNotNull('parent_id')
+                        ->pluck('parent_id')
+                        ->unique();
+                    
+                    // Combine: directly assigned parent menus + parents of assigned children
+                    $allParentMenuIds = $directParentMenuIds->merge($parentIdsFromAssignedChildren)->unique();
+                    
+                    // Load parent menus with ONLY the children that are directly assigned
+                    $allMenus = Menu::with(['children' => function($query) use ($availableMenuIds) {
+                            // Only load children that are directly available to assign
+                            $query->whereIn('id', $availableMenuIds);
+                        }])
+                        ->whereIn('id', $allParentMenuIds)
+                        ->whereNull('parent_id')
+                        ->get();
+                    
+                    // Final filter: Only show parent menus if:
+                    // 1. Parent menu is directly available to assign, OR
+                    // 2. At least one child menu is directly available to assign
+                    // And only show children that are directly available to assign
+                    $allMenus = $allMenus->filter(function($menu) use ($availableMenuIds) {
+                        // Filter children to only show directly available menus
+                        $assignedChildren = $menu->children->filter(function($child) use ($availableMenuIds) {
+                            return $availableMenuIds->contains($child->id);
+                        });
+                        
+                        // If parent menu is directly available, show it with available children
+                        if ($availableMenuIds->contains($menu->id)) {
+                            $menu->setRelation('children', $assignedChildren);
+                            return true;
+                        }
+                        
+                        // If parent is not directly available, only show if at least one child is available
+                        if ($assignedChildren->count() > 0) {
+                            $menu->setRelation('children', $assignedChildren);
+                            return true;
+                        }
+                        
+                        // No assigned children and parent not assigned, hide this menu
+                        return false;
+                    })->values();
+                }
+            }
 
         return view('roles.manage-menus', compact('role', 'allMenus'));
     }
@@ -497,13 +622,42 @@ class RolePermissionController extends Controller
         try {
             DB::beginTransaction();
 
-            $role->menus()->sync($request->menu_ids);
+            $user = auth()->user()->load(['roles.menus']);
+            
+            // If user is not super-admin, validate they can only assign menus they have access to
+            if (!$user->hasRole('super-admin')) {
+                // Get all menu IDs that the current user's roles have access to
+                $userMenuIds = collect();
+                foreach ($user->roles as $userRole) {
+                    $userMenuIds = $userMenuIds->merge($userRole->menus->pluck('id'));
+                }
+                $userMenuIds = $userMenuIds->unique();
+                
+                // Check if all requested menu IDs are in the user's accessible menus
+                $invalidMenuIds = array_diff($request->menu_ids, $userMenuIds->toArray());
+                
+                if (!empty($invalidMenuIds)) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You can only assign menus that you have access to.'
+                    ], 403);
+                }
+            }
+
+            // Use syncWithoutDetaching to add menus without removing existing ones
+            $role->menus()->syncWithoutDetaching($request->menu_ids);
 
             DB::commit();
 
+            $addedCount = count($request->menu_ids);
+            $message = $addedCount === 1 
+                ? 'Menu assigned successfully!'
+                : "{$addedCount} menus assigned successfully!";
+
             return response()->json([
                 'success' => true,
-                'message' => 'Menus assigned successfully!'
+                'message' => $message
             ]);
 
         } catch (\Exception $e) {
@@ -534,6 +688,77 @@ class RolePermissionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to remove menu: ' . $e->getMessage()
+            ], 422);
+        }
+    }
+
+    public function removeAllSubmenus(Request $request, Role $role)
+    {
+        $request->validate([
+            'parent_menu_id' => 'required|exists:menus,id'
+        ]);
+
+        try {
+            $parentMenu = \App\Models\Menu::findOrFail($request->parent_menu_id);
+            $childMenuIds = $parentMenu->children->pluck('id')->toArray();
+            
+            if (empty($childMenuIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No submenus found for this menu.'
+                ], 422);
+            }
+
+            // Get only the child menus that are actually assigned to this role
+            $assignedChildIds = $role->menus()->whereIn('menus.id', $childMenuIds)->pluck('menus.id')->toArray();
+            
+            if (empty($assignedChildIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No submenus are currently assigned to this role.'
+                ], 422);
+            }
+
+            $role->menus()->detach($assignedChildIds);
+
+            return response()->json([
+                'success' => true,
+                'message' => count($assignedChildIds) . ' submenu(s) removed successfully!'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to remove submenus: ' . $e->getMessage()
+            ], 422);
+        }
+    }
+
+    /**
+     * Remove all menus (parents and children) from the given role.
+     */
+    public function removeAllMenus(Role $role)
+    {
+        try {
+            $assignedCount = $role->menus()->count();
+
+            if ($assignedCount === 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This role has no menus assigned.'
+                ], 422);
+            }
+
+            $role->menus()->detach();
+
+            return response()->json([
+                'success' => true,
+                'message' => "All {$assignedCount} menus have been removed from this role."
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to remove all menus: ' . $e->getMessage()
             ], 422);
         }
     }

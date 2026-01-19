@@ -295,7 +295,10 @@
                 <div class="modal-body" id="editRoleModalBody">
                     <!-- Content will be loaded dynamically -->
                 </div>
-                
+                <div class="modal-footer" id="editRoleModalFooter">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Role</button>
+                </div>
             </form>
         </div>
     </div>
@@ -424,6 +427,28 @@
                 }
 
                 const formData = new FormData(form);
+                
+                // Manually collect checked permissions to ensure they're included
+                const checkedPermissions = [];
+                const allPermissionCheckboxes = form.querySelectorAll('input[name="permissions[]"]:checked');
+                console.log('Found', allPermissionCheckboxes.length, 'checked permission checkboxes');
+                
+                allPermissionCheckboxes.forEach(checkbox => {
+                    const permissionId = checkbox.value;
+                    if (permissionId) {
+                        formData.append('permissions[]', permissionId);
+                        checkedPermissions.push(permissionId);
+                    }
+                });
+                
+                // Debug: Log permissions being sent
+                console.log('Creating role with permissions:', {
+                    name: formData.get('name'),
+                    description: formData.get('description'),
+                    permissions: checkedPermissions,
+                    permissionsCount: checkedPermissions.length,
+                    formDataPermissions: formData.getAll('permissions[]')
+                });
 
                 $.ajax({
                     url: form.action,
@@ -518,8 +543,6 @@
                     console.log('Permission checkboxes found:', $('.permission-checkbox-create').length);
                 }, 100);
             });
-
-
         });
 
         function initializeCreateRoleCheckAll() {
@@ -531,9 +554,6 @@
             
             // Select all permissions for a group in create form using event delegation
             $(document).on('change', '.select-all-permissions-create', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
                 const group = $(this).data('group');
                 const isChecked = $(this).is(':checked');
                 
@@ -548,9 +568,6 @@
 
             // Update select all checkbox when individual permissions change in create form using event delegation
             $(document).on('change', '.permission-checkbox-create', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
                 const group = $(this).data('group');
                 updateSelectAllState(group);
             });
@@ -610,15 +627,31 @@
 
         function editRole(roleId) {
             $.get(`/roles/${roleId}/edit`, function (data) {
+                // Load the content into the modal body (content only, no form tags)
                 $('#editRoleModalBody').html(data);
-                $('#editRoleForm').attr('action', `/roles/${roleId}`);
+                
+                // Show the footer
+                $('#editRoleModalFooter').show();
+                
+                // Set the form action
+                const form = document.getElementById('editRoleForm');
+                if (form) {
+                    form.setAttribute('action', `/roles/${roleId}`);
+                }
+                
                 $('#editRoleModal').modal('show');
+                
+                // Wait a bit for DOM to be ready, then attach form handler
+                setTimeout(function() {
+                    const form = document.getElementById('editRoleForm');
+                    if (!form) {
+                        console.error('Form not found after loading edit content');
+                        return;
+                    }
 
-                // Add form submission handler with double submit prevention
-                $('#editRoleForm').off('submit').on('submit', function (e) {
-                    e.preventDefault();
-
-                    const form = this;
+                    // Add form submission handler with double submit prevention
+                    $(form).off('submit').on('submit', function (e) {
+                        e.preventDefault();
                     const submitBtn = form.querySelector('button[type="submit"]');
                     const originalText = submitBtn ? submitBtn.innerHTML : '';
 
@@ -657,12 +690,34 @@
                         formData.append('guard_name', guardField.value);
                     }
 
-                    // Add permissions - include all checkboxes (checked and unchecked)
-                    const allPermissionCheckboxes = form.querySelectorAll('input[name="permissions[]"]');
-                    allPermissionCheckboxes.forEach(checkbox => {
-                        if (checkbox.checked) {
-                            formData.append('permissions[]', checkbox.value);
+                    // Add permissions - use jQuery to find checkboxes (more reliable for dynamically loaded content)
+                    const $checkboxes = $('#editRoleModal input[name="permissions[]"]');
+                    const $checked = $('#editRoleModal input[name="permissions[]"]:checked');
+                    const checkedPermissions = [];
+                    
+                    console.log('Total permission checkboxes found:', $checkboxes.length);
+                    console.log('Checked permission checkboxes found:', $checked.length);
+                    console.log('Form element:', form);
+                    
+                    $checked.each(function() {
+                        const permissionId = $(this).val();
+                        console.log('Adding permission:', permissionId);
+                        if (permissionId) {
+                            formData.append('permissions[]', permissionId);
+                            checkedPermissions.push(permissionId);
                         }
+                    });
+
+                    // Debug: Log permissions being sent
+                    console.log('Updating role with permissions:', {
+                        roleId: form.action.split('/').pop(),
+                        name: nameField ? nameField.value : 'N/A',
+                        description: descField ? descField.value : 'N/A',
+                        totalCheckboxes: $checkboxes.length,
+                        checkedCheckboxes: $checked.length,
+                        checkedPermissions: checkedPermissions,
+                        checkedCount: checkedPermissions.length,
+                        formDataPermissions: Array.from(formData.getAll('permissions[]'))
                     });
 
                     $.ajax({
@@ -725,6 +780,7 @@
 
                     return false;
                 });
+                }, 100); // Small delay to ensure DOM is ready
             });
         }
 
@@ -752,17 +808,31 @@
                     $.ajax({
                         url: `/roles/${roleId}`,
                         type: 'DELETE',
+                        dataType: 'json',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
                         data: {
                             _token: '{{ csrf_token() }}'
                         },
                         success: function (response) {
-                            Swal.fire('{{ __("app.deleted") }}!', '{{ __("app.role_deleted_successfully") }}', 'success')
-                                .then(() => {
-                                    location.reload();
-                                });
+                            const ok = (response && (response.success === true));
+                            if (ok) {
+                                Swal.fire('{{ __("app.deleted") }}!', '{{ __("app.role_deleted_successfully") }}', 'success')
+                                    .then(() => {
+                                        location.reload();
+                                    });
+                            } else {
+                                Swal.fire('{{ __("app.error") }}!', (response && response.message) ? response.message : '{{ __("app.failed_to_delete_role") }}', 'error');
+                            }
                         },
                         error: function (xhr) {
-                            Swal.fire('{{ __("app.error") }}!', '{{ __("app.failed_to_delete_role") }}', 'error');
+                            let errorMessage = '{{ __("app.failed_to_delete_role") }}';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errorMessage = xhr.responseJSON.message;
+                            }
+                            Swal.fire('{{ __("app.error") }}!', errorMessage, 'error');
                         }
                     });
                 }
