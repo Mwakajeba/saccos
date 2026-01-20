@@ -135,12 +135,17 @@ class _LoanApplicationPageState extends State<LoanApplicationPage> {
     // Check if product allows app applications
     if (_selectedProduct != null) {
       final allowedInAppValue = _selectedProduct!['allowed_in_app'];
-      // Handle both int (0/1) and bool values from API
-      final allowedInApp = allowedInAppValue is bool 
-          ? allowedInAppValue 
-          : (allowedInAppValue is int 
-              ? allowedInAppValue == 1 
-              : (allowedInAppValue == true || allowedInAppValue == '1'));
+      // Handle bool/int/string variants from API (true/false, 1/0, "1"/"0", "true"/"false")
+      final allowedInApp = () {
+        if (allowedInAppValue is bool) return allowedInAppValue;
+        if (allowedInAppValue is int) return allowedInAppValue == 1;
+        if (allowedInAppValue is double) return allowedInAppValue == 1.0;
+        if (allowedInAppValue is String) {
+          final v = allowedInAppValue.trim().toLowerCase();
+          return v == '1' || v == 'true' || v == 'yes';
+        }
+        return false;
+      }();
       
       if (!allowedInApp) {
         _showError('Dirisha la maombi kwenye hii bidhaa limefungwa');

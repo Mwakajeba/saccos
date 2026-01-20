@@ -13,13 +13,164 @@ use App\Models\ShareDeposit;
 use App\Models\GlTransaction;
 use App\Models\Journal;
 use App\Models\CashCollateral;
+use App\Models\Filetype;
+use App\Models\LoanFile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class CustomerAuthController extends Controller
 {
+    /**
+     * Get all filetypes (used for KYC / loan documents).
+     */
+    public function filetypes(Request $request)
+    {
+        try {
+            $filetypes = Filetype::orderBy('name', 'asc')->get()->map(function ($ft) {
+                return [
+                    'id' => $ft->id,
+                    'name' => $ft->name,
+                ];
+            });
+
+            return response()->json([
+                'status' => 200,
+                'filetypes' => $filetypes,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * List loan documents for a given loan (customer can only access own loans).
+     */
+    public function loanDocuments(Request $request)
+    {
+        try {
+            $request->validate([
+                'customer_id' => 'required|integer|exists:customers,id',
+                'loan_id' => 'required|integer|exists:loans,id',
+            ]);
+
+            $customerId = (int) $request->input('customer_id');
+            $loanId = (int) $request->input('loan_id');
+
+            $loan = Loan::where('id', $loanId)->where('customer_id', $customerId)->first();
+            if (!$loan) {
+                return response()->json([
+                    'status' => 403,
+                    'message' => 'Unauthorized loan access',
+                ], 403);
+            }
+
+            $disk = config('upload.storage_disk', 'public');
+            $docs = LoanFile::with('fileType')
+                ->where('loan_id', $loanId)
+                ->latest()
+                ->get()
+                ->map(function ($lf) use ($disk) {
+                    return [
+                        'id' => $lf->id,
+                        'file_type_id' => $lf->file_type_id,
+                        'file_type' => $lf->fileType?->name,
+                        'file_path' => $lf->file_path,
+                        'url' => $lf->file_path ? Storage::disk($disk)->url($lf->file_path) : null,
+                        'created_at' => optional($lf->created_at)->toDateTimeString(),
+                    ];
+                });
+
+            return response()->json([
+                'status' => 200,
+                'documents' => $docs,
+                'total' => $docs->count(),
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Validation error',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload a single loan document (KYC) for a given loan.
+     * Note: mobile uses image_picker so we accept images + pdf/doc/docx.
+     */
+    public function uploadLoanDocument(Request $request)
+    {
+        try {
+            $maxFileSize = (int) config('upload.max_file_size', 5120); // KB
+            $allowedMimes = (array) config('upload.allowed_mimes', ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']);
+
+            $request->validate([
+                'customer_id' => 'required|integer|exists:customers,id',
+                'loan_id' => 'required|integer|exists:loans,id',
+                'file_type_id' => 'required|integer|exists:filetypes,id',
+                'file' => 'required|file|max:' . $maxFileSize . '|mimes:' . implode(',', $allowedMimes),
+            ]);
+
+            $customerId = (int) $request->input('customer_id');
+            $loanId = (int) $request->input('loan_id');
+
+            $loan = Loan::where('id', $loanId)->where('customer_id', $customerId)->first();
+            if (!$loan) {
+                return response()->json([
+                    'status' => 403,
+                    'message' => 'Unauthorized loan access',
+                ], 403);
+            }
+
+            $disk = config('upload.storage_disk', 'public');
+            $path = config('upload.storage_path', 'loan_documents');
+
+            $uploaded = $request->file('file');
+            $filePath = $uploaded->store($path, $disk);
+
+            $loanFile = LoanFile::create([
+                'loan_id' => $loanId,
+                'file_type_id' => (int) $request->input('file_type_id'),
+                'file_path' => $filePath,
+            ]);
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Document uploaded successfully',
+                'document' => [
+                    'id' => $loanFile->id,
+                    'file_type_id' => $loanFile->file_type_id,
+                    'file_path' => $loanFile->file_path,
+                    'url' => Storage::disk($disk)->url($loanFile->file_path),
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Validation error',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'status' => 500,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     /**
      * Customer login API
      */
