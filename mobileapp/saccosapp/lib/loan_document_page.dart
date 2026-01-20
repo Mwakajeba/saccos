@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'models/user_session.dart';
 import 'services/api_service.dart';
+import 'document_preview_page.dart';
 
 class LoanDocumentPage extends StatefulWidget {
   final Map<String, dynamic> loanData;
@@ -42,17 +42,25 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
   }
 
   int _loanId() {
-    final id = widget.loanData['id'];
+    // The API returns 'loanid' not 'id' - check both for compatibility
+    final id = widget.loanData['loanid'] ?? widget.loanData['id'];
     if (id == null) {
-      throw Exception('Loan ID is missing');
+      print('ERROR: Loan ID not found in loanData');
+      print('Available keys: ${widget.loanData.keys.toList()}');
+      print('Loan data: ${widget.loanData}');
+      throw Exception('Loan ID is missing. Available keys: ${widget.loanData.keys.toList()}');
     }
     if (id is num) {
       return id.toInt();
     }
     if (id is String) {
-      return int.tryParse(id) ?? 0;
+      final parsed = int.tryParse(id);
+      if (parsed == null) {
+        throw Exception('Loan ID is not a valid number: $id');
+      }
+      return parsed;
     }
-    return 0;
+    throw Exception('Loan ID has invalid type: ${id.runtimeType}');
   }
 
   String _loanTitle() => (widget.loanData['product_name'] ?? widget.loanData['product'] ?? 'Mkopo').toString();
@@ -198,11 +206,32 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
 
     try {
       final customerId = UserSession.instance.userId;
-      if (customerId == null) throw Exception('Tafadhali ingia tena');
+      if (customerId == null) {
+        throw Exception('Tafadhali ingia tena');
+      }
+
+      // Get and validate loan ID
+      int loanId;
+      try {
+        loanId = _loanId();
+        print('=== UPLOAD DEBUG ===');
+        print('Customer ID: $customerId');
+        print('Loan ID: $loanId');
+        print('File Type ID: $_selectedFiletypeId');
+        print('File: ${_selectedFile?.path}');
+        print('Loan Data: ${widget.loanData}');
+        
+        if (loanId <= 0) {
+          throw Exception('Loan ID is missing or invalid. Loan Data: ${widget.loanData}');
+        }
+      } catch (e) {
+        print('ERROR getting loan ID: $e');
+        throw Exception('Loan ID is missing. Please try again or contact support.');
+      }
 
       final resp = await ApiService.uploadLoanDocument(
         customerId: customerId,
-        loanId: _loanId(),
+        loanId: loanId,
         fileTypeId: _selectedFiletypeId!,
         file: _selectedFile!,
       );
@@ -237,13 +266,6 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
     }
   }
 
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      _showSnack('Imeshindwa kufungua nyaraka');
-    }
-  }
 
   void _showSnack(String msg) {
     if (!mounted) return;
@@ -415,6 +437,10 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
                       ..._documents.map((doc) {
                         final typeName = (doc['file_type'] ?? 'Nyaraka').toString();
                         final url = (doc['url'] ?? '').toString();
+                        final fileName = url.split('/').last.isNotEmpty 
+                            ? url.split('/').last 
+                            : '${typeName}_${doc['id'] ?? ''}';
+                        
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(12),
@@ -453,7 +479,20 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
                               ),
                               const SizedBox(width: 12),
                               OutlinedButton(
-                                onPressed: url.isEmpty ? null : () => _openUrl(url),
+                                onPressed: url.isEmpty
+                                    ? null
+                                    : () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => DocumentPreviewPage(
+                                              url: url,
+                                              fileName: fileName,
+                                              fileType: typeName,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                 child: const Text('Ona'),
                               ),
                             ],
