@@ -63,6 +63,16 @@
         </div>
 
         <div class="col-md-6 mb-3">
+            <label class="form-label">Default Interest Rate (%)</label>
+            <input type="number" name="default_interest_rate" step="0.1" min="0" max="100"
+                class="form-control @error('default_interest_rate') is-invalid @enderror"
+                value="{{ old('default_interest_rate', $loanProduct->default_interest_rate ?? ($loanProduct->minimum_interest_rate ?? '')) }}"
+                placeholder="e.g. 10.0">
+            <small class="text-muted">Used as the suggested interest rate in the mobile loan application (1 decimal place).</small>
+            @error('default_interest_rate') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        </div>
+
+        <div class="col-md-6 mb-3">
             <label class="form-label">Maximum Interest Rate (%) <span class="text-danger">*</span></label>
             <input type="number" name="maximum_interest_rate" step="0.000000000000001" min="0" max="100"
                 class="form-control @error('maximum_interest_rate') is-invalid @enderror"

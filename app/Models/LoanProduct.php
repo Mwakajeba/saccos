@@ -14,6 +14,7 @@ class LoanProduct extends Model
         'product_type',
         'minimum_interest_rate',
         'maximum_interest_rate',
+        'default_interest_rate',
         'interest_cycle',
         'interest_method',
         'minimum_principal',
@@ -62,6 +63,7 @@ class LoanProduct extends Model
     protected $casts = [
         'minimum_interest_rate' => 'decimal:15',
         'maximum_interest_rate' => 'decimal:15',
+        'default_interest_rate' => 'decimal:1',
         'minimum_principal' => 'decimal:15',
         'maximum_principal' => 'decimal:15',
         'top_up_type_value' => 'decimal:15',

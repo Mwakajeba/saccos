@@ -125,6 +125,7 @@ class LoanProductController extends Controller
             'product_type' => 'required|string|max:100',
             'minimum_interest_rate' => 'required|numeric|min:0|max:100',
             'maximum_interest_rate' => 'required|numeric|min:0|max:100|gte:minimum_interest_rate',
+            'default_interest_rate' => 'nullable|numeric|min:0|max:100',
             'interest_cycle' => 'required|string|max:50',
             'interest_method' => 'required|string|max:50',
             'minimum_principal' => 'required|numeric|min:0',
@@ -228,6 +229,11 @@ class LoanProductController extends Controller
             $data['has_top_up'] = in_array('1', Arr::wrap($hasTopUpValue), true);
             $data['has_contribution'] = in_array('1', Arr::wrap($hasContributionValue), true);
             $data['has_share'] = in_array('1', Arr::wrap($hasShareValue), true);
+
+            // Default interest rate: if not provided, fall back to minimum_interest_rate
+            if (!array_key_exists('default_interest_rate', $data) || $data['default_interest_rate'] === null || $data['default_interest_rate'] === '') {
+                $data['default_interest_rate'] = $data['minimum_interest_rate'] ?? null;
+            }
 
             // Handle fees_ids - map from fees_id array to fees_ids
             if ($request->has('fees_id')) {
@@ -414,6 +420,7 @@ class LoanProductController extends Controller
             'product_type' => 'required|string|max:100',
             'minimum_interest_rate' => 'required|numeric|min:0|max:100',
             'maximum_interest_rate' => 'required|numeric|min:0|max:100|gte:minimum_interest_rate',
+            'default_interest_rate' => 'nullable|numeric|min:0|max:100',
             'interest_cycle' => 'required|string|max:50',
             'interest_method' => 'required|string|max:50',
             'minimum_principal' => 'required|numeric|min:0',
@@ -527,6 +534,11 @@ class LoanProductController extends Controller
             $data['has_top_up'] = in_array('1', Arr::wrap($hasTopUpValue), true);
             $data['has_contribution'] = in_array('1', Arr::wrap($hasContributionValue), true);
             $data['has_share'] = in_array('1', Arr::wrap($hasShareValue), true);
+
+            // Default interest rate: if not provided, fall back to minimum_interest_rate
+            if (!array_key_exists('default_interest_rate', $data) || $data['default_interest_rate'] === null || $data['default_interest_rate'] === '') {
+                $data['default_interest_rate'] = $data['minimum_interest_rate'] ?? null;
+            }
 
             // Log processed checkbox values
             \Log::info('LoanProduct Update - Processed Checkbox Values', [
