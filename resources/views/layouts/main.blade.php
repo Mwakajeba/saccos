@@ -18,7 +18,8 @@
 
     <!-- Select2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css"
+        rel="stylesheet" />
 
     <!-- DataTables Bootstrap CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
@@ -47,7 +48,7 @@
 
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-    
+
     @stack('styles')
 </head>
 
@@ -89,9 +90,9 @@
     <!-- Global Error Handlers -->
     <script>
         // Fix Highcharts error #13 globally
-        window.addEventListener('load', function() {
+        window.addEventListener('load', function () {
             if (typeof Highcharts !== 'undefined') {
-                Highcharts.error = function(code, stop) {
+                Highcharts.error = function (code, stop) {
                     if (code === 13) {
                         console.warn('Highcharts error #13: Container not found, skipping chart rendering');
                         return;
@@ -100,14 +101,14 @@
                 };
             }
         });
-        
+
         // Fix DataTables column count issues globally
-        $(document).ready(function() {
+        $(document).ready(function () {
             // Override DataTables initialization to handle column count errors
             $.fn.dataTable.ext.errMode = 'throw';
-            
+
             // Add error handler for DataTables
-            $(document).on('error.dt', function(e, settings, techNote, message) {
+            $(document).on('error.dt', function (e, settings, techNote, message) {
                 if (message && message.includes('column count')) {
                     console.warn('DataTables column count warning suppressed for table:', settings.nTable.id);
                     return false; // Prevent the error from being thrown
@@ -121,7 +122,7 @@
     <!-- DataTables Core -->
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    
+
     <!-- DataTables Responsive -->
     <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
     <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
@@ -153,88 +154,88 @@
                     url: window.location.href,
                     type: 'GET',
                     cache: false,
-                    success: function(data) {
+                    success: function (data) {
                         // Extract new CSRF token from response
                         var parser = new DOMParser();
                         var doc = parser.parseFromString(data, 'text/html');
                         var newToken = doc.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-                        
+
                         if (newToken) {
                             // Update meta tag
                             $('meta[name="csrf-token"]').attr('content', newToken);
-                            
+
                             // Update all hidden CSRF input fields
                             $('input[name="_token"]').val(newToken);
-                            
+
                             // Update logout form
                             $('#logout-form input[name="_token"]').val(newToken);
-                            
+
                             console.log('CSRF token refreshed');
                         }
                     },
-                    error: function() {
+                    error: function () {
                         console.warn('Failed to refresh CSRF token');
                     }
                 });
             }
-            
+
             // Session keep-alive: ping server every 4 minutes to prevent session expiration
-            setInterval(function() {
+            setInterval(function () {
                 $.ajax({
                     url: window.location.href,
                     type: 'GET',
                     cache: false,
-                    success: function(data) {
+                    success: function (data) {
                         // Extract new CSRF token from response
                         var parser = new DOMParser();
                         var doc = parser.parseFromString(data, 'text/html');
                         var newToken = doc.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-                        
+
                         if (newToken) {
                             // Update meta tag
                             $('meta[name="csrf-token"]').attr('content', newToken);
-                            
+
                             // Update all hidden CSRF input fields
                             $('input[name="_token"]').val(newToken);
-                            
+
                             // Update logout form
                             $('#logout-form input[name="_token"]').val(newToken);
                         }
                     },
-                    error: function() {
+                    error: function () {
                         // Silent fail - don't disturb user
                     }
                 });
             }, 4 * 60 * 1000); // Every 4 minutes
-            
+
             // Refresh CSRF token every 5 minutes (300000 ms) to prevent expiration
             setInterval(refreshCsrfToken, 5 * 60 * 1000);
-            
+
             // Also refresh token when user becomes active (clicks, types, etc.)
             var activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
             var lastActivity = Date.now();
             var activityTimeout;
-            
-            activityEvents.forEach(function(event) {
-                $(document).on(event, function() {
+
+            activityEvents.forEach(function (event) {
+                $(document).on(event, function () {
                     lastActivity = Date.now();
                     clearTimeout(activityTimeout);
-                    
+
                     // Refresh token if user was inactive for more than 2 minutes
-                    activityTimeout = setTimeout(function() {
+                    activityTimeout = setTimeout(function () {
                         if (Date.now() - lastActivity > 2 * 60 * 1000) {
                             refreshCsrfToken();
                         }
                     }, 2 * 60 * 1000);
                 });
             });
-            
+
             // Refresh token before form submissions
-            $(document).on('submit', 'form', function(e) {
+            $(document).on('submit', 'form', function (e) {
                 var form = $(this);
                 var csrfInput = form.find('input[name="_token"]');
                 var metaToken = $('meta[name="csrf-token"]').attr('content');
-                
+
                 // Update form CSRF token with latest from meta tag
                 if (csrfInput.length && metaToken) {
                     csrfInput.val(metaToken);
@@ -243,10 +244,10 @@
                     form.prepend('<input type="hidden" name="_token" value="' + metaToken + '">');
                 }
             });
-            
+
             // Setup AJAX to include CSRF token in all requests
             $.ajaxSetup({
-                beforeSend: function(xhr, settings) {
+                beforeSend: function (xhr, settings) {
                     if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
                         var token = $('meta[name="csrf-token"]').attr('content');
                         if (token) {
@@ -255,16 +256,16 @@
                     }
                 }
             });
-            
+
             // Global AJAX error handler for 419 CSRF token mismatch
-            $(document).ajaxError(function(event, xhr, settings, thrownError) {
+            $(document).ajaxError(function (event, xhr, settings, thrownError) {
                 if (xhr.status === 419) {
                     // Try to refresh token first
                     refreshCsrfToken();
-                    
+
                     // If it's a form submission, retry after a short delay
                     if (settings.type === 'POST' || settings.type === 'PUT' || settings.type === 'PATCH' || settings.type === 'DELETE') {
-                        setTimeout(function() {
+                        setTimeout(function () {
                             Swal.fire({
                                 icon: 'warning',
                                 title: 'Session Expired',
@@ -273,7 +274,7 @@
                                 allowOutsideClick: false,
                                 timer: 2000,
                                 timerProgressBar: true
-                            }).then(function() {
+                            }).then(function () {
                                 window.location.reload();
                             });
                         }, 500);
@@ -287,7 +288,7 @@
                             allowOutsideClick: false,
                             timer: 2000,
                             timerProgressBar: true
-                        }).then(function() {
+                        }).then(function () {
                             window.location.reload();
                         });
                     }
@@ -398,49 +399,49 @@
 
     <!-- Global Form Submit Handler with Loading Spinner -->
     <script>
-        (function() {
+        (function () {
             'use strict';
-            
+
             /**
              * Initialize form submit button loading states
              * Prevents double-clicking and shows loading spinner
              */
             function initFormSubmitHandlers() {
                 // Find all forms with submit buttons
-                document.querySelectorAll('form').forEach(function(form) {
+                document.querySelectorAll('form').forEach(function (form) {
                     // Skip if form already has custom submit handler (has data attribute)
                     if (form.dataset.hasCustomHandler === 'true' || form.hasAttribute('data-has-custom-handler')) {
                         return;
                     }
-                    
+
                     // Find submit buttons in this form
                     const submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
-                    
+
                     if (submitButtons.length === 0) {
                         return;
                     }
-                    
+
                     // Track if form is submitting
                     let isSubmitting = false;
-                    
+
                     // Store original button states
                     const buttonStates = new Map();
-                    submitButtons.forEach(function(btn) {
+                    submitButtons.forEach(function (btn) {
                         buttonStates.set(btn, {
                             originalHTML: btn.innerHTML || btn.value,
                             originalDisabled: btn.disabled,
                             originalText: btn.textContent || btn.value
                         });
                     });
-                    
-                    form.addEventListener('submit', function(e) {
+
+                    form.addEventListener('submit', function (e) {
                         // Prevent multiple submissions
                         if (isSubmitting) {
                             e.preventDefault();
                             e.stopPropagation();
                             return false;
                         }
-                        
+
                         // Ensure CSRF token is present before submission
                         const csrfToken = document.querySelector('meta[name="csrf-token"]');
                         if (csrfToken) {
@@ -456,19 +457,19 @@
                                 form.appendChild(hiddenInput);
                             }
                         }
-                        
+
                         // Mark as submitting
                         isSubmitting = true;
-                        
+
                         // Disable all submit buttons and show loading state
-                        submitButtons.forEach(function(btn) {
+                        submitButtons.forEach(function (btn) {
                             const state = buttonStates.get(btn);
-                            
+
                             // Disable button
                             btn.disabled = true;
                             btn.setAttribute('aria-disabled', 'true');
                             btn.classList.add('opacity-75', 'cursor-not-allowed');
-                            
+
                             // Add loading spinner
                             if (btn.tagName === 'BUTTON') {
                                 const originalHTML = state.originalHTML;
@@ -496,22 +497,22 @@
                                 btn.value = 'Processing...';
                             }
                         });
-                        
+
                         // Use readonly for text inputs and textareas instead of disabled
                         // This prevents changes but still allows values to be submitted
                         const textInputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="number"], input[type="date"], input[type="tel"], textarea');
-                        textInputs.forEach(function(input) {
+                        textInputs.forEach(function (input) {
                             if (!input.readOnly) {
                                 input.setAttribute('data-original-readonly', input.readOnly);
                                 input.readOnly = true;
                                 input.classList.add('bg-light');
                             }
                         });
-                        
+
                         // For selects, use a visual indicator but don't disable (disabled selects don't submit values)
                         // Instead, add a visual overlay or pointer-events-none
                         const selects = form.querySelectorAll('select');
-                        selects.forEach(function(select) {
+                        selects.forEach(function (select) {
                             if (!select.disabled) {
                                 select.setAttribute('data-original-disabled', select.disabled);
                                 select.style.pointerEvents = 'none';
@@ -519,69 +520,79 @@
                                 select.classList.add('bg-light');
                             }
                         });
-                        
-                        // Disable checkboxes and radio buttons (these can be disabled as they have boolean values)
-                        const checkboxesRadios = form.querySelectorAll('input[type="checkbox"], input[type="radio"]');
-                        checkboxesRadios.forEach(function(input) {
+
+                        // Disable checkboxes (but NOT radio buttons - disabled radios don't submit their values!)
+                        const checkboxes = form.querySelectorAll('input[type="checkbox"]');
+                        checkboxes.forEach(function (input) {
                             if (!input.disabled) {
                                 input.setAttribute('data-original-disabled', input.disabled);
                                 input.disabled = true;
                             }
                         });
-                        
+
+                        // For radio buttons, use visual indicator instead of disabling (disabled radios don't submit values)
+                        const radios = form.querySelectorAll('input[type="radio"]');
+                        radios.forEach(function (input) {
+                            if (!input.disabled) {
+                                input.setAttribute('data-original-disabled', input.disabled);
+                                input.style.pointerEvents = 'none';
+                                input.style.opacity = '0.6';
+                            }
+                        });
+
                         // For regular form submissions, reset on page reload/redirect
                         // For AJAX forms, they should call form._resetSubmitState() on error
-                        
+
                         // Timeout protection - re-enable after 30 seconds if still submitting
-                        const timeoutId = setTimeout(function() {
+                        const timeoutId = setTimeout(function () {
                             if (isSubmitting) {
                                 console.warn('Form submission timeout - re-enabling form');
                                 resetFormState();
                             }
                         }, 30000);
-                        
+
                         // Store timeout ID for cleanup
                         form._submitTimeoutId = timeoutId;
                     });
-                    
+
                     // Reset form state function
                     function resetFormState() {
                         if (!isSubmitting) return; // Already reset
-                        
+
                         isSubmitting = false;
-                        
+
                         // Clear timeout if exists
                         if (form._submitTimeoutId) {
                             clearTimeout(form._submitTimeoutId);
                             form._submitTimeoutId = null;
                         }
-                        
-                        submitButtons.forEach(function(btn) {
+
+                        submitButtons.forEach(function (btn) {
                             const state = buttonStates.get(btn);
-                            
+
                             btn.disabled = state.originalDisabled;
                             btn.removeAttribute('aria-disabled');
                             btn.classList.remove('opacity-75', 'cursor-not-allowed');
-                            
+
                             if (btn.tagName === 'BUTTON') {
                                 btn.innerHTML = state.originalHTML;
                             } else if (btn.tagName === 'INPUT') {
                                 btn.value = state.originalText;
                             }
                         });
-                        
+
                         // Re-enable form inputs
                         // Restore readonly state for text inputs
-                        form.querySelectorAll('input[type="text"], input[type="email"], input[type="number"], input[type="date"], input[type="tel"], textarea').forEach(function(input) {
+                        form.querySelectorAll('input[type="text"], input[type="email"], input[type="number"], input[type="date"], input[type="tel"], textarea').forEach(function (input) {
                             if (input.hasAttribute('data-original-readonly')) {
                                 input.readOnly = input.getAttribute('data-original-readonly') === 'true';
                                 input.removeAttribute('data-original-readonly');
                                 input.classList.remove('bg-light');
                             }
                         });
-                        
+
                         // Restore select state
-                        form.querySelectorAll('select').forEach(function(select) {
+                        form.querySelectorAll('select').forEach(function (select) {
                             if (select.hasAttribute('data-original-disabled')) {
                                 select.style.pointerEvents = '';
                                 select.style.opacity = '';
@@ -589,39 +600,48 @@
                                 select.removeAttribute('data-original-disabled');
                             }
                         });
-                        
-                        // Restore disabled state for checkboxes and radio buttons
-                        form.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(function(input) {
+
+                        // Restore disabled state for checkboxes
+                        form.querySelectorAll('input[type="checkbox"]').forEach(function (input) {
                             if (input.hasAttribute('data-original-disabled')) {
                                 input.disabled = input.getAttribute('data-original-disabled') === 'true';
                                 input.removeAttribute('data-original-disabled');
                             }
                         });
+
+                        // Restore visual state for radio buttons
+                        form.querySelectorAll('input[type="radio"]').forEach(function (input) {
+                            if (input.hasAttribute('data-original-disabled')) {
+                                input.style.pointerEvents = '';
+                                input.style.opacity = '';
+                                input.removeAttribute('data-original-disabled');
+                            }
+                        });
                     }
-                    
+
                     // Store reset function for external access if needed
                     form._resetSubmitState = resetFormState;
                 });
             }
-            
+
             // Initialize on DOM ready
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', initFormSubmitHandlers);
             } else {
                 initFormSubmitHandlers();
             }
-            
+
             // Re-initialize for dynamically added forms
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    mutation.addedNodes.forEach(function(node) {
+            const observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    mutation.addedNodes.forEach(function (node) {
                         if (node.nodeType === 1 && (node.tagName === 'FORM' || node.querySelector('form'))) {
                             initFormSubmitHandlers();
                         }
                     });
                 });
             });
-            
+
             observer.observe(document.body, {
                 childList: true,
                 subtree: true
