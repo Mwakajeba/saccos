@@ -33,11 +33,11 @@ class PenaltyController extends Controller
     public function create()
     {
         // Only chart accounts with class name Revenue for penalty income
-        $penaltyIncomeAccounts = ChartAccount::whereHas('accountClassGroup.accountClass', function($q) {
+        $penaltyIncomeAccounts = ChartAccount::whereHas('accountClassGroup.accountClass', function ($q) {
             $q->where('name', 'Revenue');
         })->orderBy('account_name')->get();
         // Only chart accounts with class name Assets for penalty receivables
-        $penaltyReceivablesAccounts = ChartAccount::whereHas('accountClassGroup.accountClass', function($q) {
+        $penaltyReceivablesAccounts = ChartAccount::whereHas('accountClassGroup.accountClass', function ($q) {
             $q->where('name', 'Assets');
         })->orderBy('account_name')->get();
         $statusOptions = Penalty::getStatusOptions();
@@ -110,11 +110,11 @@ class PenaltyController extends Controller
 
         $penalty = Penalty::findOrFail($decoded[0]);
         // Only chart accounts with class name Revenue for penalty income
-        $penaltyIncomeAccounts = ChartAccount::whereHas('accountClassGroup.accountClass', function($q) {
+        $penaltyIncomeAccounts = ChartAccount::whereHas('accountClassGroup.accountClass', function ($q) {
             $q->where('name', 'Revenue');
         })->orderBy('account_name')->get();
         // Only chart accounts with class name Assets for penalty receivables
-        $penaltyReceivablesAccounts = ChartAccount::whereHas('accountClassGroup.accountClass', function($q) {
+        $penaltyReceivablesAccounts = ChartAccount::whereHas('accountClassGroup.accountClass', function ($q) {
             $q->where('name', 'Assets');
         })->orderBy('account_name')->get();
         $statusOptions = Penalty::getStatusOptions();
