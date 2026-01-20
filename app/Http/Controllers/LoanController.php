@@ -1369,8 +1369,6 @@ class LoanController extends Controller
             DB::transaction(function () use ($validated, $product, $userId, $branchId) {
                 // Step 1: Create Loan with initial status
 
-
-
                 // Step 1: Create Loan
                 $loan = Loan::create([
                     'product_id' => $validated['product_id'],
