@@ -63,6 +63,64 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
     throw Exception('Loan ID has invalid type: ${id.runtimeType}');
   }
 
+  Future<void> _loadDocuments() async {
+    try {
+      final customerId = UserSession.instance.userId;
+      if (customerId == null) {
+        print('ERROR: Customer ID is null');
+        return;
+      }
+
+      final loanId = _loanId();
+      print('=== LOADING DOCUMENTS ===');
+      print('Customer ID: $customerId');
+      print('Loan ID: $loanId');
+
+      if (loanId > 0) {
+        final docsResp = await ApiService.getLoanDocuments(
+          customerId: customerId,
+          loanId: loanId,
+        );
+        
+        print('=== DOCUMENTS API RESPONSE ===');
+        print('Status: ${docsResp['status']}');
+        print('Documents: ${docsResp['documents']}');
+        print('Total: ${docsResp['total']}');
+        
+        final status = docsResp['status'];
+        if (status == 200 || status == '200') {
+          final documentsList = docsResp['documents'];
+          if (documentsList != null && documentsList is List) {
+            setState(() {
+              _documents = documentsList;
+            });
+            print('Loaded ${_documents.length} documents');
+          } else {
+            print('WARNING: documents is not a list or is null. Type: ${documentsList.runtimeType}');
+            setState(() {
+              _documents = [];
+            });
+          }
+        } else {
+          print('WARNING: Documents API returned status $status');
+          setState(() {
+            _documents = [];
+          });
+        }
+      } else {
+        print('WARNING: Invalid loan ID: $loanId');
+        setState(() {
+          _documents = [];
+        });
+      }
+    } catch (e) {
+      print('ERROR loading documents: $e');
+      setState(() {
+        _documents = [];
+      });
+    }
+  }
+
   String _loanTitle() => (widget.loanData['product_name'] ?? widget.loanData['product'] ?? 'Mkopo').toString();
 
   Future<void> _loadAll() async {
@@ -103,28 +161,7 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
       }
 
       // Load documents
-      try {
-        final loanId = _loanId();
-        if (loanId > 0) {
-          final docsResp = await ApiService.getLoanDocuments(
-            customerId: customerId,
-            loanId: loanId,
-          );
-          final status = docsResp['status'];
-          if (status == 200 || status == '200') {
-            _documents = docsResp['documents'] ?? [];
-          } else {
-            print('WARNING: Documents API returned status $status');
-            _documents = [];
-          }
-        } else {
-          print('WARNING: Invalid loan ID: $loanId');
-          _documents = [];
-        }
-      } catch (e) {
-        print('ERROR loading documents: $e');
-        _documents = [];
-      }
+      await _loadDocuments();
 
       // default select first filetype
       if (_filetypes.isNotEmpty && _selectedFiletypeId == null) {
@@ -236,12 +273,20 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
         file: _selectedFile!,
       );
 
-      if (resp['status'] == 200) {
-        _showSnack('Nyaraka imepakiwa');
+      print('=== UPLOAD RESPONSE ===');
+      print('Response: $resp');
+      print('Status: ${resp['status']}');
+
+      final status = resp['status'];
+      if (status == 200 || status == '200') {
+        _showSnack('Nyaraka imepakiwa kwa mafanikio');
         setState(() {
           _selectedFile = null;
         });
-        await _loadAll();
+        
+        // Reload documents list
+        print('=== RELOADING DOCUMENTS AFTER UPLOAD ===');
+        await _loadDocuments();
       } else {
         throw Exception(resp['message'] ?? 'Imeshindwa kupakia nyaraka');
       }
