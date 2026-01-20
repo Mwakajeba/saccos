@@ -325,6 +325,7 @@ class CustomerAuthController extends Controller
                         'max_amount' => $product->maximum_principal,
                         'min_interest_rate' => $product->minimum_interest_rate,
                         'max_interest_rate' => $product->maximum_interest_rate,
+                        'default_interest_rate' => $product->default_interest_rate ?? $product->minimum_interest_rate,
                         'interest_cycle' => $product->interest_cycle,
                         'interest_method' => $product->interest_method,
                         'min_period' => $product->minimum_period,

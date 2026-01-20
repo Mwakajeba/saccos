@@ -65,9 +65,11 @@ class _LoanApplicationPageState extends State<LoanApplicationPage> {
           print('max_period: ${_selectedProduct!['max_period']}');
           print('========================');
           
-          // Set default interest rate to minimum
+          // Set default interest rate (1 decimal place)
+          final defaultInterest = _selectedProduct!['default_interest_rate'];
           final minInterest = _selectedProduct!['min_interest_rate'];
-          _interestController.text = (minInterest != null) ? minInterest.toString() : '0';
+          final interestToUse = defaultInterest ?? minInterest ?? 0;
+          _interestController.text = _toDouble(interestToUse).toStringAsFixed(1);
           
           // Set default amount to minimum
           final minAmount = _selectedProduct!['min_amount'];
