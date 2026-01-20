@@ -34,13 +34,19 @@ class CustomerAuthController extends Controller
                     'id' => $ft->id,
                     'name' => $ft->name,
                 ];
-            });
+            })->values(); // Ensure it's a proper array, not a keyed collection
+
+            Log::info('Filetypes API called', [
+                'count' => $filetypes->count(),
+                'filetypes' => $filetypes->toArray()
+            ]);
 
             return response()->json([
                 'status' => 200,
-                'filetypes' => $filetypes,
+                'filetypes' => $filetypes->toArray(), // Explicitly convert to array
             ], 200);
         } catch (\Exception $e) {
+            Log::error('Error fetching filetypes: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Server error',
                 'status' => 500,

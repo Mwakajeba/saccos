@@ -34,10 +34,26 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
   @override
   void initState() {
     super.initState();
+    print('=== LOAN DOCUMENT PAGE INIT ===');
+    print('Loan Data: ${widget.loanData}');
+    print('Loan Data Keys: ${widget.loanData.keys.toList()}');
+    print('Loan ID: ${widget.loanData['id']}');
     _loadAll();
   }
 
-  int _loanId() => (widget.loanData['id'] as num).toInt();
+  int _loanId() {
+    final id = widget.loanData['id'];
+    if (id == null) {
+      throw Exception('Loan ID is missing');
+    }
+    if (id is num) {
+      return id.toInt();
+    }
+    if (id is String) {
+      return int.tryParse(id) ?? 0;
+    }
+    return 0;
+  }
 
   String _loanTitle() => (widget.loanData['product_name'] ?? widget.loanData['product'] ?? 'Mkopo').toString();
 
@@ -51,26 +67,79 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
       final customerId = UserSession.instance.userId;
       if (customerId == null) throw Exception('Tafadhali ingia tena');
 
-      final ftResp = await ApiService.getFiletypes();
-      if (ftResp['status'] == 200) {
-        _filetypes = ftResp['filetypes'] ?? [];
+      // Load filetypes
+      try {
+        final ftResp = await ApiService.getFiletypes();
+        print('=== FILETYPES API RESPONSE ===');
+        print('Status: ${ftResp['status']}');
+        print('Filetypes: ${ftResp['filetypes']}');
+        print('Response keys: ${ftResp.keys.toList()}');
+        
+        final status = ftResp['status'];
+        if (status == 200 || status == '200') {
+          final filetypesList = ftResp['filetypes'];
+          if (filetypesList != null && filetypesList is List) {
+            _filetypes = filetypesList;
+            print('Loaded ${_filetypes.length} filetypes');
+          } else {
+            print('WARNING: filetypes is not a list or is null. Type: ${filetypesList.runtimeType}');
+            _filetypes = [];
+          }
+        } else {
+          print('WARNING: API returned status $status (type: ${status.runtimeType})');
+          _filetypes = [];
+        }
+      } catch (e) {
+        print('ERROR loading filetypes: $e');
+        _filetypes = [];
       }
 
-      final docsResp = await ApiService.getLoanDocuments(
-        customerId: customerId,
-        loanId: _loanId(),
-      );
-      if (docsResp['status'] == 200) {
-        _documents = docsResp['documents'] ?? [];
+      // Load documents
+      try {
+        final loanId = _loanId();
+        if (loanId > 0) {
+          final docsResp = await ApiService.getLoanDocuments(
+            customerId: customerId,
+            loanId: loanId,
+          );
+          final status = docsResp['status'];
+          if (status == 200 || status == '200') {
+            _documents = docsResp['documents'] ?? [];
+          } else {
+            print('WARNING: Documents API returned status $status');
+            _documents = [];
+          }
+        } else {
+          print('WARNING: Invalid loan ID: $loanId');
+          _documents = [];
+        }
+      } catch (e) {
+        print('ERROR loading documents: $e');
+        _documents = [];
       }
 
       // default select first filetype
       if (_filetypes.isNotEmpty && _selectedFiletypeId == null) {
         _selectedFiletypeId = (_filetypes.first['id'] as num).toInt();
       }
+      
+      print('=== FINAL STATE ===');
+      print('Filetypes count: ${_filetypes.length}');
+      print('Selected filetype ID: $_selectedFiletypeId');
     } catch (e) {
+      String errorMsg = e.toString().replaceFirst('Exception:', '').trim();
+      // Clean up error messages
+      if (errorMsg.contains('SERVER_ERROR:404')) {
+        errorMsg = 'Huduma haipatikani (404). Tafadhali jaribu tena baadaye.';
+      } else if (errorMsg.contains('SERVER_ERROR:')) {
+        errorMsg = 'Tatizo la seva. Tafadhali jaribu tena.';
+      } else if (errorMsg.contains('NETWORK_ERROR')) {
+        errorMsg = 'Hakuna muunganisho wa mtandao. Angalia muunganisho wako.';
+      } else if (errorMsg.contains('TIMEOUT')) {
+        errorMsg = 'Muda umekwisha. Tafadhali jaribu tena.';
+      }
       setState(() {
-        _error = e.toString().replaceFirst('Exception:', '').trim();
+        _error = errorMsg;
       });
     } finally {
       setState(() => _loading = false);
@@ -148,8 +217,19 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
         throw Exception(resp['message'] ?? 'Imeshindwa kupakia nyaraka');
       }
     } catch (e) {
+      String errorMsg = e.toString().replaceFirst('Exception:', '').trim();
+      // Clean up error messages
+      if (errorMsg.contains('SERVER_ERROR:404') || errorMsg.contains('UPLOAD_FAILED:404')) {
+        errorMsg = 'Huduma haipatikani (404). Tafadhali jaribu tena baadaye.';
+      } else if (errorMsg.contains('SERVER_ERROR:') || errorMsg.contains('UPLOAD_FAILED:')) {
+        errorMsg = 'Tatizo la seva. Tafadhali jaribu tena.';
+      } else if (errorMsg.contains('NETWORK_ERROR')) {
+        errorMsg = 'Hakuna muunganisho wa mtandao. Angalia muunganisho wako.';
+      } else if (errorMsg.contains('TIMEOUT')) {
+        errorMsg = 'Muda umekwisha. Tafadhali jaribu tena.';
+      }
       setState(() {
-        _error = e.toString().replaceFirst('Exception:', '').trim();
+        _error = errorMsg;
       });
       _showSnack(_error ?? 'Imeshindwa kupakia nyaraka');
     } finally {
@@ -212,21 +292,40 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
                             ),
                           ),
                           const SizedBox(height: 12),
+                          DropdownButtonFormField<int>(
+                            value: _selectedFiletypeId,
+                            items: _filetypes.isEmpty
+                                ? [
+                                    const DropdownMenuItem<int>(
+                                      value: null,
+                                      enabled: false,
+                                      child: Text('Hakuna aina za nyaraka'),
+                                    )
+                                  ]
+                                : _filetypes.map<DropdownMenuItem<int>>((ft) {
+                                    return DropdownMenuItem<int>(
+                                      value: (ft['id'] as num).toInt(),
+                                      child: Text((ft['name'] ?? '').toString()),
+                                    );
+                                  }).toList(),
+                            onChanged: _filetypes.isEmpty ? null : (v) => setState(() => _selectedFiletypeId = v),
+                            decoration: const InputDecoration(
+                              labelText: 'Aina ya nyaraka *',
+                              border: OutlineInputBorder(),
+                              hintText: 'Chagua aina ya nyaraka',
+                            ),
+                            isExpanded: true,
+                          ),
                           if (_filetypes.isEmpty)
-                            const Text('Hakuna aina za nyaraka (filetypes) zilizoandaliwa.'),
-                          if (_filetypes.isNotEmpty)
-                            DropdownButtonFormField<int>(
-                              value: _selectedFiletypeId,
-                              items: _filetypes.map<DropdownMenuItem<int>>((ft) {
-                                return DropdownMenuItem<int>(
-                                  value: (ft['id'] as num).toInt(),
-                                  child: Text((ft['name'] ?? '').toString()),
-                                );
-                              }).toList(),
-                              onChanged: (v) => setState(() => _selectedFiletypeId = v),
-                              decoration: const InputDecoration(
-                                labelText: 'Aina ya nyaraka',
-                                border: OutlineInputBorder(),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Hakuna aina za nyaraka zilizoandaliwa. Tafadhali wasiliana na msimamizi.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange.shade700,
+                                  fontStyle: FontStyle.italic,
+                                ),
                               ),
                             ),
                           const SizedBox(height: 12),

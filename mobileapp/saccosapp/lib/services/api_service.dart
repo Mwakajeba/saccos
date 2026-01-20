@@ -125,26 +125,45 @@ class ApiService {
   // Get filetypes for KYC / loan documents
   static Future<Map<String, dynamic>> getFiletypes() async {
     try {
+      final url = '$baseUrl/customer/filetypes';
+      print('=== CALLING FILETYPES API ===');
+      print('URL: $url');
+      
       final response = await http.get(
-        Uri.parse('$baseUrl/customer/filetypes'),
+        Uri.parse(url),
         headers: {
           'Accept': 'application/json',
         },
       ).timeout(
         const Duration(seconds: 15),
         onTimeout: () {
+          print('=== FILETYPES API TIMEOUT ===');
           throw Exception('TIMEOUT');
         },
       );
 
+      print('=== FILETYPES API RESPONSE ===');
+      print('Status Code: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+      print('Response Headers: ${response.headers}');
+
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
+        print('Decoded response: $decoded');
+        return decoded;
       } else {
+        print('=== FILETYPES API ERROR ===');
+        print('Status: ${response.statusCode}');
+        print('Body: ${response.body}');
         throw Exception('SERVER_ERROR:${response.statusCode}');
       }
-    } on http.ClientException {
+    } on http.ClientException catch (e) {
+      print('=== FILETYPES API CLIENT EXCEPTION ===');
+      print('Error: $e');
       throw Exception('NETWORK_ERROR');
     } catch (e) {
+      print('=== FILETYPES API EXCEPTION ===');
+      print('Error: $e');
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
