@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'loan_application_page.dart';
+import 'loan_document_page.dart';
 import 'home_page.dart';
 import 'profile_page.dart';
 import 'loan_repayments_page.dart';
@@ -531,6 +532,9 @@ class _LoansPageState extends State<LoansPage> {
     Color? buttonTextColor,
     bool isCompleted = false,
   }) {
+    final loanStatus = (loanData['status'] as String?)?.toLowerCase() ?? '';
+    final showKycButton = loanStatus == 'applied' || loanStatus == 'pending';
+
     return GestureDetector(
       onTap: () {
         if (status == 'Inaendelea' || status == 'Imeisha') {
@@ -774,6 +778,25 @@ class _LoansPageState extends State<LoansPage> {
                 ],
               ),
             ),
+
+            if (showKycButton) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => LoanDocumentPage(loanData: loanData),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.verified_user_outlined),
+                  label: const Text('Weka/Ona KYC'),
+                ),
+              ),
+            ],
           ],
         ),
         ),

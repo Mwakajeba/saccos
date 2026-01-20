@@ -83,6 +83,9 @@ Route::post('/api/customer/shares', [\App\Http\Controllers\Api\CustomerAuthContr
 Route::post('/api/customer/contribution-transactions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'contributionTransactions']);
 Route::post('/api/customer/share-transactions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'shareTransactions']);
 Route::post('/api/customer/loan-application', [\App\Http\Controllers\Api\CustomerAuthController::class, 'submitLoanApplication']);
+Route::get('/api/customer/filetypes', [\App\Http\Controllers\Api\CustomerAuthController::class, 'filetypes']);
+Route::post('/api/customer/loan-documents', [\App\Http\Controllers\Api\CustomerAuthController::class, 'loanDocuments']);
+Route::post('/api/customer/loan-documents/upload', [\App\Http\Controllers\Api\CustomerAuthController::class, 'uploadLoanDocument']);
 Route::get('/api/customer/complain-categories', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getComplainCategories']);
 Route::post('/api/customer/complain', [\App\Http\Controllers\Api\CustomerAuthController::class, 'submitComplain']);
 Route::post('/api/customer/complains', [\App\Http\Controllers\Api\CustomerAuthController::class, 'getCustomerComplains']);

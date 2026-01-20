@@ -122,6 +122,145 @@ class ApiService {
     }
   }
 
+  // Get filetypes for KYC / loan documents
+  static Future<Map<String, dynamic>> getFiletypes() async {
+    try {
+      final url = '$baseUrl/customer/filetypes';
+      print('=== CALLING FILETYPES API ===');
+      print('URL: $url');
+      
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Accept': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          print('=== FILETYPES API TIMEOUT ===');
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      print('=== FILETYPES API RESPONSE ===');
+      print('Status Code: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+      print('Response Headers: ${response.headers}');
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        print('Decoded response: $decoded');
+        return decoded;
+      } else {
+        print('=== FILETYPES API ERROR ===');
+        print('Status: ${response.statusCode}');
+        print('Body: ${response.body}');
+        throw Exception('SERVER_ERROR:${response.statusCode}');
+      }
+    } on http.ClientException catch (e) {
+      print('=== FILETYPES API CLIENT EXCEPTION ===');
+      print('Error: $e');
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      print('=== FILETYPES API EXCEPTION ===');
+      print('Error: $e');
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // List loan documents for a loan
+  static Future<Map<String, dynamic>> getLoanDocuments({
+    required int customerId,
+    required int loanId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/customer/loan-documents'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'customer_id': customerId,
+          'loan_id': loanId,
+        }),
+      ).timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        // Bubble server message if any
+        try {
+          final data = jsonDecode(response.body);
+          throw Exception(data['message'] ?? 'SERVER_ERROR:${response.statusCode}');
+        } catch (_) {
+          throw Exception('SERVER_ERROR:${response.statusCode}');
+        }
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
+  // Upload a single loan document (multipart)
+  static Future<Map<String, dynamic>> uploadLoanDocument({
+    required int customerId,
+    required int loanId,
+    required int fileTypeId,
+    required File file,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/customer/loan-documents/upload');
+      final request = http.MultipartRequest('POST', uri);
+
+      request.fields['customer_id'] = customerId.toString();
+      request.fields['loan_id'] = loanId.toString();
+      request.fields['file_type_id'] = fileTypeId.toString();
+
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+      request.headers['Accept'] = 'application/json';
+
+      final streamed = await request.send().timeout(
+        const Duration(seconds: 45),
+        onTimeout: () {
+          throw Exception('TIMEOUT');
+        },
+      );
+      final response = await http.Response.fromStream(streamed);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        try {
+          final data = jsonDecode(response.body);
+          throw Exception(data['message'] ?? 'UPLOAD_FAILED:${response.statusCode}');
+        } catch (_) {
+          throw Exception('UPLOAD_FAILED:${response.statusCode}');
+        }
+      }
+    } on http.ClientException {
+      throw Exception('NETWORK_ERROR');
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('NETWORK_ERROR');
+    }
+  }
+
   // Get group members
   static Future<Map<String, dynamic>> getGroupMembers(int customerId) async {
     try {
