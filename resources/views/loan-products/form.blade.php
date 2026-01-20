@@ -176,6 +176,7 @@
 
         <div class="col-md-6 mb-3">
             <div class="form-check">
+                <input type="hidden" name="has_top_up" value="0">
                 <input class="form-check-input" type="checkbox" name="has_top_up" id="has_top_up" value="1" {{ old('has_top_up', isset($loanProduct) && !empty($loanProduct->top_up_type)) ? 'checked' : '' }}>
                 <label class="form-check-label" for="has_top_up">
                     Has Top Up
@@ -209,10 +210,9 @@
         </div>
         <div class="col-md-6 mb-3">
             <div class="form-check">
-                <input type="hidden" name="allow_push_to_ess" value="0" id="allow_push_to_ess_hidden">
+                <input type="hidden" name="allow_push_to_ess" value="0">
                 <input type="checkbox" name="allow_push_to_ess" id="allow_push_to_ess" class="form-check-input"
-                    value="1" {{ old('allow_push_to_ess', $loanProduct->allow_push_to_ess ?? false) ? 'checked' : '' }}
-                    onchange="document.getElementById('allow_push_to_ess_hidden').disabled = this.checked;">
+                    value="1" {{ old('allow_push_to_ess', $loanProduct->allow_push_to_ess ?? false) ? 'checked' : '' }}>
                 <label class="form-check-label" for="allow_push_to_ess">Allow Push to ESS</label>
             </div>
         </div>
@@ -220,10 +220,9 @@
         <!-- Allowed in App Application -->
         <div class="col-md-6 mb-3">
             <div class="form-check">
-                <input type="hidden" name="allowed_in_app" value="0" id="allowed_in_app_hidden">
+                <input type="hidden" name="allowed_in_app" value="0">
                 <input type="checkbox" name="allowed_in_app" id="allowed_in_app" class="form-check-input"
-                    value="1" {{ (old('allowed_in_app', isset($loanProduct) ? (bool)$loanProduct->allowed_in_app : false)) ? 'checked' : '' }}
-                    onchange="document.getElementById('allowed_in_app_hidden').disabled = this.checked;">
+                    value="1" {{ (old('allowed_in_app', isset($loanProduct) ? (bool)$loanProduct->allowed_in_app : false)) ? 'checked' : '' }}>
                 <label class="form-check-label" for="allowed_in_app">Allowed in App Application</label>
                 <small class="form-text text-muted d-block">Allow customers to apply for loans using this product through the mobile app</small>
             </div>
@@ -236,6 +235,7 @@
 
         <div class="col-md-6 mb-3">
             <div class="form-check">
+                <input type="hidden" name="has_contribution" value="0">
                 <input class="form-check-input" type="checkbox" name="has_contribution" id="has_contribution"
                     value="1" {{ old('has_contribution', $loanProduct->has_contribution ?? false) ? 'checked' : '' }}>
                 <label class="form-check-label" for="has_contribution">
@@ -285,6 +285,7 @@
 
         <div class="col-md-6 mb-3">
             <div class="form-check">
+                <input type="hidden" name="has_share" value="0">
                 <input class="form-check-input" type="checkbox" name="has_share" id="has_share"
                     value="1" {{ old('has_share', $loanProduct->has_share ?? false) ? 'checked' : '' }}>
                 <label class="form-check-label" for="has_share">
@@ -334,6 +335,7 @@
 
         <div class="col-md-6 mb-3">
             <div class="form-check">
+                <input type="hidden" name="has_approval_levels" value="0">
                 <input class="form-check-input" type="checkbox" name="has_approval_levels" id="has_approval_levels"
                     value="1" {{ old('has_approval_levels', $loanProduct->has_approval_levels ?? false) ? 'checked' : '' }}>
                 <label class="form-check-label" for="has_approval_levels">
@@ -858,29 +860,26 @@
 @push('scripts')
     <script>
         function handleSubmit(form) {
-            // CRITICAL: Handle checkboxes FIRST before any other logic
-            // Unchecked checkboxes don't send any value, so we must add hidden inputs
-            const checkboxes = ['allowed_in_app', 'allow_push_to_ess', 'has_cash_collateral', 'has_approval_levels', 'has_top_up', 'has_contribution', 'has_share'];
-            checkboxes.forEach(name => {
-                // Remove any existing hidden inputs for this checkbox to avoid duplicates
-                const existingHidden = form.querySelectorAll(`input[name="${name}"][type="hidden"]`);
-                existingHidden.forEach(h => h.remove());
-                
-                const checkbox = form.querySelector(`input[name="${name}"][type="checkbox"]`);
-                if (checkbox) {
-                    if (!checkbox.checked) {
-                        // Add hidden input with value 0 if checkbox is unchecked
-                        const hidden = document.createElement('input');
-                        hidden.type = 'hidden';
-                        hidden.name = name;
-                        hidden.value = '0';
-                        // Insert before the checkbox to ensure it's processed
-                        checkbox.parentNode.insertBefore(hidden, checkbox);
-                    }
-                    // If checked, the checkbox itself will send value="1"
+            // Force checkbox values to be submitted reliably.
+            // Some browsers / UI layers can result in only the hidden "0" arriving.
+            // We always submit hidden "0" in HTML, and on submit we append an override "1" when checked.
+            const checkboxNames = ['allowed_in_app', 'allow_push_to_ess', 'has_cash_collateral', 'has_approval_levels', 'has_top_up', 'has_contribution', 'has_share'];
+            checkboxNames.forEach((name) => {
+                // Remove any previous overrides
+                form.querySelectorAll(`input[type="hidden"][data-checkbox-override="1"][name="${name}"]`).forEach(el => el.remove());
+
+                const cb = form.querySelector(`input[type="checkbox"][name="${name}"]`);
+                if (cb && cb.checked) {
+                    const override = document.createElement('input');
+                    override.type = 'hidden';
+                    override.name = name;
+                    override.value = '1';
+                    override.setAttribute('data-checkbox-override', '1');
+                    // Append at the end so PHP/Laravel receives "1" as the last value
+                    form.appendChild(override);
                 }
             });
-            
+
             // Debug: Log what we're sending
             const formData = new FormData(form);
             console.log('Form submission - checkbox values:', {

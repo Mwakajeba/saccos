@@ -154,16 +154,18 @@ class _LoginPageState extends State<LoginPage> {
     return Column(
       children: [
         Container(
-          width: 80,
-          height: 80,
+          width: 150,
+          height: 150,
           decoration: BoxDecoration(
-            color: const Color(0xFF13EC5B).withOpacity(0.1),
+            color: Colors.white.withOpacity(0.5),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             child: Image.asset(
-              'assets/icon/app_icon.png',
+              'assets/icon/logo.png',
+              width: 126,
+              height: 126,
               fit: BoxFit.contain,
             ),
           ),

@@ -1196,6 +1196,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/loans/{loan}/guarantors', [LoanController::class, 'addGuarantor'])->name('loans.addGuarantor');
     Route::delete('/loans/{loan}/guarantors/{guarantor}', [LoanController::class, 'removeGuarantor'])->name('loans.removeGuarantor');
     Route::get('/loans/{encodedId}/export-details', [LoanController::class, 'exportLoanDetails'])->name('loans.export-details');
+    
+    // Loan Restructuring Routes
+    Route::get('/loans/{encodedId}/restructure', [LoanController::class, 'restructure'])->name('loans.restructure');
+    Route::post('/loans/{encodedId}/restructure/process', [LoanController::class, 'processRestructure'])->name('loans.restructure.process');
 
     // Loan Collateral Routes
     Route::post('/loan-collaterals', [LoanCollateralController::class, 'store'])->name('loan-collaterals.store');

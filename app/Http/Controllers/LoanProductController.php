@@ -13,6 +13,7 @@ use App\Models\ShareProduct;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Arr;
 use Vinkla\Hashids\Facades\Hashids;
 
 class LoanProductController extends Controller
@@ -210,11 +211,23 @@ class LoanProductController extends Controller
         DB::beginTransaction();
         try {
             $data = $request->all();
-            // Handle checkboxes - JavaScript ensures unchecked boxes send "0", checked boxes send "1"
-            $data['allow_push_to_ess'] = ($request->input('allow_push_to_ess') == '1') ? true : false;
-            $data['allowed_in_app'] = ($request->input('allowed_in_app') == '1') ? true : false;
-            $data['has_cash_collateral'] = ($request->input('has_cash_collateral') == '1') ? true : false;
-            $data['has_approval_levels'] = ($request->input('has_approval_levels') == '1') ? true : false;
+            // Handle checkboxes safely.
+            // With hidden input + checkbox, the request value can be ['0','1'] (array) depending on order.
+            $allowPushToEssValue = $request->input('allow_push_to_ess');
+            $allowedInAppValue = $request->input('allowed_in_app');
+            $hasCashCollateralValue = $request->input('has_cash_collateral');
+            $hasApprovalLevelsValue = $request->input('has_approval_levels');
+            $hasTopUpValue = $request->input('has_top_up');
+            $hasContributionValue = $request->input('has_contribution');
+            $hasShareValue = $request->input('has_share');
+
+            $data['allow_push_to_ess'] = in_array('1', Arr::wrap($allowPushToEssValue), true);
+            $data['allowed_in_app'] = in_array('1', Arr::wrap($allowedInAppValue), true);
+            $data['has_cash_collateral'] = in_array('1', Arr::wrap($hasCashCollateralValue), true);
+            $data['has_approval_levels'] = in_array('1', Arr::wrap($hasApprovalLevelsValue), true);
+            $data['has_top_up'] = in_array('1', Arr::wrap($hasTopUpValue), true);
+            $data['has_contribution'] = in_array('1', Arr::wrap($hasContributionValue), true);
+            $data['has_share'] = in_array('1', Arr::wrap($hasShareValue), true);
 
             // Handle fees_ids - map from fees_id array to fees_ids
             if ($request->has('fees_id')) {
@@ -498,27 +511,43 @@ class LoanProductController extends Controller
 
             $data = $request->all();
             
-            // Handle checkboxes - JavaScript ensures unchecked boxes send "0", checked boxes send "1"
+            // Handle checkboxes safely (hidden + checkbox can result in arrays like ['0','1'])
             $allowPushToEssValue = $request->input('allow_push_to_ess');
-            $data['allow_push_to_ess'] = ($allowPushToEssValue == '1') ? true : false;
-            
             $allowedInAppValue = $request->input('allowed_in_app');
-            $data['allowed_in_app'] = ($allowedInAppValue == '1') ? true : false;
-            
             $hasCashCollateralValue = $request->input('has_cash_collateral');
-            $data['has_cash_collateral'] = ($hasCashCollateralValue == '1') ? true : false;
-            
             $hasApprovalLevelsValue = $request->input('has_approval_levels');
-            $data['has_approval_levels'] = ($hasApprovalLevelsValue == '1') ? true : false;
+            $hasTopUpValue = $request->input('has_top_up');
+            $hasContributionValue = $request->input('has_contribution');
+            $hasShareValue = $request->input('has_share');
+
+            $data['allow_push_to_ess'] = in_array('1', Arr::wrap($allowPushToEssValue), true);
+            $data['allowed_in_app'] = in_array('1', Arr::wrap($allowedInAppValue), true);
+            $data['has_cash_collateral'] = in_array('1', Arr::wrap($hasCashCollateralValue), true);
+            $data['has_approval_levels'] = in_array('1', Arr::wrap($hasApprovalLevelsValue), true);
+            $data['has_top_up'] = in_array('1', Arr::wrap($hasTopUpValue), true);
+            $data['has_contribution'] = in_array('1', Arr::wrap($hasContributionValue), true);
+            $data['has_share'] = in_array('1', Arr::wrap($hasShareValue), true);
 
             // Log processed checkbox values
             \Log::info('LoanProduct Update - Processed Checkbox Values', [
                 'product_id' => $loanProduct->id,
                 'allowed_in_app_input' => $allowedInAppValue,
+                'allowed_in_app_has' => $request->has('allowed_in_app'),
                 'allowed_in_app_processed' => $data['allowed_in_app'],
                 'allow_push_to_ess_processed' => $data['allow_push_to_ess'],
                 'has_cash_collateral_processed' => $data['has_cash_collateral'],
+                'has_approval_levels_input' => $hasApprovalLevelsValue,
+                'has_approval_levels_has' => $request->has('has_approval_levels'),
                 'has_approval_levels_processed' => $data['has_approval_levels'],
+                'has_top_up_input' => $hasTopUpValue,
+                'has_top_up_has' => $request->has('has_top_up'),
+                'has_top_up_processed' => $data['has_top_up'],
+                'has_contribution_input' => $hasContributionValue,
+                'has_contribution_has' => $request->has('has_contribution'),
+                'has_contribution_processed' => $data['has_contribution'],
+                'has_share_input' => $hasShareValue,
+                'has_share_has' => $request->has('has_share'),
+                'has_share_processed' => $data['has_share'],
             ]);
 
             // Handle fees_ids - map from fees_id array to fees_ids

@@ -16,25 +16,38 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h4 class="fw-bold text-dark mb-0">Loan Details for {{ $loan->customer->name }}</h4>
                     <div class="d-flex gap-2" style="margin-left: 16px;">
-                        <a href="{{ route('loans.writeoff', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
-                            class="btn btn-danger">Write Off Loans</a>
+                        @if($loan->status !== 'restructured' && $loan->status !== 'completed')
+                            <a href="{{ route('loans.writeoff', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
+                                class="btn btn-danger">Write Off Loans</a>
 
-                        @if($loan->isEligibleForTopUp())
-                            <button type="button" class="btn btn-success" onclick="showTopUpModal()">
-                                <i class="bx bx-plus-circle me-2"></i>Apply for Top-Up
-                            </button>
-                        @else
-                            <button type="button" class="btn btn-secondary" disabled title="Loan not eligible for top-up">
-                                <i class="bx bx-plus-circle me-2"></i>Top-Up Not Available
-                            </button>
+                            @if($loan->isEligibleForTopUp())
+                                <button type="button" class="btn btn-success" onclick="showTopUpModal()">
+                                    <i class="bx bx-plus-circle me-2"></i>Apply for Top-Up
+                                </button>
+                            @else
+                                <!-- <button type="button" class="btn btn-secondary" disabled title="Loan not eligible for top-up">
+                                    <i class="bx bx-plus-circle me-2"></i>Top-Up Not Available
+                                </button> -->
+
+                                <button type="button" class="btn btn-success" onclick="showTopUpModal()">
+                                    <i class="bx bx-plus-circle me-2"></i>Apply for Top-Up
+                                </button>
+                            @endif
+                            <a href="{{ route('loans.fees_receipt', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
+                                class="btn btn-success"><i class="bx bx-plus-circle me-2"></i> Loan Fees Receipt</a>
                         @endif
-                        <a href="{{ route('loans.fees_receipt', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
-                            class="btn btn-success"><i class="bx bx-plus-circle me-2"></i> Loan Fees Receipt</a>
 
                         @if($loan->status === 'active' || $loan->status === 'disbursed')
                             <button type="button" class="btn btn-warning" onclick="showSettleLoanModal()">
                                 <i class="bx bx-check-circle me-2"></i>Settle Loan
                             </button>
+                        @endif
+
+                        @if($loan->status === 'active' || $loan->status === 'disbursed')
+                            <a href="{{ route('loans.restructure', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
+                                class="btn btn-primary">
+                                <i class="bx bx-refresh me-2"></i>Loan Restructure
+                            </a>
                         @endif
 
                         @if($loan->status === 'active')
@@ -681,13 +694,17 @@
                                                             <button type="button" class="btn btn-sm btn-success" disabled>
                                                                 <i class="bx bx-check-circle me-1"></i>Paid
                                                             </button>
+                                                        @elseif($loan->status === 'restructured')
+                                                            <button type="button" class="btn btn-sm btn-secondary" disabled>
+                                                                <i class="bx bx-refresh me-1"></i>Restructured
+                                                            </button>
                                                         @else
                                                             <button type="button" class="btn btn-sm btn-primary"
                                                                 onclick="repayScheduleItem('{{ $item->id }}', '{{ number_format($remainingAmount, 2) }}', '{{ \Carbon\Carbon::parse($item->due_date)->format('M d, Y') }}', '{{ number_format($item->principal, 2) }}', '{{ number_format($item->interest, 2) }}', '{{ number_format($item->penalty_amount, 2) }}', '{{ number_format($item->fee_amount, 2) }}')">
                                                                 <i class="bx bx-credit-card me-1"></i>Repay
                                                             </button>
                                                         @endif
-                                                        @if($item->isPenaltyRemovalAllowed())
+                                                        @if($item->isPenaltyRemovalAllowed() && $loan->status !== 'restructured')
                                                             <button type="button" class="btn btn-sm btn-warning ms-1"
                                                                 onclick="removePenalty('{{ $item->id }}', '{{ number_format($item->penalty_amount, 2) }}')">
                                                                 <i class="bx bx-x-circle me-1"></i>Remove Penalty
