@@ -24,6 +24,50 @@ use Illuminate\Support\Facades\Storage;
 class CustomerAuthController extends Controller
 {
     /**
+     * Update customer password (mobile/web).
+     */
+    public function updatePassword(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'customer_id' => 'required|integer|exists:customers,id',
+                'current_password' => 'required|string',
+                'new_password' => 'required|string|min:8|confirmed',
+            ]);
+
+            $customer = Customer::findOrFail((int) $validated['customer_id']);
+
+            if (!Hash::check($validated['current_password'], $customer->password)) {
+                return response()->json([
+                    'status' => 401,
+                    'message' => 'Current password is incorrect',
+                ], 401);
+            }
+
+            $customer->password = Hash::make($validated['new_password']);
+            $customer->save();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Password updated successfully',
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Validation error',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Error updating customer password: ' . $e->getMessage());
+            return response()->json([
+                'status' => 500,
+                'message' => 'Server error',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Get all filetypes (used for KYC / loan documents).
      */
     public function filetypes(Request $request)
