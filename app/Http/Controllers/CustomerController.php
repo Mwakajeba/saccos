@@ -57,7 +57,7 @@ class CustomerController extends Controller
     /**
      * Format phone number to ensure 255 prefix
      * - Input should be 9 digits (from form input)
-     * - Returns 255 followed by the 9 digits
+     * - Returns 255 followed by the 9 digitsccccccccc
      */
     private function formatPhoneNumberWithPrefix($phoneNumber)
     {
