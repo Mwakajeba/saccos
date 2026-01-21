@@ -1915,6 +1915,30 @@ class LoanController extends Controller
     }
 
     /**
+     * Check if the given user can directly disburse a loan when no approval levels are configured.
+     * Allowed roles: any role whose name (case-insensitive) contains 'manager' or 'accountant'
+     * e.g. 'Branch Manager', 'General Manager', 'Accountant'.
+     */
+    private function userCanDisburseWithoutApproval(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        // Ensure we have roles loaded
+        $user->loadMissing('roles');
+
+        foreach ($user->roles as $role) {
+            $name = strtolower($role->name ?? '');
+            if (str_contains($name, 'manager') || str_contains($name, 'accountant')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Post release-date fees (GL + Journal) for a loan disbursement and return total fees.
      */
     private function postReleaseFees(Loan $loan, LoanProduct $product, float $principal, string $date, int $userId, int $branchId, int $bankChartAccountId): float
@@ -2247,7 +2271,9 @@ class LoanController extends Controller
 
         $feeSummary = $this->getFeeSummaryForLoan($loan);
 
-        $feeSummary = $this->getFeeSummaryForLoan($loan);
+        $approvalRoles = $loan->getApprovalRoles();
+        $hasApprovalLevels = !empty($approvalRoles);
+        $canDirectDisburse = !$hasApprovalLevels && $this->userCanDisburseWithoutApproval(auth()->user());
 
         // Get IDs of guarantors already attached to this loan
         $guarantorIdsAlreadyAdded = $loan->guarantors->pluck('id')->toArray();
@@ -2265,7 +2291,15 @@ class LoanController extends Controller
         // Set the encoded ID for the loan object
         $loan->encodedId = $encodedId;
 
-        return view('loans.show', compact('loan', 'guarantorCustomers', 'filetypes', 'bankAccounts', 'feeSummary'));
+        return view('loans.show', compact(
+            'loan',
+            'guarantorCustomers',
+            'filetypes',
+            'bankAccounts',
+            'feeSummary',
+            'hasApprovalLevels',
+            'canDirectDisburse'
+        ));
     }
 
 
@@ -2607,6 +2641,12 @@ class LoanController extends Controller
             'guarantors' // add this if not eager loaded already
         ])->findOrFail($decoded[0]);
 
+        $feeSummary = $this->getFeeSummaryForLoan($loan);
+
+        $approvalRoles = $loan->getApprovalRoles();
+        $hasApprovalLevels = !empty($approvalRoles);
+        $canDirectDisburse = !$hasApprovalLevels && $this->userCanDisburseWithoutApproval(auth()->user());
+
         // Get IDs of guarantors already attached to this loan
         $guarantorIdsAlreadyAdded = $loan->guarantors->pluck('id')->toArray();
 
@@ -2622,7 +2662,15 @@ class LoanController extends Controller
         // Set the encoded ID for the loan object
         $loan->encodedId = $encodedId;
 
-        return view('loans.show', compact('loan', 'guarantorCustomers', 'filetypes', 'bankAccounts', 'feeSummary'));
+        return view('loans.show', compact(
+            'loan',
+            'guarantorCustomers',
+            'filetypes',
+            'bankAccounts',
+            'feeSummary',
+            'hasApprovalLevels',
+            'canDirectDisburse'
+        ));
     }
 
     public function applicationEdit($encodedId)
@@ -2737,6 +2785,9 @@ class LoanController extends Controller
             Log::info("=== LOAN EDIT METHOD ===", ["encoded_id" => $encodedId, "loan_id" => $loan->id, "loan_data" => ["amount" => $loan->amount, "interest" => $loan->interest, "period" => $loan->period, "interest_cycle" => $loan->interest_cycle, "customer_id" => $loan->customer_id, "group_id" => $loan->group_id, "product_id" => $loan->product_id, "bank_account_id" => $loan->bank_account_id, "loan_officer_id" => $loan->loan_officer_id, "sector" => $loan->sector]]);
             $user = auth()->user();
 
+            $approvalRoles = $loan->getApprovalRoles();
+            $hasApprovalLevels = !empty($approvalRoles);
+
             // Debug information
             \Log::notice('Approval attempt context', [
                 'loan_id' => $loan->id,
@@ -2744,7 +2795,7 @@ class LoanController extends Controller
                 'user_id' => $user->id,
                 'user_roles' => $user->roles->pluck('id')->toArray(),
                 'product_approval_levels' => $loan->product->approval_levels ?? 'none',
-                'approval_roles' => $loan->getApprovalRoles(),
+                'approval_roles' => $approvalRoles,
                 'next_level' => $loan->getNextApprovalLevel(),
                 'next_role' => $loan->getNextApprovalRole(),
                 'next_action' => $loan->getNextApprovalAction(),
@@ -2752,14 +2803,27 @@ class LoanController extends Controller
                 // 'has_approved' => $loan->hasUserApproved($user)
             ]);
 
-            // Validate user has permission to approve
-            if (!$loan->canBeApprovedByUser($user)) {
-                \Log::warning('User does not have permission to approve', [
-                    'user_id' => $user->id,
-                    'required_role' => $loan->getNextApprovalRole(),
-                    'user_roles' => $user->roles->pluck('id')->toArray()
-                ]);
-                return redirect()->back()->withErrors(['You do not have permission to approve this loan. Required role: ' . $loan->getApprovalLevelName($loan->getNextApprovalLevel())]);
+            // Permission checks
+            if ($hasApprovalLevels) {
+                // Standard multi-level approval based on configured roles
+                if (!$loan->canBeApprovedByUser($user)) {
+                    \Log::warning('User does not have permission to approve', [
+                        'user_id' => $user->id,
+                        'required_role' => $loan->getNextApprovalRole(),
+                        'user_roles' => $user->roles->pluck('id')->toArray()
+                    ]);
+                    return redirect()->back()->withErrors(['You do not have permission to approve this loan. Required role: ' . $loan->getApprovalLevelName($loan->getNextApprovalLevel())]);
+                }
+            } else {
+                // No approval levels configured: only Manager/Accountant-type roles may proceed
+                if (!$this->userCanDisburseWithoutApproval($user)) {
+                    \Log::warning('User not allowed to approve/disburse loan without approval levels', [
+                        'user_id' => $user->id,
+                        'loan_id' => $loan->id,
+                        'user_roles' => $user->roles->pluck('name')->toArray(),
+                    ]);
+                    return redirect()->back()->withErrors(['Only Manager, Accountant, or General Manager roles can disburse this loan.']);
+                }
             }
 
             // Check if user has already approved this loan
@@ -2775,9 +2839,17 @@ class LoanController extends Controller
                 'comments' => 'nullable|string|max:1000',
             ]);
 
-            $nextAction = $loan->getNextApprovalAction();
-            $nextLevel = $loan->getNextApprovalLevel();
-            $roleName = $loan->getApprovalLevelName($nextLevel);
+            // Determine next action/level
+            if ($hasApprovalLevels) {
+                $nextAction = $loan->getNextApprovalAction();
+                $nextLevel = $loan->getNextApprovalLevel();
+                $roleName = $loan->getApprovalLevelName($nextLevel);
+            } else {
+                // No approval levels: treat this as a direct disbursement step
+                $nextAction = 'disburse';
+                $nextLevel = 1;
+                $roleName = 'Direct Disbursement';
+            }
 
             \Log::notice('Computed next step', [
                 'loan_id' => $loan->id,
