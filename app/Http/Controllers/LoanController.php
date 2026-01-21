@@ -19,6 +19,8 @@ use App\Models\ChartAccount;
 use App\Models\Payment;
 use App\Models\PaymentItem;
 use App\Models\Penalty;
+use App\Models\Journal;
+use App\Models\JournalItem;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\LoanRestructuringService;
@@ -497,10 +499,10 @@ class LoanController extends Controller
                         }
                     }
 
-                        // // Change status action (available to users who can edit loans)
-                        // if (auth()->user()->can('edit loan')) {
-                        //     $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
-                        // }
+                    // // Change status action (available to users who can edit loans)
+                    // if (auth()->user()->can('edit loan')) {
+                    //     $actions .= '<button class="btn btn-sm btn-outline-secondary change-status-btn me-1" data-id="' . $encodedId . '" title="Change Status"><i class="bx bx-transfer"></i></button>';
+                    // }
 
                     return '<div class="text-center">' . $actions . '</div>';
                 })
@@ -1437,29 +1439,16 @@ class LoanController extends Controller
                     throw new \Exception('Principal receivable account not set for this loan product.');
                 }
 
-                $releaseFeeTotal = 0;
-                if ($product && $product->fees_ids) {
-                    \Log::info('fees_ids: ' . json_encode($product->fees_ids));
-                    $feeIds = is_array($product->fees_ids) ? $product->fees_ids : json_decode($product->fees_ids, true);
-                    \Log::info('Decoded feeIds:', ['feeIds' => $feeIds]);
-                    if (is_array($feeIds)) {
-                        $releaseFees = \DB::table('fees')
-                            ->whereIn('id', $feeIds)
-                            ->where('deduction_criteria', 'charge_fee_on_release_date')
-                            ->where('status', 'active')
-                            ->get();
-                        \Log::info('Release fees found:', ['count' => count($releaseFees), 'fees' => json_encode($releaseFees)]);
-                        foreach ($releaseFees as $fee) {
-                            $feeAmount = (float) $fee->amount;
-                            $feeType = $fee->fee_type;
-                            $calculatedFee = $feeType === 'percentage'
-                                ? ((float) $validated['amount'] * (float) $feeAmount / 100)
-                                : (float) $feeAmount;
-                            $releaseFeeTotal += $calculatedFee;
-                            \Log::info("Fee: {$fee->name}, Type: $feeType, Amount: $feeAmount, Calculated: $calculatedFee");
-                        }
-                    }
-                }
+                // Post release-date fees (GL + Journals) and adjust disbursement amount
+                $releaseFeeTotal = $this->postReleaseFees(
+                    $loan,
+                    $product,
+                    (float) $validated['amount'],
+                    $validated['date_applied'],
+                    $userId,
+                    $branchId,
+                    $bankAccount->chart_account_id
+                );
 
                 \Log::info("Total release fees: $releaseFeeTotal");
 
@@ -1768,25 +1757,15 @@ class LoanController extends Controller
                     throw new \Exception('Principal receivable account not set for this loan product.');
                 }
 
-                $releaseFeeTotal = 0;
-                if ($product && $product->fees_ids) {
-                    $feeIds = is_array($product->fees_ids) ? $product->fees_ids : json_decode($product->fees_ids, true);
-                    if (is_array($feeIds)) {
-                        $releaseFees = \DB::table('fees')
-                            ->whereIn('id', $feeIds)
-                            ->where('deduction_criteria', 'charge_fee_on_release_date')
-                            ->where('status', 'active')
-                            ->get();
-                        foreach ($releaseFees as $fee) {
-                            $feeAmount = (float) $fee->amount;
-                            $feeType = $fee->fee_type;
-                            $calculatedFee = $feeType === 'percentage'
-                                ? ((float) $validated['amount'] * (float) $feeAmount / 100)
-                                : (float) $feeAmount;
-                            $releaseFeeTotal += $calculatedFee;
-                        }
-                    }
-                }
+                $releaseFeeTotal = $this->postReleaseFees(
+                    $loan,
+                    $product,
+                    (float) $validated['amount'],
+                    $validated['date_applied'],
+                    $userId,
+                    $branchId,
+                    $bankAccount->chart_account_id
+                );
                 $disbursementAmount = $validated['amount'] - $releaseFeeTotal;
 
                 $payment = Payment::create([
@@ -1867,6 +1846,261 @@ class LoanController extends Controller
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'amount' => "Amount must be between {$product->minimum_principal} and {$product->maximum_principal}.",
             ]);
+        }
+    }
+
+    /**
+     * Build a read-only summary of release-date fees and net disbursement for a loan.
+     */
+    private function getFeeSummaryForLoan(Loan $loan): array
+    {
+        $principal = (float) $loan->amount;
+        $interestAmount = (float) ($loan->interest_amount ?? $loan->calculateInterestAmount($loan->interest));
+
+        $summary = [
+            'principal' => $principal,
+            'interest_amount' => $interestAmount,
+            'total_fees' => 0.0,
+            'net_disbursement' => $principal,
+            'items' => [],
+        ];
+
+        $product = $loan->product;
+        if (!$product || !$product->fees_ids || $principal <= 0) {
+            return $summary;
+        }
+
+        $feeIds = is_array($product->fees_ids)
+            ? $product->fees_ids
+            : json_decode($product->fees_ids, true);
+
+        if (!is_array($feeIds) || empty($feeIds)) {
+            return $summary;
+        }
+
+        $releaseFees = \DB::table('fees')
+            ->whereIn('id', $feeIds)
+            ->where('deduction_criteria', 'charge_fee_on_release_date')
+            ->where('status', 'active')
+            ->get();
+
+        $totalFees = 0.0;
+        $items = [];
+
+        foreach ($releaseFees as $fee) {
+            $feeAmount = (float) $fee->amount;
+            $feeType = $fee->fee_type;
+            $calculated = $feeType === 'percentage'
+                ? ($principal * $feeAmount / 100)
+                : $feeAmount;
+
+            $calculated = (float) $calculated;
+            if ($calculated <= 0) {
+                continue;
+            }
+
+            $totalFees += $calculated;
+            $items[] = [
+                'name' => $fee->name,
+                'fee_type' => $feeType,
+                'amount' => $calculated,
+            ];
+        }
+
+        $summary['total_fees'] = $totalFees;
+        $summary['net_disbursement'] = $principal - $totalFees;
+        $summary['items'] = $items;
+
+        return $summary;
+    }
+
+    /**
+     * Post release-date fees (GL + Journal) for a loan disbursement and return total fees.
+     */
+    private function postReleaseFees(Loan $loan, LoanProduct $product, float $principal, string $date, int $userId, int $branchId, int $bankChartAccountId): float
+    {
+        $totalFees = 0.0;
+
+        if (!$product || !$product->fees_ids) {
+            return $totalFees;
+        }
+
+        $feeIds = is_array($product->fees_ids)
+            ? $product->fees_ids
+            : json_decode($product->fees_ids, true);
+
+        if (!is_array($feeIds) || empty($feeIds)) {
+            return $totalFees;
+        }
+
+        $releaseFees = \DB::table('fees')
+            ->whereIn('id', $feeIds)
+            ->where('deduction_criteria', 'charge_fee_on_release_date')
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($releaseFees as $fee) {
+            $feeAmount = (float) $fee->amount;
+            $feeType = $fee->fee_type;
+            $feeName = $fee->name;
+            $chartAccountId = $fee->chart_account_id;
+
+            if (!$chartAccountId || !$bankChartAccountId) {
+                continue;
+            }
+
+            $calculated = $feeType === 'percentage'
+                ? ($principal * $feeAmount / 100)
+                : $feeAmount;
+
+            $calculated = (float) $calculated;
+            if ($calculated <= 0) {
+                continue;
+            }
+
+            $totalFees += $calculated;
+
+            // Journal header
+            $journal = Journal::create([
+                'reference' => $loan->id,
+                'reference_type' => 'Loan Disbursement',
+                'customer_id' => $loan->customer_id,
+                'description' => "{$feeName} Fee for loan #{$loan->id}",
+                'branch_id' => $branchId,
+                'user_id' => $userId,
+                'date' => $date,
+            ]);
+
+            // Credit fee income account
+            JournalItem::create([
+                'journal_id' => $journal->id,
+                'chart_account_id' => $chartAccountId,
+                'amount' => $calculated,
+                'description' => "{$feeName} for loan #{$loan->id}",
+                'nature' => 'credit',
+            ]);
+
+            // Debit bank account chart account (cash out reduced by fee)
+            JournalItem::create([
+                'journal_id' => $journal->id,
+                'chart_account_id' => $bankChartAccountId,
+                'amount' => $calculated,
+                'description' => "{$feeName} for loan #{$loan->id}",
+                'nature' => 'debit',
+            ]);
+
+            // GL credit to fee income
+            GlTransaction::create([
+                'chart_account_id' => $chartAccountId,
+                'customer_id' => $loan->customer_id,
+                'amount' => $calculated,
+                'nature' => 'credit',
+                'transaction_id' => $loan->id,
+                'transaction_type' => 'Loan Disbursement',
+                'date' => $date,
+                'description' => "{$feeName} for loan #{$loan->id}",
+                'branch_id' => $branchId,
+                'user_id' => $userId,
+            ]);
+        }
+
+        return $totalFees;
+    }
+
+    /**
+     * Calculate loan summary (principal, interest, release-date fees, net disbursement)
+     * for confirmation before creating/updating a loan.
+     */
+    public function calculateSummary(Request $request)
+    {
+        try {
+            $data = $request->validate([
+                'product_id'   => 'required|exists:loan_products,id',
+                'amount'       => 'required|numeric|min:0.01',
+                'interest'     => 'required|numeric|min:0',
+                'period'       => 'required|integer|min:1',
+                'date_applied' => 'required|date|before_or_equal:today',
+            ]);
+
+            /** @var LoanProduct $product */
+            $product = LoanProduct::with('principalReceivableAccount')->findOrFail($data['product_id']);
+
+            // Reuse existing product limits validation so summary matches actual creation rules
+            $this->validateProductLimits($data, $product);
+
+            // Build a transient Loan instance so we can reuse its calculators without persisting
+            $loan = new Loan([
+                'product_id'     => $product->id,
+                'amount'         => $data['amount'],
+                'period'         => $data['period'],
+                'interest'       => $data['interest'],
+                'date_applied'   => $data['date_applied'],
+                'interest_cycle' => $request->input('interest_cycle', $product->interest_cycle ?? 'monthly'),
+            ]);
+
+            // Use the same calculation logic as in store()/createLoanFromImport
+            $interestAmount = $loan->calculateInterestAmount($data['interest']);
+
+            // Calculate sum of release-date fees (same pattern as disbursement logic)
+            $releaseFeeTotal = 0;
+            $feeBreakdown = [];
+
+            if ($product && $product->fees_ids) {
+                $feeIds = is_array($product->fees_ids)
+                    ? $product->fees_ids
+                    : json_decode($product->fees_ids, true);
+
+                if (is_array($feeIds) && !empty($feeIds)) {
+                    $releaseFees = \DB::table('fees')
+                        ->whereIn('id', $feeIds)
+                        ->where('deduction_criteria', 'charge_fee_on_release_date')
+                        ->where('status', 'active')
+                        ->get();
+
+                    foreach ($releaseFees as $fee) {
+                        $feeAmount = (float) $fee->amount;
+                        $feeType   = $fee->fee_type;
+
+                        $calculated = $feeType === 'percentage'
+                            ? ((float) $data['amount'] * $feeAmount / 100)
+                            : $feeAmount;
+
+                        $releaseFeeTotal += $calculated;
+
+                        $feeBreakdown[] = [
+                            'name'            => $fee->name,
+                            'fee_type'        => $feeType,
+                            'base_amount'     => $feeAmount,
+                            'calculated_type' => $feeType === 'percentage' ? 'percentage' : 'fixed',
+                            'calculated'      => $calculated,
+                        ];
+                    }
+                }
+            }
+
+            $principal       = (float) $data['amount'];
+            $totalFees       = $releaseFeeTotal;
+            $interestAmount  = (float) $interestAmount;
+            $netDisbursement = $principal - $totalFees;
+
+            return response()->json([
+                'success'          => true,
+                'principal'        => $principal,
+                'interest_amount'  => $interestAmount,
+                'total_fees'       => $totalFees,
+                'net_disbursement' => $netDisbursement,
+                'fee_breakdown'    => $feeBreakdown,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 
@@ -2011,6 +2245,10 @@ class LoanController extends Controller
             'guarantors' // add this if not eager loaded already
         ])->findOrFail($decoded[0]);
 
+        $feeSummary = $this->getFeeSummaryForLoan($loan);
+
+        $feeSummary = $this->getFeeSummaryForLoan($loan);
+
         // Get IDs of guarantors already attached to this loan
         $guarantorIdsAlreadyAdded = $loan->guarantors->pluck('id')->toArray();
 
@@ -2027,7 +2265,7 @@ class LoanController extends Controller
         // Set the encoded ID for the loan object
         $loan->encodedId = $encodedId;
 
-        return view('loans.show', compact('loan', 'guarantorCustomers', 'filetypes', 'bankAccounts'));
+        return view('loans.show', compact('loan', 'guarantorCustomers', 'filetypes', 'bankAccounts', 'feeSummary'));
     }
 
 
@@ -2384,7 +2622,7 @@ class LoanController extends Controller
         // Set the encoded ID for the loan object
         $loan->encodedId = $encodedId;
 
-        return view('loans.show', compact('loan', 'guarantorCustomers', 'filetypes', 'bankAccounts'));
+        return view('loans.show', compact('loan', 'guarantorCustomers', 'filetypes', 'bankAccounts', 'feeSummary'));
     }
 
     public function applicationEdit($encodedId)
@@ -2883,25 +3121,15 @@ class LoanController extends Controller
             'description' => $notes,
         ]);
 
-        $releaseFeeTotal = 0;
-        if ($product && $product->fees_ids) {
-            $feeIds = is_array($product->fees_ids) ? $product->fees_ids : json_decode($product->fees_ids, true);
-            if (is_array($feeIds)) {
-                $releaseFees = \DB::table('fees')
-                    ->whereIn('id', $feeIds)
-                    ->where('deduction_criteria', 'charge_fee_on_release_date')
-                    ->where('status', 'active')
-                    ->get();
-                foreach ($releaseFees as $fee) {
-                    $feeAmount = (float) $fee->amount;
-                    $feeType = $fee->fee_type;
-                    $calculatedFee = $feeType === 'percentage'
-                        ? ((float) $loan->amount * (float) $feeAmount / 100)
-                        : (float) $feeAmount;
-                    $releaseFeeTotal += $calculatedFee;
-                }
-            }
-        }
+        $releaseFeeTotal = $this->postReleaseFees(
+            $loan,
+            $product,
+            (float) $loan->amount,
+            $disburseDate,
+            $userId,
+            $branchId,
+            $bankAccount->chart_account_id
+        );
         $disbursementAmount = $loan->amount - $releaseFeeTotal;
 
         // Create GL Transactions
@@ -3459,7 +3687,7 @@ class LoanController extends Controller
 
         // Calculate outstanding amounts
         $schedules = $loan->schedule ?? collect();
-        
+
         // Outstanding Principal: Original loan amount - total paid principal
         // This avoids rounding errors from summing schedule principal amounts
         $paidPrincipal = $schedules->sum(function ($schedule) {
@@ -3521,7 +3749,7 @@ class LoanController extends Controller
 
         try {
             $restructuringService = new LoanRestructuringService();
-            
+
             $params = [
                 'new_tenure' => $request->new_tenure,
                 'new_interest_rate' => $request->new_interest_rate,
@@ -3530,7 +3758,7 @@ class LoanController extends Controller
             ];
 
             $userId = auth()->id() ?? 1;
-            
+
             // Use the service to restructure the loan
             $restructuredLoan = $restructuringService->restructure($loan, $params, $userId);
 
@@ -3545,7 +3773,6 @@ class LoanController extends Controller
 
             return redirect()->route('loans.show', Hashids::encode($restructuredLoan->id))
                 ->with('success', 'Loan restructured successfully. A new loan has been created with the restructured terms.');
-
         } catch (\Exception $e) {
             Log::error('Loan restructuring failed: ' . $e->getMessage(), [
                 'loan_id' => $loan->id,

@@ -107,6 +107,9 @@ Route::get('/loans/{hashid}/writeoff', [\App\Http\Controllers\LoanController::cl
 // // ...existing code...
 
 Route::get('loans/data', [LoanController::class, 'getLoansData'])->name('loans.data');
+Route::post('loans/calculate-summary', [LoanController::class, 'calculateSummary'])
+    ->name('loans.calculate-summary')
+    ->middleware('auth');
 // Group Members AJAX
 Route::get('group-members-ajax/{group}', [\App\Http\Controllers\GroupMemberAjaxController::class, 'index'])->name('group.members.ajax');
 // Loans in Arrears (30+ days)
@@ -147,13 +150,13 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::get('/management', function () {
         return view('shares.management');
     })->name('management');
-    
+
     // Share Products Routes
     Route::resource('products', \App\Http\Controllers\ShareProductController::class)->except(['show']);
     Route::get('products/data', [\App\Http\Controllers\ShareProductController::class, 'getShareProductsData'])->name('products.data');
     Route::get('products/{encodedId}', [\App\Http\Controllers\ShareProductController::class, 'show'])->name('products.show');
     Route::patch('products/{encodedId}/toggle-status', [\App\Http\Controllers\ShareProductController::class, 'toggleStatus'])->name('products.toggle-status');
-    
+
     // Share Accounts Routes (data route must come BEFORE resource to avoid route conflicts)
     Route::get('accounts/data', [\App\Http\Controllers\ShareAccountController::class, 'getShareAccountsData'])->name('accounts.data');
     Route::get('accounts/export', [\App\Http\Controllers\ShareAccountController::class, 'export'])->name('accounts.export');
@@ -164,12 +167,12 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::get('accounts/{encodedId}/transactions/data', [\App\Http\Controllers\ShareAccountController::class, 'getAccountTransactionsData'])->name('accounts.transactions.data');
     Route::get('accounts/{encodedId}/statement/export', [\App\Http\Controllers\ShareAccountController::class, 'exportStatement'])->name('accounts.statement.export');
     Route::resource('accounts', \App\Http\Controllers\ShareAccountController::class);
-    
+
     // Share Opening Balance Routes
     Route::get('opening-balance', [\App\Http\Controllers\ShareAccountController::class, 'openingBalanceIndex'])->name('opening-balance.index');
     Route::get('opening-balance/download-template', [\App\Http\Controllers\ShareAccountController::class, 'downloadOpeningBalanceTemplate'])->name('opening-balance.download-template');
     Route::post('opening-balance/import', [\App\Http\Controllers\ShareAccountController::class, 'importOpeningBalance'])->name('opening-balance.import');
-    
+
     // Share Deposits Routes (data route must come BEFORE resource to avoid route conflicts)
     Route::get('deposits/data', [\App\Http\Controllers\ShareDepositController::class, 'getShareDepositsData'])->name('deposits.data');
     Route::get('deposits/export', [\App\Http\Controllers\ShareDepositController::class, 'export'])->name('deposits.export');
@@ -180,11 +183,11 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::get('deposits/download-opening-balance-template', [\App\Http\Controllers\ShareDepositController::class, 'downloadOpeningBalanceTemplate'])->name('deposits.download-opening-balance-template');
     Route::post('deposits/{id}/change-status', [\App\Http\Controllers\ShareDepositController::class, 'changeStatus'])->name('deposits.change-status');
     Route::resource('deposits', \App\Http\Controllers\ShareDepositController::class);
-    
+
     Route::get('/withdrawals', function () {
         return view('shares.withdrawals.index');
     })->name('withdrawals.index');
-    
+
     Route::get('/transfers', function () {
         return view('shares.transfers.index');
     })->name('transfers.index');
@@ -203,7 +206,7 @@ Route::middleware(['auth'])->prefix('dividends')->name('dividends.')->group(func
     Route::put('/profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'updateProfitAllocation'])->name('profit-allocations.update');
     Route::delete('/profit-allocations/{encodedId}', [\App\Http\Controllers\DividendController::class, 'destroyProfitAllocation'])->name('profit-allocations.destroy');
     Route::patch('/profit-allocations/{encodedId}/change-status', [\App\Http\Controllers\DividendController::class, 'changeProfitAllocationStatus'])->name('profit-allocations.change-status');
-    
+
     // Dividends Routes
     Route::get('/dividends', [\App\Http\Controllers\DividendController::class, 'dividends'])->name('dividends');
     Route::get('/dividends/data', [\App\Http\Controllers\DividendController::class, 'getDividendsData'])->name('dividends.data');
@@ -346,13 +349,13 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
 
     //Filetypes settings
     Route::resource('filetypes', FiletypeController::class);
-    
+
     //Journal References settings
     Route::resource('journal-references', \App\Http\Controllers\JournalReferenceController::class);
-    
+
     //Complain Categories settings
     Route::resource('complain-categories', \App\Http\Controllers\Settings\ComplainCategoryController::class);
-    
+
     //Announcements settings
     Route::resource('announcements', \App\Http\Controllers\Settings\AnnouncementController::class);
 
@@ -421,7 +424,7 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     // Opening Balance Accounts Settings
     Route::get('/opening-balance-accounts', [SettingsController::class, 'openingBalanceAccountsSettings'])->name('opening-balance-accounts');
     Route::put('/opening-balance-accounts', [SettingsController::class, 'updateOpeningBalanceAccountsSettings'])->name('opening-balance-accounts.update');
-    
+
     // Opening Balance Logs
     Route::get('/opening-balance-logs', [SettingsController::class, 'openingBalanceLogsIndex'])->name('opening-balance-logs.index');
     Route::get('/opening-balance-logs/data', [SettingsController::class, 'getOpeningBalanceLogsData'])->name('opening-balance-logs.data');
@@ -554,7 +557,7 @@ Route::prefix('super-admin')->name('super-admin.')->middleware(['auth', 'role:su
 Route::prefix('accounting')->name('accounting.')->middleware('auth')->group(function () {
     // Accounting Dashboard
     Route::get('/', [AccountingController::class, 'index'])->name('index');
-    
+
     // Account Class Groups
     Route::get('/account-class-groups', [AccountClassGroupController::class, 'index'])->name('account-class-groups.index');
 
@@ -997,6 +1000,7 @@ Route::get('/contributions/reports/transactions', [ContributionController::class
 
 // Investment (UTT) Routes
 use App\Http\Controllers\InvestmentController;
+
 Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(function () {
     // Funds Management
     Route::get('/funds', [InvestmentController::class, 'fundsIndex'])->name('funds.index');
@@ -1007,11 +1011,11 @@ Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(
     Route::get('/funds/{encodedId}/edit', [InvestmentController::class, 'fundsEdit'])->name('funds.edit');
     Route::put('/funds/{encodedId}', [InvestmentController::class, 'fundsUpdate'])->name('funds.update');
     Route::post('/funds/{encodedId}/toggle-status', [InvestmentController::class, 'fundsToggleStatus'])->name('funds.toggle-status');
-    
+
     // Holdings Management
     Route::get('/holdings', [InvestmentController::class, 'holdingsIndex'])->name('holdings.index');
     Route::get('/holdings/data', [InvestmentController::class, 'getHoldingsData'])->name('holdings.data');
-    
+
     // Transactions Management
     Route::get('/transactions', [InvestmentController::class, 'transactionsIndex'])->name('transactions.index');
     Route::get('/transactions/data', [InvestmentController::class, 'getTransactionsData'])->name('transactions.data');
@@ -1021,26 +1025,26 @@ Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(
     Route::post('/transactions/{encodedId}/approve', [InvestmentController::class, 'transactionsApprove'])->name('transactions.approve');
     Route::post('/transactions/{encodedId}/settle', [InvestmentController::class, 'transactionsSettle'])->name('transactions.settle');
     Route::post('/transactions/{encodedId}/cancel', [InvestmentController::class, 'transactionsCancel'])->name('transactions.cancel');
-    
+
     // NAV Prices Management
     Route::get('/nav-prices', [InvestmentController::class, 'navPricesIndex'])->name('nav-prices.index');
     Route::get('/nav-prices/data', [InvestmentController::class, 'getNavPricesData'])->name('nav-prices.data');
     Route::get('/nav-prices/create', [InvestmentController::class, 'navPricesCreate'])->name('nav-prices.create');
     Route::post('/nav-prices', [InvestmentController::class, 'navPricesStore'])->name('nav-prices.store');
-    
+
     // Cash Flows Management
     Route::get('/cash-flows', [InvestmentController::class, 'cashFlowsIndex'])->name('cash-flows.index');
     Route::get('/cash-flows/data', [InvestmentController::class, 'getCashFlowsData'])->name('cash-flows.data');
-    
+
     // Reconciliations Management
     Route::get('/reconciliations', [InvestmentController::class, 'reconciliationsIndex'])->name('reconciliations.index');
     Route::get('/reconciliations/data', [InvestmentController::class, 'getReconciliationsData'])->name('reconciliations.data');
     Route::get('/reconciliations/create', [InvestmentController::class, 'reconciliationsCreate'])->name('reconciliations.create');
     Route::post('/reconciliations', [InvestmentController::class, 'reconciliationsStore'])->name('reconciliations.store');
-    
+
     // Valuation & Reports
     Route::get('/valuation', [InvestmentController::class, 'getPortfolioValuation'])->name('valuation');
-    
+
     // Member View (Read-Only)
     Route::get('/member-view', [InvestmentController::class, 'memberView'])->name('member-view');
 });
@@ -1088,23 +1092,23 @@ Route::middleware(['auth'])->group(function () {
     // New Balance Sheet report
     Route::get('reports/balance-sheet', [NewBalanceSheetReportController::class, 'index'])->name('reports.balance-sheet');
 
-  // Simple SMS send endpoint for navbar modal
-  Route::post('sms/send', function(\Illuminate\Http\Request $request) {
-      $validated = $request->validate([
-          'phone' => 'required|string',
-          'message' => 'required|string|max:500'
-      ]);
-      try {
-          $result = \App\Helpers\SmsHelper::send($validated['phone'], $validated['message']);
-          if (is_array($result) && isset($result['success'])) {
-              return response()->json($result);
-          }
-          return response()->json(['success' => true, 'response' => $result]);
-      } catch (\Throwable $e) {
-          \Log::error('SMS send failed: '.$e->getMessage());
-          return response()->json(['success' => false, 'message' => 'SMS send failed: ' . $e->getMessage()], 500);
-      }
-  })->name('sms.send');
+    // Simple SMS send endpoint for navbar modal
+    Route::post('sms/send', function (\Illuminate\Http\Request $request) {
+        $validated = $request->validate([
+            'phone' => 'required|string',
+            'message' => 'required|string|max:500'
+        ]);
+        try {
+            $result = \App\Helpers\SmsHelper::send($validated['phone'], $validated['message']);
+            if (is_array($result) && isset($result['success'])) {
+                return response()->json($result);
+            }
+            return response()->json(['success' => true, 'response' => $result]);
+        } catch (\Throwable $e) {
+            \Log::error('SMS send failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'SMS send failed: ' . $e->getMessage()], 500);
+        }
+    })->name('sms.send');
 });
 
 ////////////////////////////////////////////// END LOAN CALCULATOR ///////////////////////////////////////////
@@ -1199,7 +1203,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/loans/{loan}/guarantors', [LoanController::class, 'addGuarantor'])->name('loans.addGuarantor');
     Route::delete('/loans/{loan}/guarantors/{guarantor}', [LoanController::class, 'removeGuarantor'])->name('loans.removeGuarantor');
     Route::get('/loans/{encodedId}/export-details', [LoanController::class, 'exportLoanDetails'])->name('loans.export-details');
-    
+
     // Loan Restructuring Routes
     Route::get('/loans/{encodedId}/restructure', [LoanController::class, 'restructure'])->name('loans.restructure');
     Route::post('/loans/{encodedId}/restructure/process', [LoanController::class, 'processRestructure'])->name('loans.restructure.process');
