@@ -599,64 +599,6 @@ class Loan extends Model
             Log::info('fee ids >>>>>>>>>>>>>: ' . json_encode($releaseFeeIds));
         }
 
-        if (!empty($releaseFeeIds)) {
-            $releaseFees = \DB::table('fees')->whereIn('id', $releaseFeeIds)->get();
-            foreach ($releaseFees as $releaseFee) {
-                $feeAmount = (float) $releaseFee->amount;
-                $feeType = $releaseFee->fee_type;
-                $feeName = $releaseFee->name;
-                $chartAccountId = $releaseFee->chart_account_id;
-
-                if ($chartAccountId && $bankChartAccountId) {
-                    $totalFee = $feeType === 'percentage'
-                        ? ((float) $principal * (float) $feeAmount / 100)
-                        : (float) $feeAmount;
-                    $totalFeeFloat = (float) $totalFee;
-
-                    // Create journal and GL transaction for release fee
-                    $journal = \App\Models\Journal::create([
-                        'reference' => $this->id,
-                        'reference_type' => 'Loan Disbursement',
-                        'customer_id' => $this->customer_id,
-                        'description' => "{$feeName}  Fee for loan #{$this->id}",
-                        'branch_id' => $this->branch_id,
-                        'user_id' => auth()->id() ?? 1,
-                        'date' => $this->disbursed_on,
-                    ]);
-
-                    // Credit fee income account
-                    \App\Models\JournalItem::create([
-                        'journal_id' => $journal->id,
-                        'chart_account_id' => $chartAccountId,
-                        'amount' => $totalFeeFloat,
-                        'description' => "{$feeName}  for loan #{$this->id}",
-                        'nature' => 'credit',
-                    ]);
-                    // Debit bank account chart account
-                    \App\Models\JournalItem::create([
-                        'journal_id' => $journal->id,
-                        'chart_account_id' => $bankChartAccountId,
-                        'amount' => $totalFeeFloat,
-                        'description' => "{$feeName} for loan #{$this->id}",
-                        'nature' => 'debit',
-                    ]);
-
-                    \App\Models\GlTransaction::create([
-                        'chart_account_id' => $chartAccountId,
-                        'customer_id' => $this->customer_id,
-                        'amount' => $totalFeeFloat,
-                        'nature' => 'credit',
-                        'transaction_id' => $this->id,
-                        'transaction_type' => 'Loan Disbursement',
-                        'date' => $this->disbursed_on,
-                        'description' => "{$feeName}  for loan #{$this->id}",
-                        'branch_id' => $this->branch_id,
-                        'user_id' => auth()->id() ?? 1,
-                    ]);
-                }
-            }
-        }
-
         foreach ($schedule as $i => $row) {
             $dueDate = $startDate->copy()->{$this->getDateIncrementMethod()}($this->getDateIncrementValue($i));
             $endDate = $dueDate->copy()->addDays(5);
