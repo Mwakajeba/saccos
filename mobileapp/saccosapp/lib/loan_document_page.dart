@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'models/user_session.dart';
 import 'services/api_service.dart';
+import 'document_preview_page.dart';
 
 class LoanDocumentPage extends StatefulWidget {
   final Map<String, dynamic> loanData;
@@ -42,17 +42,83 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
   }
 
   int _loanId() {
-    final id = widget.loanData['id'];
+    // The API returns 'loanid' not 'id' - check both for compatibility
+    final id = widget.loanData['loanid'] ?? widget.loanData['id'];
     if (id == null) {
-      throw Exception('Loan ID is missing');
+      print('ERROR: Loan ID not found in loanData');
+      print('Available keys: ${widget.loanData.keys.toList()}');
+      print('Loan data: ${widget.loanData}');
+      throw Exception('Loan ID is missing. Available keys: ${widget.loanData.keys.toList()}');
     }
     if (id is num) {
       return id.toInt();
     }
     if (id is String) {
-      return int.tryParse(id) ?? 0;
+      final parsed = int.tryParse(id);
+      if (parsed == null) {
+        throw Exception('Loan ID is not a valid number: $id');
+      }
+      return parsed;
     }
-    return 0;
+    throw Exception('Loan ID has invalid type: ${id.runtimeType}');
+  }
+
+  Future<void> _loadDocuments() async {
+    try {
+      final customerId = UserSession.instance.userId;
+      if (customerId == null) {
+        print('ERROR: Customer ID is null');
+        return;
+      }
+
+      final loanId = _loanId();
+      print('=== LOADING DOCUMENTS ===');
+      print('Customer ID: $customerId');
+      print('Loan ID: $loanId');
+
+      if (loanId > 0) {
+        final docsResp = await ApiService.getLoanDocuments(
+          customerId: customerId,
+          loanId: loanId,
+        );
+        
+        print('=== DOCUMENTS API RESPONSE ===');
+        print('Status: ${docsResp['status']}');
+        print('Documents: ${docsResp['documents']}');
+        print('Total: ${docsResp['total']}');
+        
+        final status = docsResp['status'];
+        if (status == 200 || status == '200') {
+          final documentsList = docsResp['documents'];
+          if (documentsList != null && documentsList is List) {
+            setState(() {
+              _documents = documentsList;
+            });
+            print('Loaded ${_documents.length} documents');
+          } else {
+            print('WARNING: documents is not a list or is null. Type: ${documentsList.runtimeType}');
+            setState(() {
+              _documents = [];
+            });
+          }
+        } else {
+          print('WARNING: Documents API returned status $status');
+          setState(() {
+            _documents = [];
+          });
+        }
+      } else {
+        print('WARNING: Invalid loan ID: $loanId');
+        setState(() {
+          _documents = [];
+        });
+      }
+    } catch (e) {
+      print('ERROR loading documents: $e');
+      setState(() {
+        _documents = [];
+      });
+    }
   }
 
   String _loanTitle() => (widget.loanData['product_name'] ?? widget.loanData['product'] ?? 'Mkopo').toString();
@@ -95,28 +161,7 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
       }
 
       // Load documents
-      try {
-        final loanId = _loanId();
-        if (loanId > 0) {
-          final docsResp = await ApiService.getLoanDocuments(
-            customerId: customerId,
-            loanId: loanId,
-          );
-          final status = docsResp['status'];
-          if (status == 200 || status == '200') {
-            _documents = docsResp['documents'] ?? [];
-          } else {
-            print('WARNING: Documents API returned status $status');
-            _documents = [];
-          }
-        } else {
-          print('WARNING: Invalid loan ID: $loanId');
-          _documents = [];
-        }
-      } catch (e) {
-        print('ERROR loading documents: $e');
-        _documents = [];
-      }
+      await _loadDocuments();
 
       // default select first filetype
       if (_filetypes.isNotEmpty && _selectedFiletypeId == null) {
@@ -198,21 +243,50 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
 
     try {
       final customerId = UserSession.instance.userId;
-      if (customerId == null) throw Exception('Tafadhali ingia tena');
+      if (customerId == null) {
+        throw Exception('Tafadhali ingia tena');
+      }
+
+      // Get and validate loan ID
+      int loanId;
+      try {
+        loanId = _loanId();
+        print('=== UPLOAD DEBUG ===');
+        print('Customer ID: $customerId');
+        print('Loan ID: $loanId');
+        print('File Type ID: $_selectedFiletypeId');
+        print('File: ${_selectedFile?.path}');
+        print('Loan Data: ${widget.loanData}');
+        
+        if (loanId <= 0) {
+          throw Exception('Loan ID is missing or invalid. Loan Data: ${widget.loanData}');
+        }
+      } catch (e) {
+        print('ERROR getting loan ID: $e');
+        throw Exception('Loan ID is missing. Please try again or contact support.');
+      }
 
       final resp = await ApiService.uploadLoanDocument(
         customerId: customerId,
-        loanId: _loanId(),
+        loanId: loanId,
         fileTypeId: _selectedFiletypeId!,
         file: _selectedFile!,
       );
 
-      if (resp['status'] == 200) {
-        _showSnack('Nyaraka imepakiwa');
+      print('=== UPLOAD RESPONSE ===');
+      print('Response: $resp');
+      print('Status: ${resp['status']}');
+
+      final status = resp['status'];
+      if (status == 200 || status == '200') {
+        _showSnack('Nyaraka imepakiwa kwa mafanikio');
         setState(() {
           _selectedFile = null;
         });
-        await _loadAll();
+        
+        // Reload documents list
+        print('=== RELOADING DOCUMENTS AFTER UPLOAD ===');
+        await _loadDocuments();
       } else {
         throw Exception(resp['message'] ?? 'Imeshindwa kupakia nyaraka');
       }
@@ -237,13 +311,6 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
     }
   }
 
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      _showSnack('Imeshindwa kufungua nyaraka');
-    }
-  }
 
   void _showSnack(String msg) {
     if (!mounted) return;
@@ -415,6 +482,10 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
                       ..._documents.map((doc) {
                         final typeName = (doc['file_type'] ?? 'Nyaraka').toString();
                         final url = (doc['url'] ?? '').toString();
+                        final fileName = url.split('/').last.isNotEmpty 
+                            ? url.split('/').last 
+                            : '${typeName}_${doc['id'] ?? ''}';
+                        
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(12),
@@ -453,7 +524,20 @@ class _LoanDocumentPageState extends State<LoanDocumentPage> {
                               ),
                               const SizedBox(width: 12),
                               OutlinedButton(
-                                onPressed: url.isEmpty ? null : () => _openUrl(url),
+                                onPressed: url.isEmpty
+                                    ? null
+                                    : () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => DocumentPreviewPage(
+                                              url: url,
+                                              fileName: fileName,
+                                              fileType: typeName,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                 child: const Text('Ona'),
                               ),
                             ],
