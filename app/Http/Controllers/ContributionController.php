@@ -53,12 +53,12 @@ class ContributionController extends Controller
             }
 
             $query = DB::table($tableName);
-            
+
             // Add branch filter if branch_id column exists
             if ($branchId && DB::getSchemaBuilder()->hasColumn($tableName, 'branch_id')) {
                 $query->where('branch_id', $branchId);
             }
-            
+
             // Add company filter if company_id column exists
             if ($companyId && DB::getSchemaBuilder()->hasColumn($tableName, 'company_id')) {
                 $query->where('company_id', $companyId);
@@ -97,9 +97,9 @@ class ContributionController extends Controller
                 'ribaPayableJournal',
                 'charge'
             ])
-            ->where('branch_id', $branchId)
-            ->where('company_id', $companyId)
-            ->select('contribution_products.*');
+                ->where('branch_id', $branchId)
+                ->where('company_id', $companyId)
+                ->select('contribution_products.*');
 
             return DataTables::eloquent($products)
                 ->addColumn('interest_formatted', function ($product) {
@@ -229,27 +229,27 @@ class ContributionController extends Controller
             // This handles cases where multiple products share the same liability account
             $transactions = GlTransaction::where('chart_account_id', $product->liability_account_id)
                 ->where('branch_id', $branchId)
-                ->where(function($query) use ($product) {
+                ->where(function ($query) use ($product) {
                     // Deposits, withdrawals, and journals - all transactions for this product
                     $query->whereIn('transaction_type', ['contribution_deposit', 'contribution_withdrawal', 'journal']);
-                    
+
                     // For transfers: filter by journal items to match the product
                     // Match the GL transaction's nature with journal item's nature AND product name in description
-                    $query->orWhere(function($q) use ($product) {
+                    $query->orWhere(function ($q) use ($product) {
                         $q->where('transaction_type', 'contribution_transfer')
-                          ->whereExists(function($subQuery) use ($product) {
-                              $subQuery->select(DB::raw(1))
-                                  ->from('journal_items')
-                                  ->join('journals', 'journal_items.journal_id', '=', 'journals.id')
-                                  ->whereColumn('journals.id', 'gl_transactions.transaction_id')
-                                  ->whereColumn('journal_items.nature', 'gl_transactions.nature') // Match nature (debit/credit)
-                                  ->where('journal_items.chart_account_id', $product->liability_account_id)
-                                  ->where(function($descQuery) use ($product) {
-                                      // Match journal items that mention this product in description
-                                      $productName = $product->product_name;
-                                      $descQuery->where('journal_items.description', 'LIKE', "%{$productName}%");
-                                  });
-                          });
+                            ->whereExists(function ($subQuery) use ($product) {
+                                $subQuery->select(DB::raw(1))
+                                    ->from('journal_items')
+                                    ->join('journals', 'journal_items.journal_id', '=', 'journals.id')
+                                    ->whereColumn('journals.id', 'gl_transactions.transaction_id')
+                                    ->whereColumn('journal_items.nature', 'gl_transactions.nature') // Match nature (debit/credit)
+                                    ->where('journal_items.chart_account_id', $product->liability_account_id)
+                                    ->where(function ($descQuery) use ($product) {
+                                        // Match journal items that mention this product in description
+                                        $productName = $product->product_name;
+                                        $descQuery->where('journal_items.description', 'LIKE', "%{$productName}%");
+                                    });
+                            });
                     });
                 })
                 ->with(['customer', 'chartAccount'])
@@ -313,17 +313,17 @@ class ContributionController extends Controller
         $user = auth()->user();
         $companyId = $user->company_id;
         $branchId = $user->branch_id;
-        
+
         $chartAccounts = ChartAccount::all();
         $bankAccounts = BankAccount::all();
         $journalReferences = \App\Models\JournalReference::where('company_id', $companyId)
-            ->where(function($query) use ($branchId) {
+            ->where(function ($query) use ($branchId) {
                 $query->where('branch_id', $branchId)
-                      ->orWhereNull('branch_id');
+                    ->orWhereNull('branch_id');
             })
             ->where('is_active', true)
             ->get();
-        
+
         return view('contributions.products.create', compact('chartAccounts', 'bankAccounts', 'journalReferences'));
     }
 
@@ -335,42 +335,42 @@ class ContributionController extends Controller
                 'can_withdraw' => $request->has('can_withdraw') ? 1 : 0,
                 'has_charge' => $request->has('has_charge') ? 1 : 0,
             ]);
-            
-            $validated = $request->validate([
-            'product_name' => 'required|string|max:255',
-            'interest' => 'required|numeric|min:0|max:100',
-            'category' => 'required|in:Voluntary,Mandatory',
-            'auto_create' => 'required|in:Yes,No',
-            'compound_period' => 'required|in:Daily,Monthly',
-            'interest_posting_period' => 'nullable|in:Monthly,Quarterly,Annually',
-            'interest_calculation_type' => 'required|in:Daily,Monthly,Annually',
-            'lockin_period_frequency' => 'required|integer|min:0',
-            'lockin_period_frequency_type' => 'required|in:Days,Months',
-            'automatic_opening_balance' => 'required|numeric|min:0',
-            'minimum_balance_for_interest_calculations' => 'required|numeric|min:0',
-            'description' => 'nullable|string',
-            'can_withdraw' => 'required|boolean',
-            'has_charge' => 'required|boolean',
-            'charge_id' => 'nullable|exists:fees,id',
-            'charge_type' => 'nullable|required_if:has_charge,1|in:Fixed,Percentage',
-            'charge_amount' => 'nullable|required_if:has_charge,1|numeric|min:0',
-            'bank_account_id' => 'required|exists:chart_accounts,id',
-            'journal_reference_id' => 'required|exists:journal_references,id',
-            'riba_journal_id' => 'required|exists:journal_references,id',
-            'pay_loan_journal_id' => 'required|exists:journal_references,id',
-            'liability_account_id' => 'required|exists:chart_accounts,id',
-            'expense_account_id' => 'required|exists:chart_accounts,id',
-            'riba_payable_account_id' => 'required|exists:chart_accounts,id',
-            'withholding_account_id' => 'required|exists:chart_accounts,id',
-            'withholding_percentage' => 'nullable|numeric|min:0|max:100',
-            'riba_payable_journal_id' => 'required|exists:journal_references,id',
-        ]);
 
-        // Ensure boolean values are properly cast (already normalized above, but ensure boolean type)
-        $validated['can_withdraw'] = (bool) $validated['can_withdraw'];
-        $validated['has_charge'] = (bool) $validated['has_charge'];
-        $validated['company_id'] = auth()->user()->company_id;
-        $validated['branch_id'] = auth()->user()->branch_id;
+            $validated = $request->validate([
+                'product_name' => 'required|string|max:255',
+                'interest' => 'required|numeric|min:0|max:100',
+                'category' => 'required|in:Voluntary,Mandatory',
+                'auto_create' => 'required|in:Yes,No',
+                'compound_period' => 'required|in:Daily,Monthly',
+                'interest_posting_period' => 'nullable|in:Monthly,Quarterly,Annually',
+                'interest_calculation_type' => 'required|in:Daily,Monthly,Annually',
+                'lockin_period_frequency' => 'required|integer|min:0',
+                'lockin_period_frequency_type' => 'required|in:Days,Months',
+                'automatic_opening_balance' => 'required|numeric|min:0',
+                'minimum_balance_for_interest_calculations' => 'required|numeric|min:0',
+                'description' => 'nullable|string',
+                'can_withdraw' => 'required|boolean',
+                'has_charge' => 'required|boolean',
+                'charge_id' => 'nullable|exists:fees,id',
+                'charge_type' => 'nullable|required_if:has_charge,1|in:Fixed,Percentage',
+                'charge_amount' => 'nullable|required_if:has_charge,1|numeric|min:0',
+                'bank_account_id' => 'required|exists:chart_accounts,id',
+                'journal_reference_id' => 'required|exists:journal_references,id',
+                'riba_journal_id' => 'required|exists:journal_references,id',
+                'pay_loan_journal_id' => 'required|exists:journal_references,id',
+                'liability_account_id' => 'required|exists:chart_accounts,id',
+                'expense_account_id' => 'required|exists:chart_accounts,id',
+                'riba_payable_account_id' => 'required|exists:chart_accounts,id',
+                'withholding_account_id' => 'required|exists:chart_accounts,id',
+                'withholding_percentage' => 'nullable|numeric|min:0|max:100',
+                'riba_payable_journal_id' => 'required|exists:journal_references,id',
+            ]);
+
+            // Ensure boolean values are properly cast (already normalized above, but ensure boolean type)
+            $validated['can_withdraw'] = (bool) $validated['can_withdraw'];
+            $validated['has_charge'] = (bool) $validated['has_charge'];
+            $validated['company_id'] = auth()->user()->company_id;
+            $validated['branch_id'] = auth()->user()->branch_id;
 
             ContributionProduct::create($validated);
 
@@ -457,12 +457,12 @@ class ContributionController extends Controller
 
         // Get product ID from query parameter if provided
         $productId = $request->get('product_id');
-        
+
         // Get active contribution products
         $productsQuery = ContributionProduct::where('branch_id', $branchId)
             ->where('company_id', $companyId)
             ->where('is_active', true);
-        
+
         // If product_id is provided, filter to that product only
         if ($productId) {
             $decoded = Hashids::decode($productId);
@@ -470,13 +470,13 @@ class ContributionController extends Controller
                 $productsQuery->where('id', $decoded[0]);
             }
         }
-        
+
         $products = $productsQuery->orderBy('product_name')->get();
 
         // Get customers with contribution accounts for current branch/company
-        $customersQuery = Customer::whereHas('contributionAccounts', function($query) use ($branchId, $companyId, $productId) {
+        $customersQuery = Customer::whereHas('contributionAccounts', function ($query) use ($branchId, $companyId, $productId) {
             $query->where('branch_id', $branchId)
-                  ->where('company_id', $companyId);
+                ->where('company_id', $companyId);
             // If product_id is provided, filter customers by that product
             if ($productId) {
                 $decoded = Hashids::decode($productId);
@@ -485,8 +485,8 @@ class ContributionController extends Controller
                 }
             }
         })
-        ->where('branch_id', $branchId)
-        ->where('company_id', $companyId);
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId);
 
         $customers = $customersQuery->orderBy('name')->get();
 
@@ -595,10 +595,210 @@ class ContributionController extends Controller
 
             return redirect()->route('contributions.deposits.index')
                 ->with('success', "Contribution deposit of " . number_format($request->amount, 2) . " successfully recorded.");
-
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Failed to process deposit: ' . $e->getMessage()])->withInput();
+        }
+    }
+
+    public function depositsBulkCreate()
+    {
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        // Get active contribution products
+        $products = ContributionProduct::where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->orderBy('product_name')
+            ->get();
+
+        // Get bank accounts
+        $bankAccounts = BankAccount::with('chartAccount')
+            ->orderBy('name')
+            ->get();
+
+        return view('contributions.deposits.bulk-create', compact('products', 'bankAccounts'));
+    }
+
+    public function downloadDepositTemplate(Request $request)
+    {
+        $validator = \Validator::make($request->all(), [
+            'contribution_product_id' => 'required|exists:contribution_products,id',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        try {
+            $contributionProductId = $request->contribution_product_id;
+            $fileName = 'contribution_deposit_import_template_' . date('Y-m-d') . '.xlsx';
+
+            return \Maatwebsite\Excel\Facades\Excel::download(
+                new \App\Exports\ContributionDepositImportTemplateExport($contributionProductId),
+                $fileName
+            );
+        } catch (\Exception $e) {
+            \Log::error('Contribution Deposit Template Download Error: ' . $e->getMessage());
+
+            return redirect()->back()
+                ->with('error', 'Failed to generate template: ' . $e->getMessage());
+        }
+    }
+
+    public function depositsBulkStore(Request $request)
+    {
+        $request->validate([
+            'contribution_product_id' => 'required|exists:contribution_products,id',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
+            'import_file' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        try {
+            $user = auth()->user();
+            $branchId = $user->branch_id;
+            $companyId = $user->company_id;
+
+            // Read Excel file
+            $rows = \Maatwebsite\Excel\Facades\Excel::toArray([], $request->file('import_file'));
+            $rows = $rows[0]; // Get first sheet
+
+            // Get header row and create mapping
+            $header = array_shift($rows);
+            $header = array_map(function ($h) {
+                return strtolower(trim((string) $h));
+            }, $header);
+
+            // Find column indices
+            $customerIdIndex = array_search('customer_id', $header);
+            $customerNameIndex = array_search('customer_name', $header);
+            $amountIndex = array_search('amount', $header);
+            $dateIndex = array_search('date', $header);
+            $descriptionIndex = array_search('description', $header);
+
+            if ($customerIdIndex === false || $amountIndex === false || $dateIndex === false) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Excel file must contain customer_id, amount, and date columns'
+                ], 400);
+            }
+
+            // Prepare data for job
+            $dataRows = [];
+            foreach ($rows as $row) {
+                // Skip empty rows
+                if (empty(array_filter($row))) {
+                    continue;
+                }
+
+                $dataRows[] = [
+                    'customer_id' => isset($row[$customerIdIndex]) ? trim($row[$customerIdIndex]) : '',
+                    'customer_name' => isset($row[$customerNameIndex]) ? trim($row[$customerNameIndex]) : '',
+                    'amount' => isset($row[$amountIndex]) ? trim($row[$amountIndex]) : '',
+                    'date' => isset($row[$dateIndex]) ? trim($row[$dateIndex]) : '',
+                    'description' => isset($row[$descriptionIndex]) ? trim($row[$descriptionIndex]) : '',
+                ];
+            }
+
+            if (empty($dataRows)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'No data rows found in the Excel file'
+                ], 400);
+            }
+
+            // Generate unique job ID
+            $jobId = 'bulk_deposit_' . uniqid() . '_' . time();
+
+            // Dispatch job for processing
+            \App\Jobs\BulkContributionDepositJob::dispatch(
+                $dataRows,
+                $request->contribution_product_id,
+                $request->bank_account_id,
+                $user->id,
+                $jobId
+            );
+
+            // Auto-start queue worker to process the job immediately
+            try {
+                \Illuminate\Support\Facades\Artisan::call('queue:work', [
+                    '--once' => true,
+                    '--timeout' => 600,
+                    '--tries' => 1,
+                ]);
+            } catch (\Exception $e) {
+                \Log::warning('Failed to auto-start queue worker: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'job_id' => $jobId,
+                'message' => 'Bulk deposit import has been queued and processing has started.'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Contribution Deposit Bulk Import Error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to process import: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getBulkDepositProgress($jobId)
+    {
+        try {
+            $progress = \Illuminate\Support\Facades\Cache::get("bulk_deposit_progress_{$jobId}");
+
+            if (!$progress) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Progress not found. The job may have expired or not started yet.'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'progress' => $progress
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Get Bulk Deposit Progress Error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get progress: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function downloadFailedDeposits($jobId)
+    {
+        try {
+            $failedRecords = \Illuminate\Support\Facades\Cache::get("bulk_deposit_failed_{$jobId}");
+
+            if (!$failedRecords || empty($failedRecords)) {
+                return redirect()->route('contributions.deposits.index')
+                    ->with('error', 'No failed records found for this import.');
+            }
+
+            $fileName = 'failed_contribution_deposits_' . date('Y-m-d_His') . '.xlsx';
+
+            // Store a flag in session to redirect after download
+            session()->flash('redirect_after_download', route('contributions.deposits.index'));
+
+            return \Maatwebsite\Excel\Facades\Excel::download(
+                new \App\Exports\ContributionDepositFailedRecordsExport($failedRecords),
+                $fileName
+            );
+        } catch (\Exception $e) {
+            \Log::error('Download Failed Deposits Error: ' . $e->getMessage());
+
+            return redirect()->route('contributions.deposits.index')
+                ->with('error', 'Failed to download failed records: ' . $e->getMessage());
         }
     }
 
@@ -660,12 +860,12 @@ class ContributionController extends Controller
 
         // Get product ID from query parameter if provided
         $productId = $request->get('product_id');
-        
+
         // Get active contribution products
         $productsQuery = ContributionProduct::where('is_active', true)
             ->where('branch_id', $branchId)
             ->where('company_id', $companyId);
-        
+
         // If product_id is provided, filter to that product only
         if ($productId) {
             $decoded = Hashids::decode($productId);
@@ -673,18 +873,18 @@ class ContributionController extends Controller
                 $productsQuery->where('id', $decoded[0]);
             }
         }
-        
+
         $products = $productsQuery->orderBy('product_name')->get();
 
         // Get customers with contribution accounts for current branch/company
-        $customers = Customer::whereHas('contributionAccounts', function($query) use ($branchId, $companyId) {
+        $customers = Customer::whereHas('contributionAccounts', function ($query) use ($branchId, $companyId) {
             $query->where('branch_id', $branchId)
-                  ->where('company_id', $companyId);
+                ->where('company_id', $companyId);
         })
-        ->where('branch_id', $branchId)
-        ->where('company_id', $companyId)
-        ->orderBy('name')
-        ->get();
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->orderBy('name')
+            ->get();
 
         // Get bank accounts
         $bankAccounts = BankAccount::with('chartAccount')
@@ -801,7 +1001,6 @@ class ContributionController extends Controller
 
             return redirect()->route('contributions.withdrawals.index')
                 ->with('success', "Contribution withdrawal of " . number_format($request->amount, 2) . " successfully recorded.");
-
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Failed to process withdrawal: ' . $e->getMessage()])->withInput();
@@ -820,14 +1019,14 @@ class ContributionController extends Controller
         $companyId = $user->company_id;
 
         // Get all customers with contribution accounts
-        $customers = Customer::whereHas('contributionAccounts', function($query) use ($branchId, $companyId) {
+        $customers = Customer::whereHas('contributionAccounts', function ($query) use ($branchId, $companyId) {
             $query->where('branch_id', $branchId)
-                  ->where('company_id', $companyId);
+                ->where('company_id', $companyId);
         })
-        ->where('branch_id', $branchId)
-        ->where('company_id', $companyId)
-        ->orderBy('name')
-        ->get();
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->orderBy('name')
+            ->get();
 
         // Get all active products
         $products = ContributionProduct::where('is_active', true)
@@ -856,8 +1055,10 @@ class ContributionController extends Controller
         $companyId = $user->company_id;
 
         // Validate that source and destination are different
-        if ($request->source_customer_id == $request->destination_customer_id && 
-            $request->source_product_id == $request->destination_product_id) {
+        if (
+            $request->source_customer_id == $request->destination_customer_id &&
+            $request->source_product_id == $request->destination_product_id
+        ) {
             return back()->withErrors(['error' => 'Source and destination cannot be the same.'])->withInput();
         }
 
@@ -893,7 +1094,7 @@ class ContributionController extends Controller
             if (!$destinationAccount) {
                 // Generate account number
                 $accountNumber = $this->generateContributionAccountNumber();
-                
+
                 $destinationAccount = ContributionAccount::create([
                     'customer_id' => $request->destination_customer_id,
                     'contribution_product_id' => $request->destination_product_id,
@@ -985,7 +1186,6 @@ class ContributionController extends Controller
 
             return redirect()->route('contributions.transfers.index')
                 ->with('success', "Transfer of " . number_format($request->amount, 2) . " successfully completed.");
-
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Failed to process transfer: ' . $e->getMessage()])->withInput();
@@ -1039,7 +1239,7 @@ class ContributionController extends Controller
             $journals = Journal::whereIn('id', $transactionIds)
                 ->pluck('reference', 'id')
                 ->toArray();
-            
+
             // Get all destination transactions (credits to liability accounts) for these journals
             $destinationTransactions = GlTransaction::where('transaction_type', 'contribution_transfer')
                 ->where('nature', 'credit')
@@ -1185,7 +1385,7 @@ class ContributionController extends Controller
 
         // Get transactions for display (default: 20 newest, or all if filtered)
         $limit = $request->has('product_id') || $request->has('start_date') || $request->has('end_date') ? null : 20;
-        
+
         if ($limit) {
             $transactions = $query->orderBy('date', 'desc')
                 ->orderBy('id', 'desc')
@@ -1222,15 +1422,15 @@ class ContributionController extends Controller
                 ->first();
 
             // Determine transaction type and amounts
-            $isDeposit = $transaction->transaction_type === 'contribution_deposit' || 
-                        ($transaction->transaction_type === 'journal' && $transaction->nature === 'credit');
-            $isWithdrawal = $transaction->transaction_type === 'contribution_withdrawal' || 
-                           ($transaction->transaction_type === 'journal' && $transaction->nature === 'debit') ||
-                           $transaction->transaction_type === 'contribution_transfer';
-            
+            $isDeposit = $transaction->transaction_type === 'contribution_deposit' ||
+                ($transaction->transaction_type === 'journal' && $transaction->nature === 'credit');
+            $isWithdrawal = $transaction->transaction_type === 'contribution_withdrawal' ||
+                ($transaction->transaction_type === 'journal' && $transaction->nature === 'debit') ||
+                $transaction->transaction_type === 'contribution_transfer';
+
             $credit = $transaction->nature === 'credit' ? $transaction->amount : 0;
             $debit = $transaction->nature === 'debit' ? $transaction->amount : 0;
-            
+
             $runningBalance += $credit - $debit;
 
             // Generate transaction ID prefix and description
@@ -1248,8 +1448,8 @@ class ContributionController extends Controller
             }
 
             $transactionsData[] = [
-                'trx_id' => ($transaction->transaction_type === 'journal' || $transaction->transaction_type === 'contribution_transfer') 
-                    ? $trxPrefix 
+                'trx_id' => ($transaction->transaction_type === 'journal' || $transaction->transaction_type === 'contribution_transfer')
+                    ? $trxPrefix
                     : $trxPrefix . '-' . str_pad($transaction->transaction_id, 6, '0', STR_PAD_LEFT),
                 'date' => $transaction->date->format('Y-m-d'),
                 'description' => $trxDescription,
@@ -1292,9 +1492,9 @@ class ContributionController extends Controller
         $chartAccounts = ChartAccount::all();
         $bankAccounts = BankAccount::all();
         $journalReferences = JournalReference::where('company_id', $companyId)
-            ->where(function($query) use ($branchId) {
+            ->where(function ($query) use ($branchId) {
                 $query->where('branch_id', $branchId)
-                      ->orWhereNull('branch_id');
+                    ->orWhereNull('branch_id');
             })
             ->where('is_active', true)
             ->get();
@@ -1465,7 +1665,7 @@ class ContributionController extends Controller
             );
         } catch (\Exception $e) {
             \Log::error('Contribution Opening Balance Template Download Error: ' . $e->getMessage());
-            
+
             return redirect()->back()
                 ->with('error', 'Failed to generate template: ' . $e->getMessage());
         }
@@ -1527,8 +1727,8 @@ class ContributionController extends Controller
 
                 $dataRows[] = [
                     'customer_no' => trim($row[$customerNoIndex] ?? ''),
-                    'opening_balance_date' => isset($row[$openingBalanceDateIndex]) && !empty(trim($row[$openingBalanceDateIndex])) 
-                        ? trim($row[$openingBalanceDateIndex]) 
+                    'opening_balance_date' => isset($row[$openingBalanceDateIndex]) && !empty(trim($row[$openingBalanceDateIndex]))
+                        ? trim($row[$openingBalanceDateIndex])
                         : $openingBalanceDate,
                     'opening_balance_amount' => trim($row[$openingBalanceAmountIndex] ?? ''),
                     'opening_balance_description' => isset($row[$openingBalanceDescriptionIndex]) ? trim($row[$openingBalanceDescriptionIndex]) : '',
@@ -1559,10 +1759,9 @@ class ContributionController extends Controller
 
             return redirect()->back()
                 ->with('success', 'Opening balance import has been queued and processing has started. Check logs for progress.');
-
         } catch (\Exception $e) {
             \Log::error('Contribution Opening Balance Import Error: ' . $e->getMessage());
-            
+
             return redirect()->back()
                 ->with('error', 'Failed to process import: ' . $e->getMessage())
                 ->withInput();

@@ -983,6 +983,11 @@ Route::get('/contributions/deposits', [ContributionController::class, 'deposits'
 Route::get('/contributions/deposits/data', [ContributionController::class, 'getDepositsData'])->name('contributions.deposits.data')->middleware('auth');
 Route::get('/contributions/deposits/create', [ContributionController::class, 'depositsCreate'])->name('contributions.deposits.create')->middleware('auth');
 Route::post('/contributions/deposits', [ContributionController::class, 'depositsStore'])->name('contributions.deposits.store')->middleware('auth');
+Route::get('/contributions/deposits/bulk-create', [ContributionController::class, 'depositsBulkCreate'])->name('contributions.deposits.bulk-create')->middleware('auth');
+Route::get('/contributions/deposits/download-template', [ContributionController::class, 'downloadDepositTemplate'])->name('contributions.deposits.download-template')->middleware('auth');
+Route::post('/contributions/deposits/bulk-store', [ContributionController::class, 'depositsBulkStore'])->name('contributions.deposits.bulk-store')->middleware('auth');
+Route::get('/contributions/deposits/bulk-progress/{jobId}', [ContributionController::class, 'getBulkDepositProgress'])->name('contributions.deposits.bulk-progress')->middleware('auth');
+Route::get('/contributions/deposits/download-failed/{jobId}', [ContributionController::class, 'downloadFailedDeposits'])->name('contributions.deposits.download-failed')->middleware('auth');
 Route::get('/contributions/opening-balance', [ContributionController::class, 'openingBalanceIndex'])->name('contributions.opening-balance.index')->middleware('auth');
 Route::get('/contributions/opening-balance/download-template', [ContributionController::class, 'downloadOpeningBalanceTemplate'])->name('contributions.opening-balance.download-template')->middleware('auth');
 Route::post('/contributions/opening-balance/import', [ContributionController::class, 'importOpeningBalance'])->name('contributions.opening-balance.import')->middleware('auth');
