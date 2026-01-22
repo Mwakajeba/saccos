@@ -71,24 +71,19 @@ class CustomerController extends Controller
         // Remove any spaces, dashes, or special characters
         $phoneNumber = preg_replace("/[^0-9]/", "", $phoneNumber);
 
-        // If it's 9 digits, add +255 prefix
+        // If it's 9 digits, add 255 prefix
         if (strlen($phoneNumber) === 9) {
-            return "+255" . $phoneNumber;
+            return "255" . $phoneNumber;
         }
 
-        // If it already starts with +255, return as is
-        if (substr($phoneNumber, 0, 4) === "+255") {
+        // If it already starts with 255, return as is (whether length is 12 or not)
+        if (substr($phoneNumber, 0, 3) === "255") {
             return $phoneNumber;
         }
 
-        // If it starts with 255, add +
-        if (substr($phoneNumber, 0, 3) === "255" && strlen($phoneNumber) === 12) {
-            return "+" . $phoneNumber;
-        }
-
-        // If it starts with 0, remove 0 and add +255
+        // If it starts with 0, remove 0 and add 255
         if (substr($phoneNumber, 0, 1) === "0" && strlen($phoneNumber) === 10) {
-            return "+255" . substr($phoneNumber, 1);
+            return "255" . substr($phoneNumber, 1);
         }
 
         // Return as is (shouldn't happen with proper validation)
