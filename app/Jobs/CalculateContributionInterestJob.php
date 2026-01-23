@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\ContributionAccount;
 use App\Models\ContributionProduct;
 use App\Models\InterestOnSaving;
+use App\Models\InterestSavingSummary;
 use App\Models\GlTransaction;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -88,10 +89,69 @@ class CalculateContributionInterestJob implements ShouldQueue
             }
         });
 
+        // Create or update summary for the day
+        $this->createOrUpdateSummary($calculationDate, $processedCount, $skippedCount, $errorCount);
+
         Log::info('CalculateContributionInterestJob completed', [
             'processed' => $processedCount,
             'skipped' => $skippedCount,
             'errors' => $errorCount
+        ]);
+    }
+
+    /**
+     * Create or update daily summary
+     */
+    protected function createOrUpdateSummary(string $calculationDate, int $processedCount, int $skippedCount, int $errorCount): void
+    {
+        // Get all interest records for this date to calculate totals
+        $interestRecords = InterestOnSaving::where('calculation_date', $calculationDate)->get();
+
+        if ($interestRecords->isEmpty()) {
+            Log::info('No interest records found for summary', ['date' => $calculationDate]);
+            return;
+        }
+
+        // Get branch and company from first record (assuming all are from same branch/company for a job run)
+        $firstRecord = $interestRecords->first();
+        $branchId = $firstRecord->branch_id;
+        $companyId = $firstRecord->company_id;
+
+        // Calculate summary totals
+        $totalAccounts = $interestRecords->count();
+        $totalCustomers = $interestRecords->pluck('customer_id')->unique()->count();
+        $totalInterestAmount = $interestRecords->sum('interest_amount_gained');
+        $totalWithholdingAmount = $interestRecords->sum('withholding_amount');
+        $totalNetAmount = $interestRecords->sum('net_amount');
+        $totalBalance = $interestRecords->sum('account_balance_at_interest_calculation');
+
+        $dayOfCalculation = Carbon::parse($calculationDate)->format('l'); // Day name (Monday, Tuesday, etc.)
+
+        // Create or update summary
+        InterestSavingSummary::updateOrCreate(
+            [
+                'calculation_date' => $calculationDate,
+                'branch_id' => $branchId,
+                'company_id' => $companyId,
+            ],
+            [
+                'day_of_calculation' => $dayOfCalculation,
+                'total_accounts' => $totalAccounts,
+                'total_customers' => $totalCustomers,
+                'total_interest_amount' => $totalInterestAmount,
+                'total_withholding_amount' => $totalWithholdingAmount,
+                'total_net_amount' => $totalNetAmount,
+                'total_balance' => $totalBalance,
+                'processed_count' => $processedCount,
+                'skipped_count' => $skippedCount,
+                'error_count' => $errorCount,
+            ]
+        );
+
+        Log::info('Interest saving summary created/updated', [
+            'date' => $calculationDate,
+            'total_accounts' => $totalAccounts,
+            'total_interest' => $totalInterestAmount
         ]);
     }
 
@@ -251,9 +311,10 @@ class CalculateContributionInterestJob implements ShouldQueue
                 return ($balance * $interestRate / 100) / 365;
 
             case 'Monthly':
-                // Monthly rate converted to daily: (monthly_rate / 100) / 30
-                // Assuming the interest field is annual, we convert: (annual_rate / 12) / 30
-                return ($balance * $interestRate / 100) / 30;
+                // Monthly rate converted to daily: (annual_rate / 12) / 30
+                // Assuming the interest field is annual, we convert monthly to daily
+                $monthlyRate = $interestRate / 12; // Convert annual to monthly
+                return ($balance * $monthlyRate / 100) / 30; // Convert monthly to daily
 
             case 'Annually':
             default:

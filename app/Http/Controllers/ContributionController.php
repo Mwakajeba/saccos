@@ -19,8 +19,10 @@ use App\Models\ReceiptItem;
 use App\Models\Payment;
 use App\Models\PaymentItem;
 use App\Models\InterestOnSaving;
+use App\Models\InterestSavingSummary;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
+use Carbon\Carbon;
 
 class ContributionController extends Controller
 {
@@ -1787,7 +1789,7 @@ class ContributionController extends Controller
     }
 
     /**
-     * Ajax endpoint for Interest on Saving DataTable
+     * Ajax endpoint for Interest on Saving Summary DataTable
      */
     public function getInterestOnSavingData(Request $request)
     {
@@ -1796,66 +1798,101 @@ class ContributionController extends Controller
             $branchId = $user->branch_id;
             $companyId = $user->company_id;
 
-            $interestRecords = InterestOnSaving::with([
-                'contributionAccount',
-                'contributionProduct',
-                'customer',
-                'branch',
-                'company'
-            ])
+            $summaries = InterestSavingSummary::with(['branch', 'company'])
                 ->where('branch_id', $branchId)
                 ->where('company_id', $companyId)
-                ->select('interest_on_saving.*');
+                ->select('interest_saving_summary.*');
 
-            return DataTables::eloquent($interestRecords)
-                ->addColumn('customer_name', function ($record) {
-                    return $record->customer->name ?? 'N/A';
+            return DataTables::eloquent($summaries)
+                ->addColumn('calculation_date_formatted', function ($summary) {
+                    return $summary->calculation_date ? $summary->calculation_date->format('Y-m-d') : 'N/A';
                 })
-                ->addColumn('customer_number', function ($record) {
-                    return $record->customer->customerNo ?? 'N/A';
+                ->addColumn('day_of_calculation', function ($summary) {
+                    return $summary->day_of_calculation ?? 'N/A';
                 })
-                ->addColumn('account_number', function ($record) {
-                    return $record->contributionAccount->account_number ?? 'N/A';
+                ->addColumn('total_accounts_formatted', function ($summary) {
+                    return number_format($summary->total_accounts ?? 0);
                 })
-                ->addColumn('product_name', function ($record) {
-                    return $record->contributionProduct->product_name ?? 'N/A';
+                ->addColumn('total_customers_formatted', function ($summary) {
+                    return number_format($summary->total_customers ?? 0);
                 })
-                ->addColumn('calculation_date_formatted', function ($record) {
-                    return $record->calculation_date ? $record->calculation_date->format('Y-m-d') : 'N/A';
+                ->addColumn('total_balance_formatted', function ($summary) {
+                    return number_format($summary->total_balance ?? 0, 2);
                 })
-                ->addColumn('day_of_calculation', function ($record) {
-                    return $record->date_of_calculation ? $record->date_of_calculation->format('l') : 'N/A';
+                ->addColumn('total_interest_amount_formatted', function ($summary) {
+                    return number_format($summary->total_interest_amount ?? 0, 2);
                 })
-                ->addColumn('balance_formatted', function ($record) {
-                    return number_format($record->account_balance_at_interest_calculation ?? 0, 2);
+                ->addColumn('total_withholding_amount_formatted', function ($summary) {
+                    return number_format($summary->total_withholding_amount ?? 0, 2);
                 })
-                ->addColumn('interest_rate_formatted', function ($record) {
-                    return number_format($record->interest_rate ?? 0, 2) . '%';
+                ->addColumn('total_net_amount_formatted', function ($summary) {
+                    return number_format($summary->total_net_amount ?? 0, 2);
                 })
-                ->addColumn('interest_amount_formatted', function ($record) {
-                    return number_format($record->interest_amount_gained ?? 0, 2);
-                })
-                ->addColumn('withholding_amount_formatted', function ($record) {
-                    return number_format($record->withholding_amount ?? 0, 2);
-                })
-                ->addColumn('net_amount_formatted', function ($record) {
-                    return number_format($record->net_amount ?? 0, 2);
-                })
-                ->addColumn('posted_badge', function ($record) {
-                    if ($record->posted) {
-                        return '<span class="badge bg-success">Posted</span>';
-                    } else {
-                        $reason = $record->reason ?? 'Waiting for approval';
-                        return '<span class="badge bg-warning" title="' . e($reason) . '">Pending</span>';
+                ->addColumn('stats_badge', function ($summary) {
+                    $stats = [];
+                    if ($summary->processed_count > 0) {
+                        $stats[] = '<span class="badge bg-success">' . $summary->processed_count . ' Processed</span>';
                     }
+                    if ($summary->skipped_count > 0) {
+                        $stats[] = '<span class="badge bg-secondary">' . $summary->skipped_count . ' Skipped</span>';
+                    }
+                    if ($summary->error_count > 0) {
+                        $stats[] = '<span class="badge bg-danger">' . $summary->error_count . ' Errors</span>';
+                    }
+                    return implode(' ', $stats) ?: '<span class="badge bg-info">No data</span>';
                 })
-                ->addColumn('reason_text', function ($record) {
-                    return $record->reason ?? 'Waiting for approval';
+                ->addColumn('actions', function ($summary) {
+                    $encodedDate = Hashids::encode($summary->id);
+                    $viewUrl = route('contributions.interest-on-saving.show', $summary->calculation_date->format('Y-m-d'));
+                    return '<a href="' . $viewUrl . '" class="btn btn-sm btn-info" title="View Details"><i class="bx bx-show"></i> View</a>';
                 })
-                ->rawColumns(['posted_badge'])
+                ->rawColumns(['stats_badge', 'actions'])
+                ->orderColumn('calculation_date', 'calculation_date DESC')
                 ->make(true);
         }
 
         return response()->json(['error' => 'Invalid request'], 400);
+    }
+
+    /**
+     * Show detailed interest records for a specific date
+     */
+    public function interestOnSavingShow($date)
+    {
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        // Validate date format
+        try {
+            $calculationDate = Carbon::parse($date)->format('Y-m-d');
+        } catch (\Exception $e) {
+            abort(404, 'Invalid date format');
+        }
+
+        // Get summary
+        $summary = InterestSavingSummary::where('calculation_date', $calculationDate)
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->first();
+
+        if (!$summary) {
+            abort(404, 'Summary not found for this date');
+        }
+
+        // Get all interest records for this date
+        $interestRecords = InterestOnSaving::with([
+            'contributionAccount',
+            'contributionProduct',
+            'customer'
+        ])
+            ->where('calculation_date', $calculationDate)
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->orderBy('customer_id')
+            ->orderBy('contribution_product_id')
+            ->get();
+
+        return view('contributions.interest-on-saving.show', compact('summary', 'interestRecords', 'calculationDate'));
     }
 }

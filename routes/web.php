@@ -993,6 +993,7 @@ Route::get('/contributions/opening-balance/download-template', [ContributionCont
 Route::post('/contributions/opening-balance/import', [ContributionController::class, 'importOpeningBalance'])->name('contributions.opening-balance.import')->middleware('auth');
 Route::get('/contributions/interest-on-saving', [ContributionController::class, 'interestOnSaving'])->name('contributions.interest-on-saving.index')->middleware('auth');
 Route::get('/contributions/interest-on-saving/data', [ContributionController::class, 'getInterestOnSavingData'])->name('contributions.interest-on-saving.data')->middleware('auth');
+Route::get('/contributions/interest-on-saving/{date}', [ContributionController::class, 'interestOnSavingShow'])->name('contributions.interest-on-saving.show')->middleware('auth');
 Route::get('/contributions/withdrawals', [ContributionController::class, 'withdrawals'])->name('contributions.withdrawals.index')->middleware('auth');
 Route::get('/contributions/withdrawals/data', [ContributionController::class, 'getWithdrawalsData'])->name('contributions.withdrawals.data')->middleware('auth');
 Route::get('/contributions/withdrawals/create', [ContributionController::class, 'withdrawalsCreate'])->name('contributions.withdrawals.create')->middleware('auth');

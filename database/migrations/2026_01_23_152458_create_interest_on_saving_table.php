@@ -20,19 +20,19 @@ return new class extends Migration
             $table->foreignId('contribution_account_id')->constrained('contribution_accounts')->onDelete('cascade');
             $table->foreignId('contribution_product_id')->constrained('contribution_products')->onDelete('cascade');
             $table->foreignId('customer_id')->constrained('customers')->onDelete('cascade');
-            $table->date('calculation_date'); // The date interest was calculated
-            $table->date('date_of_calculation'); // Day of calculation (same as calculation_date, but kept for clarity)
+            $table->date('calculation_date'); // Date interest was calculated
+            $table->date('date_of_calculation'); // Day of calculation
             $table->decimal('interest_rate', 8, 2); // Rate at time of calculation
             $table->decimal('interest_amount_gained', 15, 2); // Calculated interest amount
             $table->decimal('account_balance_at_interest_calculation', 15, 2); // Balance used
             $table->decimal('withholding_percentage', 5, 2)->nullable();
             $table->decimal('withholding_amount', 15, 2)->default(0);
-            $table->decimal('net_amount', 15, 2); // After deducting withholding amount
+            $table->decimal('net_amount', 15, 2); // After deducting withholding
             $table->text('description')->nullable();
             $table->boolean('posted')->default(false);
             $table->string('reason')->nullable(); // Reason if not posted (e.g., "waiting for approval")
-            $table->foreignId('branch_id')->nullable()->constrained('branches')->onDelete('set null');
-            $table->foreignId('company_id')->nullable()->constrained('companies')->onDelete('set null');
+            $table->foreignId('branch_id')->constrained('branches')->onDelete('cascade');
+            $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
             $table->foreignId('created_by')->nullable()->constrained('users')->onDelete('set null');
             $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');
             $table->timestamps();
