@@ -18,6 +18,7 @@ use App\Models\Receipt;
 use App\Models\ReceiptItem;
 use App\Models\Payment;
 use App\Models\PaymentItem;
+use App\Models\InterestOnSaving;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -37,6 +38,7 @@ class ContributionController extends Controller
             'withdrawals' => $this->getCount('contribution_withdrawals', $branchId, $companyId),
             'transfers' => $this->getCount('contribution_transfers', $branchId, $companyId),
             'opening_balances' => 0, // Placeholder for opening balance count
+            'interest_on_saving' => $this->getCount('interest_on_saving', $branchId, $companyId),
         ];
 
         return view('contributions.index', compact('stats'));
@@ -1774,5 +1776,86 @@ class ContributionController extends Controller
                 ->with('error', 'Failed to process import: ' . $e->getMessage())
                 ->withInput();
         }
+    }
+
+    /**
+     * Show interest on saving view
+     */
+    public function interestOnSaving()
+    {
+        return view('contributions.interest-on-saving.index');
+    }
+
+    /**
+     * Ajax endpoint for Interest on Saving DataTable
+     */
+    public function getInterestOnSavingData(Request $request)
+    {
+        if ($request->ajax()) {
+            $user = auth()->user();
+            $branchId = $user->branch_id;
+            $companyId = $user->company_id;
+
+            $interestRecords = InterestOnSaving::with([
+                'contributionAccount',
+                'contributionProduct',
+                'customer',
+                'branch',
+                'company'
+            ])
+                ->where('branch_id', $branchId)
+                ->where('company_id', $companyId)
+                ->select('interest_on_saving.*');
+
+            return DataTables::eloquent($interestRecords)
+                ->addColumn('customer_name', function ($record) {
+                    return $record->customer->name ?? 'N/A';
+                })
+                ->addColumn('customer_number', function ($record) {
+                    return $record->customer->customerNo ?? 'N/A';
+                })
+                ->addColumn('account_number', function ($record) {
+                    return $record->contributionAccount->account_number ?? 'N/A';
+                })
+                ->addColumn('product_name', function ($record) {
+                    return $record->contributionProduct->product_name ?? 'N/A';
+                })
+                ->addColumn('calculation_date_formatted', function ($record) {
+                    return $record->calculation_date ? $record->calculation_date->format('Y-m-d') : 'N/A';
+                })
+                ->addColumn('day_of_calculation', function ($record) {
+                    return $record->date_of_calculation ? $record->date_of_calculation->format('l') : 'N/A';
+                })
+                ->addColumn('balance_formatted', function ($record) {
+                    return number_format($record->account_balance_at_interest_calculation ?? 0, 2);
+                })
+                ->addColumn('interest_rate_formatted', function ($record) {
+                    return number_format($record->interest_rate ?? 0, 2) . '%';
+                })
+                ->addColumn('interest_amount_formatted', function ($record) {
+                    return number_format($record->interest_amount_gained ?? 0, 2);
+                })
+                ->addColumn('withholding_amount_formatted', function ($record) {
+                    return number_format($record->withholding_amount ?? 0, 2);
+                })
+                ->addColumn('net_amount_formatted', function ($record) {
+                    return number_format($record->net_amount ?? 0, 2);
+                })
+                ->addColumn('posted_badge', function ($record) {
+                    if ($record->posted) {
+                        return '<span class="badge bg-success">Posted</span>';
+                    } else {
+                        $reason = $record->reason ?? 'Waiting for approval';
+                        return '<span class="badge bg-warning" title="' . e($reason) . '">Pending</span>';
+                    }
+                })
+                ->addColumn('reason_text', function ($record) {
+                    return $record->reason ?? 'Waiting for approval';
+                })
+                ->rawColumns(['posted_badge'])
+                ->make(true);
+        }
+
+        return response()->json(['error' => 'Invalid request'], 400);
     }
 }
