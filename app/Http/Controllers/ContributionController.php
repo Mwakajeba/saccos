@@ -332,6 +332,7 @@ class ContributionController extends Controller
         try {
             // Normalize checkbox values before validation (checkboxes don't send value when unchecked)
             $request->merge([
+                'has_interest_on_saving' => $request->has('has_interest_on_saving') ? 1 : 0,
                 'can_withdraw' => $request->has('can_withdraw') ? 1 : 0,
                 'has_charge' => $request->has('has_charge') ? 1 : 0,
             ]);
@@ -339,11 +340,12 @@ class ContributionController extends Controller
             $validated = $request->validate([
                 'product_name' => 'required|string|max:255',
                 'interest' => 'required|numeric|min:0|max:100',
+                'has_interest_on_saving' => 'required|boolean',
                 'category' => 'required|in:Voluntary,Mandatory',
                 'auto_create' => 'required|in:Yes,No',
                 'compound_period' => 'required|in:Daily,Monthly',
                 'interest_posting_period' => 'nullable|in:Monthly,Quarterly,Annually',
-                'interest_calculation_type' => 'required|in:Daily,Monthly,Annually',
+                'interest_calculation_type' => 'nullable|in:Daily,Monthly,Annually',
                 'lockin_period_frequency' => 'required|integer|min:0',
                 'lockin_period_frequency_type' => 'required|in:Days,Months',
                 'automatic_opening_balance' => 'required|numeric|min:0',
@@ -354,23 +356,25 @@ class ContributionController extends Controller
                 'charge_id' => 'nullable|exists:fees,id',
                 'charge_type' => 'nullable|required_if:has_charge,1|in:Fixed,Percentage',
                 'charge_amount' => 'nullable|required_if:has_charge,1|numeric|min:0',
-                'bank_account_id' => 'required|exists:chart_accounts,id',
-                'journal_reference_id' => 'required|exists:journal_references,id',
-                'riba_journal_id' => 'required|exists:journal_references,id',
-                'pay_loan_journal_id' => 'required|exists:journal_references,id',
+                'bank_account_id' => 'nullable|exists:chart_accounts,id',
+                'journal_reference_id' => 'nullable|exists:journal_references,id',
+                'riba_journal_id' => 'nullable|exists:journal_references,id',
+                'pay_loan_journal_id' => 'nullable|exists:journal_references,id',
                 'liability_account_id' => 'required|exists:chart_accounts,id',
                 'expense_account_id' => 'required|exists:chart_accounts,id',
                 'riba_payable_account_id' => 'required|exists:chart_accounts,id',
                 'withholding_account_id' => 'required|exists:chart_accounts,id',
                 'withholding_percentage' => 'nullable|numeric|min:0|max:100',
-                'riba_payable_journal_id' => 'required|exists:journal_references,id',
+                'riba_payable_journal_id' => 'nullable|exists:journal_references,id',
             ]);
 
             // Ensure boolean values are properly cast (already normalized above, but ensure boolean type)
+            $validated['has_interest_on_saving'] = (bool) $validated['has_interest_on_saving'];
             $validated['can_withdraw'] = (bool) $validated['can_withdraw'];
             $validated['has_charge'] = (bool) $validated['has_charge'];
             $validated['company_id'] = auth()->user()->company_id;
             $validated['branch_id'] = auth()->user()->branch_id;
+            $validated['interest_calculation_type'] = $validated['interest_calculation_type'] ?? 'Daily';
 
             ContributionProduct::create($validated);
 
@@ -1524,6 +1528,7 @@ class ContributionController extends Controller
         try {
             // Normalize checkbox values before validation
             $request->merge([
+                'has_interest_on_saving' => $request->has('has_interest_on_saving') ? 1 : 0,
                 'can_withdraw' => $request->has('can_withdraw') ? 1 : 0,
                 'has_charge' => $request->has('has_charge') ? 1 : 0,
             ]);
@@ -1531,11 +1536,12 @@ class ContributionController extends Controller
             $validated = $request->validate([
                 'product_name' => 'required|string|max:255|unique:contribution_products,product_name,' . $product->id,
                 'interest' => 'required|numeric|min:0|max:100',
+                'has_interest_on_saving' => 'required|boolean',
                 'category' => 'required|in:Voluntary,Mandatory',
                 'auto_create' => 'required|in:Yes,No',
                 'compound_period' => 'required|in:Daily,Monthly',
                 'interest_posting_period' => 'nullable|in:Monthly,Quarterly,Annually',
-                'interest_calculation_type' => 'required|in:Daily,Monthly,Annually',
+                'interest_calculation_type' => 'nullable|in:Daily,Monthly,Annually',
                 'lockin_period_frequency' => 'required|integer|min:0',
                 'lockin_period_frequency_type' => 'required|in:Days,Months',
                 'automatic_opening_balance' => 'required|numeric|min:0',
@@ -1546,21 +1552,23 @@ class ContributionController extends Controller
                 'charge_id' => 'nullable|exists:fees,id',
                 'charge_type' => 'nullable|required_if:has_charge,1|in:Fixed,Percentage',
                 'charge_amount' => 'nullable|required_if:has_charge,1|numeric|min:0',
-                'bank_account_id' => 'required|exists:chart_accounts,id',
-                'journal_reference_id' => 'required|exists:journal_references,id',
-                'riba_journal_id' => 'required|exists:journal_references,id',
-                'pay_loan_journal_id' => 'required|exists:journal_references,id',
+                'bank_account_id' => 'nullable|exists:chart_accounts,id',
+                'journal_reference_id' => 'nullable|exists:journal_references,id',
+                'riba_journal_id' => 'nullable|exists:journal_references,id',
+                'pay_loan_journal_id' => 'nullable|exists:journal_references,id',
                 'liability_account_id' => 'required|exists:chart_accounts,id',
                 'expense_account_id' => 'required|exists:chart_accounts,id',
-                'riba_payable_account_id' => 'required|exists:chart_accounts,id',
-                'withholding_account_id' => 'required|exists:chart_accounts,id',
+                'riba_payable_account_id' => 'nullable|exists:chart_accounts,id',
+                'withholding_account_id' => 'nullable|exists:chart_accounts,id',
                 'withholding_percentage' => 'nullable|numeric|min:0|max:100',
-                'riba_payable_journal_id' => 'required|exists:journal_references,id',
+                'riba_payable_journal_id' => 'nullable|exists:journal_references,id',
             ]);
 
             // Ensure boolean values are properly cast
+            $validated['has_interest_on_saving'] = (bool) $validated['has_interest_on_saving'];
             $validated['can_withdraw'] = (bool) $validated['can_withdraw'];
             $validated['has_charge'] = (bool) $validated['has_charge'];
+            $validated['interest_calculation_type'] = $validated['interest_calculation_type'] ?? 'Daily';
 
             $product->update($validated);
 

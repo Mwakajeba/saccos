@@ -1314,6 +1314,60 @@ Route::middleware(['auth'])->group(function () {
 });
 
 
+////////////////////////////////////////////// IMPREST MANAGEMENT ///////////////////////////////////////////
+
+Route::middleware(['auth'])->prefix('imprest')->name('imprest.')->group(function () {
+    // Main dashboard
+    Route::get('/', [App\Http\Controllers\ImprestController::class, 'index'])->name('index');
+
+    // Imprest Settings
+    Route::post('/settings', [App\Http\Controllers\ImprestController::class, 'storeSettings'])->name('settings.store');
+    Route::post('/validate-budget', [App\Http\Controllers\ImprestController::class, 'validateBudget'])->name('validate-budget');
+
+    // Imprest Requests
+    Route::get('/requests', [App\Http\Controllers\ImprestController::class, 'requests'])->name('requests.index');
+    Route::get('/requests/create', [App\Http\Controllers\ImprestController::class, 'create'])->name('requests.create');
+    Route::post('/requests', [App\Http\Controllers\ImprestController::class, 'store'])->name('requests.store');
+    Route::get('/requests/{id}', [App\Http\Controllers\ImprestController::class, 'show'])->name('requests.show');
+    Route::get('/requests/{id}/edit', [App\Http\Controllers\ImprestController::class, 'edit'])->name('requests.edit');
+    Route::put('/requests/{id}', [App\Http\Controllers\ImprestController::class, 'update'])->name('requests.update');
+    Route::delete('/requests/{id}', [App\Http\Controllers\ImprestController::class, 'destroy'])->name('requests.destroy');
+    Route::get('/requests/{id}/print', [App\Http\Controllers\ImprestController::class, 'print'])->name('requests.print');
+
+    // Workflow pages
+    Route::get('/checked', [App\Http\Controllers\ImprestController::class, 'checkedRequests'])->name('checked.index');
+    Route::get('/approved', [App\Http\Controllers\ImprestController::class, 'approvedRequests'])->name('approved.index');
+    Route::get('/disbursed', [App\Http\Controllers\ImprestController::class, 'disbursedRequests'])->name('disbursed.index');
+    Route::get('/closed', [App\Http\Controllers\ImprestController::class, 'closedRequests'])->name('closed.index');
+
+    // Actions
+    Route::post('/requests/{id}/check', [App\Http\Controllers\ImprestActionController::class, 'check'])->name('check');
+    Route::post('/requests/{id}/approve', [App\Http\Controllers\ImprestActionController::class, 'approve'])->name('approve');
+    Route::get('/requests/{id}/disburse', [App\Http\Controllers\ImprestActionController::class, 'showDisburseForm'])->name('disburse.form');
+    Route::post('/requests/{id}/disburse', [App\Http\Controllers\ImprestActionController::class, 'disburse'])->name('disburse');
+    Route::post('/requests/{id}/close', [App\Http\Controllers\ImprestActionController::class, 'close'])->name('close');
+
+    // Liquidation
+    Route::get('/requests/{id}/liquidation/create', [App\Http\Controllers\ImprestLiquidationController::class, 'create'])->name('liquidation.create');
+    Route::post('/requests/{id}/liquidation', [App\Http\Controllers\ImprestLiquidationController::class, 'store'])->name('liquidation.store');
+    Route::get('/liquidation/{id}', [App\Http\Controllers\ImprestLiquidationController::class, 'show'])->name('liquidation.show');
+    Route::post('/liquidation/{id}/verify', [App\Http\Controllers\ImprestLiquidationController::class, 'verify'])->name('liquidation.verify');
+    Route::post('/liquidation/{id}/approve', [App\Http\Controllers\ImprestLiquidationController::class, 'approveLiquidation'])->name('liquidation.approve');
+
+    // Multi-level Approval Settings
+    Route::get('/multi-approval-settings', [App\Http\Controllers\ImprestApprovalSettingsController::class, 'index'])->name('multi-approval-settings.index');
+    Route::post('/multi-approval-settings', [App\Http\Controllers\ImprestApprovalSettingsController::class, 'store'])->name('multi-approval-settings.store');
+    Route::get('/multi-approval-settings/users', [App\Http\Controllers\ImprestApprovalSettingsController::class, 'getUsersByBranch'])->name('multi-approval-settings.users');
+
+    // Multi-level Approvals
+    Route::get('/multi-approvals/pending', [App\Http\Controllers\ImprestMultiApprovalController::class, 'pendingApprovals'])->name('multi-approvals.pending');
+    Route::post('/multi-approvals/{id}/approve', [App\Http\Controllers\ImprestMultiApprovalController::class, 'approve'])->name('multi-approvals.approve');
+    Route::post('/multi-approvals/{id}/reject', [App\Http\Controllers\ImprestMultiApprovalController::class, 'reject'])->name('multi-approvals.reject');
+    Route::get('/multi-approvals/{id}/history', [App\Http\Controllers\ImprestMultiApprovalController::class, 'approvalHistory'])->name('multi-approvals.history');
+});
+
+////////////////////////////////////////////// END IMPREST MANAGEMENT ///////////////////////////////////////////
+
 Route::post('/logout', function (\Illuminate\Http\Request $request) {
     Auth::logout();
     $request->session()->invalidate();
