@@ -79,6 +79,34 @@ class LoanController extends Controller
         // Fetch required data for the receipt form
         $bankAccounts = BankAccount::all();
         $customers = Customer::all();
+        
+        // Get fees with include_in_schedule = true for default line items
+        $defaultLineItemFees = collect();
+        
+        if ($loan->product && $loan->product->fees_ids) {
+            $feeIds = is_array($loan->product->fees_ids) ? $loan->product->fees_ids : json_decode($loan->product->fees_ids, true);
+            if (is_array($feeIds)) {
+                $includedFees = \DB::table('fees')
+                    ->whereIn('id', $feeIds)
+                    ->where('include_in_schedule', true)
+                    ->where('status', 'active')
+                    ->get();
+                    
+                foreach ($includedFees as $fee) {
+                    $amount = (float) $fee->amount;
+                    $calculated = $fee->fee_type === 'percentage'
+                        ? ($loan->amount * $amount / 100)
+                        : $amount;
+                    $defaultLineItemFees->push((object) [
+                        'chart_account_id' => $fee->chart_account_id,
+                        'amount' => $calculated,
+                        'description' => $fee->name,
+                        'fee_name' => $fee->name
+                    ]);
+                }
+            }
+        }
+        
         // Get fees with deduction_criteria = 'do_not_include_in_loan_schedule'
         $excludedFees = \DB::table('fees')
             ->where('deduction_criteria', 'do_not_include_in_loan_schedule')
@@ -111,7 +139,7 @@ class LoanController extends Controller
             ]);
         }
 
-        return view('loans.fees_receipt', compact('loan', 'fees', 'totalFees', 'bankAccounts', 'customers', 'chartAccounts'));
+        return view('loans.fees_receipt', compact('loan', 'fees', 'totalFees', 'bankAccounts', 'customers', 'chartAccounts', 'defaultLineItemFees'));
     }
 
     /**
@@ -3389,6 +3417,398 @@ class LoanController extends Controller
 
         fclose($handle);
         exit;
+    }
+
+    /**
+     * Download bulk repayment import template
+     */
+    public function downloadRepaymentTemplate(Request $request)
+    {
+        $request->validate([
+            'due_date' => 'required|date',
+            'branch_id' => 'required|exists:branches,id'
+        ]);
+
+        $dueDate = $request->input('due_date');
+        $branchId = $request->input('branch_id');
+
+        // First, let's get all schedules for the date without any filters
+        $allSchedules = \App\Models\LoanSchedule::whereDate('due_date', $dueDate)->count();
+        
+        // Query loan schedules due on the specified date
+        $schedulesQuery = \App\Models\LoanSchedule::with(['loan.customer', 'repayments'])
+            ->whereDate('due_date', $dueDate);
+        
+        // Only filter by branch if we have active loans
+        if ($branchId) {
+            $schedulesQuery->whereHas('loan', function($query) use ($branchId) {
+                $query->where('branch_id', $branchId);
+            });
+        }
+        
+        $schedules = $schedulesQuery->orderBy('loan_id')->get();
+
+        // Filter out fully paid schedules
+        $unpaidSchedules = $schedules->filter(function($schedule) {
+            // Calculate total amount due
+            $totalDue = ($schedule->principal ?? 0) + ($schedule->interest ?? 0) + 
+                       ($schedule->fee_amount ?? 0) + ($schedule->penalty_amount ?? 0);
+            
+            // Calculate total paid
+            $totalPaid = $schedule->repayments->sum(function ($repayment) {
+                return ($repayment->principal ?? 0) + ($repayment->interest ?? 0) + 
+                       ($repayment->fee_amount ?? 0) + ($repayment->penalt_amount ?? 0);
+            });
+            
+            // Include schedules that still have remaining balance
+            return ($totalDue - $totalPaid) > 0;
+        });
+
+        if ($unpaidSchedules->isEmpty()) {
+            return redirect()->back()->with('warning', 'No unpaid scheduled payments found for the selected due date. Total schedules in DB for this date: ' . $allSchedules . ', After branch filter: ' . $schedules->count() . ', After filtering unpaid: 0');
+        }
+
+        $fileName = 'bulk_repayment_template_' . $dueDate . '.xlsx';
+        
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\BulkRepaymentTemplateExport($unpaidSchedules), 
+            $fileName
+        );
+    }
+
+    /**
+     * Import bulk loan repayments from Excel
+     */
+    public function bulkRepaymentImport(Request $request)
+    {
+        $validated = $request->validate([
+            'import_file' => 'required|file|mimes:xlsx,xls|max:5120',
+            'branch_id' => 'required|exists:branches,id',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
+            'repayment_date' => 'required|date|before_or_equal:today',
+            'transaction_type' => 'required|in:Receipt,Journal',
+            'skip_errors' => 'nullable|boolean'
+        ]);
+
+        $file = $request->file('import_file');
+        $branchId = $validated['branch_id'];
+        $bankAccountId = $validated['bank_account_id'];
+        $repaymentDate = $validated['repayment_date'];
+        $transactionType = $validated['transaction_type'];
+        $skipErrors = $request->has('skip_errors');
+
+        try {
+            \Log::info('Starting bulk repayment import', [
+                'user_id' => auth()->id(),
+                'branch_id' => $branchId,
+                'transaction_type' => $transactionType,
+                'repayment_date' => $repaymentDate
+            ]);
+
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getRealPath());
+            $worksheet = $spreadsheet->getActiveSheet();
+            $rows = $worksheet->toArray();
+
+            // Skip header row
+            array_shift($rows);
+
+            // Remove empty rows
+            $rows = array_filter($rows, function($row) {
+                return !empty(array_filter($row));
+            });
+
+            $totalRows = count($rows);
+
+            \Log::info('Excel file loaded', [
+                'total_rows' => $totalRows,
+                'sample_row' => $rows[0] ?? null
+            ]);
+
+            // If more than 50 rows, use queue
+            if ($totalRows > 50) {
+                \Log::info('Dispatching to queue (large dataset)', ['row_count' => $totalRows]);
+                
+                \App\Jobs\BulkRepaymentImportJob::dispatch(
+                    array_values($rows), // Reindex array
+                    $branchId,
+                    $bankAccountId,
+                    $repaymentDate,
+                    $transactionType,
+                    auth()->id()
+                );
+
+                return redirect()->back()->with('success', 
+                    "Bulk import queued successfully. {$totalRows} repayments are being processed in the background. Check the logs for progress.");
+            }
+
+            \Log::info('Processing immediately (small dataset)', ['row_count' => $totalRows]);
+
+            // Process immediately for smaller datasets
+            $successCount = 0;
+            $errorCount = 0;
+            $errors = [];
+            $rowNumber = 1;
+
+            foreach ($rows as $row) {
+                $rowNumber++;
+
+                try {
+                    $customer = trim($row[0] ?? '');
+                    $scheduleId = trim($row[1] ?? '');
+                    $loanId = trim($row[2] ?? '');
+                    $amount = trim($row[3] ?? '');
+
+                    // Validate required fields
+                    if (empty($scheduleId)) {
+                        throw new \Exception("Schedule ID is required");
+                    }
+                    if (empty($loanId)) {
+                        throw new \Exception("Loan ID is required");
+                    }
+                    if (empty($amount) || !is_numeric($amount) || $amount <= 0) {
+                        throw new \Exception("Valid payment amount is required");
+                    }
+
+                    // Process within a database transaction
+                    \DB::transaction(function () use ($scheduleId, $loanId, $amount, $branchId, $bankAccountId, $repaymentDate, $transactionType) {
+                        $this->processRepayment($scheduleId, $loanId, $amount, $branchId, $bankAccountId, $repaymentDate, $transactionType);
+                    });
+
+                    $successCount++;
+
+                } catch (\Exception $e) {
+                    $errorCount++;
+                    $errors[] = "Row {$rowNumber} ({$customer}): " . $e->getMessage();
+                    
+                    if (!$skipErrors) {
+                        return redirect()->back()
+                            ->with('warning', 'Import failed at row ' . $rowNumber)
+                            ->with('import_errors', $errors);
+                    }
+                }
+            }
+
+            // Prepare success message
+            $message = "{$successCount} repayment(s) imported successfully.";
+            if ($errorCount > 0) {
+                $message .= " {$errorCount} row(s) skipped due to errors.";
+            }
+
+            \Log::info('Bulk import completed', [
+                'success_count' => $successCount,
+                'error_count' => $errorCount
+            ]);
+
+            if ($errorCount > 0) {
+                return redirect()->back()
+                    ->with('warning', $message)
+                    ->with('import_errors', $errors);
+            }
+
+            return redirect()->back()->with('success', $message);
+
+        } catch (\Exception $e) {
+            \Log::error('Bulk import failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->back()
+                ->with('error', 'Import failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Process individual repayment with GL transactions
+     */
+    protected function processRepayment($scheduleId, $loanId, $amount, $branchId, $bankAccountId, $repaymentDate, $transactionType)
+    {
+        \Log::info('Processing repayment', [
+            'schedule_id' => $scheduleId,
+            'loan_id' => $loanId,
+            'amount' => $amount,
+            'branch_id' => $branchId,
+            'transaction_type' => $transactionType
+        ]);
+
+        // Find the loan schedule
+        $schedule = \App\Models\LoanSchedule::with(['loan.product', 'repayments'])
+            ->where('id', $scheduleId)
+            ->where('loan_id', $loanId)
+            ->first();
+
+        if (!$schedule) {
+            \Log::error('Schedule not found', ['schedule_id' => $scheduleId, 'loan_id' => $loanId]);
+            throw new \Exception("Schedule not found (ID: {$scheduleId})");
+        }
+
+        \Log::info('Schedule found', [
+            'schedule_id' => $schedule->id,
+            'loan_account' => $schedule->loan->account_number ?? 'N/A',
+            'customer' => $schedule->loan->customer->name ?? 'N/A'
+        ]);
+
+        // Verify loan belongs to the selected branch
+        if ($schedule->loan->branch_id != $branchId) {
+            throw new \Exception("Loan does not belong to selected branch");
+        }
+
+        // Check if loan can accept repayments
+        if (!in_array($schedule->loan->status, ['disbursed', 'partially_paid'])) {
+            throw new \Exception("Loan status does not allow repayments (Status: {$schedule->loan->status})");
+        }
+
+        // Check if schedule is already fully paid
+        if ($schedule->remaining_amount <= 0) {
+            throw new \Exception("This schedule is already fully paid");
+        }
+
+        // Get loan product for GL accounts
+        $loanProduct = $schedule->loan->product;
+        if (!$loanProduct) {
+            throw new \Exception("Loan product not found");
+        }
+
+        // Verify GL accounts exist
+        if (!$loanProduct->principal_receivables_account_id) {
+            throw new \Exception("Principal receivables account not configured for loan product");
+        }
+        if (!$loanProduct->interest_receivables_account_id) {
+            throw new \Exception("Interest receivables account not configured for loan product");
+        }
+
+        // Calculate principal and interest portions
+        $totalDue = ($schedule->principal ?? 0) + ($schedule->interest ?? 0);
+        $principalPortion = $totalDue > 0 ? ($amount * ($schedule->principal ?? 0) / $totalDue) : 0;
+        $interestPortion = $totalDue > 0 ? ($amount * ($schedule->interest ?? 0) / $totalDue) : 0;
+
+        $reference = 'BULK_' . strtoupper(substr($transactionType, 0, 3)) . '_' . now()->format('YmdHis') . '_' . $scheduleId;
+        
+        // Create GL Transaction
+        $glTransaction = \App\Models\GlTransaction::create([
+            'branch_id' => $branchId,
+            'transaction_date' => $repaymentDate,
+            'reference_number' => $reference,
+            'description' => 'Bulk loan repayment - ' . $schedule->loan->customer->name,
+            'amount' => $amount,
+            'created_by' => auth()->id(),
+            'status' => 'posted'
+        ]);
+
+        if ($transactionType === 'Receipt') {
+            // Create Receipt
+            $receipt = \App\Models\Receipt::create([
+                'receipt_number' => $reference,
+                'branch_id' => $branchId,
+                'customer_id' => $schedule->loan->customer_id,
+                'receipt_date' => $repaymentDate,
+                'total_amount' => $amount,
+                'payment_method' => 'Bank Transfer',
+                'bank_account_id' => $bankAccountId,
+                'notes' => 'Bulk repayment import',
+                'gl_transaction_id' => $glTransaction->id,
+                'created_by' => auth()->id(),
+                'status' => 'completed'
+            ]);
+
+            // Create Receipt Items
+            if ($principalPortion > 0) {
+                \App\Models\ReceiptItem::create([
+                    'receipt_id' => $receipt->id,
+                    'debit_account_id' => $bankAccountId,
+                    'credit_account_id' => $loanProduct->principal_receivables_account_id,
+                    'amount' => $principalPortion,
+                    'description' => 'Principal repayment'
+                ]);
+            }
+
+            if ($interestPortion > 0) {
+                \App\Models\ReceiptItem::create([
+                    'receipt_id' => $receipt->id,
+                    'debit_account_id' => $bankAccountId,
+                    'credit_account_id' => $loanProduct->interest_receivables_account_id,
+                    'amount' => $interestPortion,
+                    'description' => 'Interest repayment'
+                ]);
+            }
+
+        } else { // Journal
+            // Create Journal
+            $journal = \App\Models\Journal::create([
+                'journal_number' => $reference,
+                'branch_id' => $branchId,
+                'journal_date' => $repaymentDate,
+                'total_debit' => $amount,
+                'total_credit' => $amount,
+                'description' => 'Bulk loan repayment - ' . $schedule->loan->customer->name,
+                'gl_transaction_id' => $glTransaction->id,
+                'created_by' => auth()->id(),
+                'status' => 'posted'
+            ]);
+
+            // Create Journal Items - Debit (Bank Account)
+            \App\Models\JournalItem::create([
+                'journal_id' => $journal->id,
+                'account_id' => $bankAccountId,
+                'debit' => $amount,
+                'credit' => 0,
+                'description' => 'Loan repayment received'
+            ]);
+
+            // Create Journal Items - Credit (Principal Receivables)
+            if ($principalPortion > 0) {
+                \App\Models\JournalItem::create([
+                    'journal_id' => $journal->id,
+                    'account_id' => $loanProduct->principal_receivables_account_id,
+                    'debit' => 0,
+                    'credit' => $principalPortion,
+                    'description' => 'Principal repayment'
+                ]);
+            }
+
+            // Create Journal Items - Credit (Interest Receivables)
+            if ($interestPortion > 0) {
+                \App\Models\JournalItem::create([
+                    'journal_id' => $journal->id,
+                    'account_id' => $loanProduct->interest_receivables_account_id,
+                    'debit' => 0,
+                    'credit' => $interestPortion,
+                    'description' => 'Interest repayment'
+                ]);
+            }
+        }
+
+        // Create Repayment record
+        $repayment = \App\Models\Repayment::create([
+            'loan_id' => $schedule->loan_id,
+            'loan_schedule_id' => $schedule->id,
+            'customer_id' => $schedule->loan->customer_id,
+            'branch_id' => $branchId,
+            'payment_date' => $repaymentDate,
+            'principal' => $principalPortion,
+            'interest' => $interestPortion,
+            'fee_amount' => 0,
+            'penalt_amount' => 0,
+            'total_amount' => $amount,
+            'payment_method' => $transactionType === 'Receipt' ? 'Bank Transfer' : 'Journal Entry',
+            'reference_number' => $reference,
+            'notes' => 'Bulk repayment import (' . $transactionType . ')',
+            'bank_account_id' => $bankAccountId,
+            'gl_transaction_id' => $glTransaction->id,
+            'recorded_by' => auth()->id(),
+            'status' => 'completed'
+        ]);
+
+        // Update loan outstanding balance
+        $schedule->loan->decrement('outstanding_balance', $amount);
+        
+        // Update loan status if fully paid
+        $loan = $schedule->loan->fresh();
+        if ($loan->outstanding_balance <= 0) {
+            $loan->update(['status' => 'paid']);
+        } elseif ($loan->status === 'disbursed') {
+            $loan->update(['status' => 'partially_paid']);
+        }
     }
 
     /**

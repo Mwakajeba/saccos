@@ -1,8 +1,5 @@
 <?php
 
-
-
-
 namespace App\Http\Controllers;
 
 use App\Models\BankAccount;
@@ -29,9 +26,9 @@ ini_set('max_execution_time', 0);
 class CustomerController extends Controller
 {
     /**
-     * Format phone number to standard format
+     * Format phone number to standard format (255 prefix, no +)
      * - If starts with 0, remove 0 and add 255
-     * - If starts with +255, remove +
+     * - If starts with +255, remove + to get 255
      * - Otherwise return as is
      */
     private function formatPhoneNumber($phoneNumber)
@@ -48,19 +45,19 @@ class CustomerController extends Controller
             return "255" . substr($phoneNumber, 1);
         }
 
-        // If starts with +255, remove +
+        // If starts with +255, remove + to get 255
         if (substr($phoneNumber, 0, 4) === "+255") {
             return substr($phoneNumber, 1);
         }
 
-        // Return as is if already in correct format
+        // Return as is if already in correct format (255 prefix)
         return $phoneNumber;
     }
 
     /**
-     * Format phone number to ensure +255 prefix
-     * - Input should be 9 digits (from form input)
-     * - Returns +255 followed by the 9 digits
+     * Format phone number to ensure 255 prefix (without +)
+     * - Input should be 12 digits starting with 255 OR 9 digits
+     * - Returns 255 followed by the 9 digits
      */
     private function formatPhoneNumberWithPrefix($phoneNumber)
     {
@@ -69,15 +66,15 @@ class CustomerController extends Controller
         }
 
         // Remove any spaces, dashes, or special characters
-        $phoneNumber = preg_replace("/[^0-9]/", "", $phoneNumber);
+        $phoneNumber = preg_replace("/[^0-9+]/", "", $phoneNumber);
 
-        // If it's 9 digits, add 255 prefix
-        if (strlen($phoneNumber) === 9) {
-            return "255" . $phoneNumber;
+        // If it already starts with +255, remove + and return
+        if (substr($phoneNumber, 0, 4) === "+255") {
+            return substr($phoneNumber, 1);
         }
 
-        // If it already starts with 255, return as is (whether length is 12 or not)
-        if (substr($phoneNumber, 0, 3) === "255") {
+        // If it starts with 255, return as is
+        if (substr($phoneNumber, 0, 3) === "255" && strlen($phoneNumber) === 12) {
             return $phoneNumber;
         }
 
@@ -86,7 +83,12 @@ class CustomerController extends Controller
             return "255" . substr($phoneNumber, 1);
         }
 
-        // Return as is (shouldn't happen with proper validation)
+        // If it's 9 digits, add 255 prefix
+        if (strlen($phoneNumber) === 9) {
+            return "255" . $phoneNumber;
+        }
+
+        // Return as is
         return $phoneNumber;
     }
 
@@ -290,8 +292,8 @@ class CustomerController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
-            'phone1' => ['required', 'string', 'regex:/^\+255[0-9]{9}$/', 'unique:customers,phone1'],
-            'phone2' => ['nullable', 'string', 'regex:/^\+255[0-9]{9}$/', 'unique:customers,phone2'],
+            'phone1' => ['required', 'string', 'regex:/^255[0-9]{9}$/', 'unique:customers,phone1'],
+            'phone2' => ['nullable', 'string', 'regex:/^255[0-9]{9}$/', 'unique:customers,phone2'],
             'reference' => 'nullable|string|max:255',
             'dob' => ['required', 'date', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
             'sex' => 'required|in:M,F',
@@ -524,8 +526,8 @@ class CustomerController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000', // Added description validation
-            'phone1' => ['required', 'string', 'regex:/^\+255[0-9]{9}$/', 'unique:customers,phone1,' . $customer->id],
-            'phone2' => ['nullable', 'string', 'regex:/^\+255[0-9]{9}$/', 'unique:customers,phone2,' . $customer->id],
+            'phone1' => ['required', 'string', 'regex:/^255[0-9]{9}$/', 'unique:customers,phone1,' . $customer->id],
+            'phone2' => ['nullable', 'string', 'regex:/^255[0-9]{9}$/', 'unique:customers,phone2,' . $customer->id],
             'reference' => 'nullable|string|max:255',
             'dob' => 'required|date',
             'sex' => 'required|in:M,F',

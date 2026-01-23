@@ -18,7 +18,8 @@
 
 <form
     action="{{ $isEdit ? route('accounting.fees.update', Hashids::encode($fee->id)) : route('accounting.fees.store') }}"
-    method="POST">
+    method="POST"
+    onsubmit="return handleFeeFormSubmit(this);">
     @csrf
     @if($isEdit) @method('PUT') @endif
 
@@ -134,6 +135,7 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Include in Schedule</label>
                             <div class="form-check">
+                                <input type="hidden" name="include_in_schedule" value="0">
                                 <input class="form-check-input" type="checkbox" name="include_in_schedule" id="include_in_schedule" value="1" {{ old('include_in_schedule', $fee->include_in_schedule ?? false) ? 'checked' : '' }}>
                                 <label class="form-check-label" for="include_in_schedule">
                                     Yes
@@ -178,6 +180,38 @@
 
 @push('scripts')
     <script>
+        function handleFeeFormSubmit(form) {
+            // Force checkbox values to be submitted reliably
+            const checkboxNames = ['include_in_schedule'];
+            checkboxNames.forEach((name) => {
+                // Remove any previous overrides
+                form.querySelectorAll(`input[type="hidden"][data-checkbox-override="1"][name="${name}"]`).forEach(el => el.remove());
+
+                const cb = form.querySelector(`input[type="checkbox"][name="${name}"]`);
+                if (cb && cb.checked) {
+                    const override = document.createElement('input');
+                    override.type = 'hidden';
+                    override.name = name;
+                    override.value = '1';
+                    override.setAttribute('data-checkbox-override', '1');
+                    // Append at the end so Laravel receives "1" as the last value
+                    form.appendChild(override);
+                }
+            });
+
+            // Prevent multiple submissions
+            if (form.dataset.submitted === "true") return false;
+            form.dataset.submitted = "true";
+
+            // Disable submit buttons
+            form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('opacity-50');
+            });
+
+            return true;
+        }
+
         $(document).ready(function () {
             // Update amount suffix and help text based on fee type
             function updateAmountField() {

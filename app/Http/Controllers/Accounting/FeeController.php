@@ -78,7 +78,7 @@ class FeeController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        if ($request->has('include_in_schedule')) {
+        if ($request->boolean('include_in_schedule')) {
             $existing = Fee::where('include_in_schedule', true)->first();
             if ($existing) {
                 return redirect()->back()
@@ -99,7 +99,7 @@ class FeeController extends Controller
             'description' => $request->description,
             'status' => $request->status,
             'deduction_criteria' => $request->deduction_criteria,
-            'include_in_schedule' => $request->has('include_in_schedule'),
+            'include_in_schedule' => $request->boolean('include_in_schedule'),
             'company_id' => $companyId,
             'branch_id' => $branchId,
             'created_by' => $user->id,
@@ -177,7 +177,7 @@ class FeeController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        if ($request->has('include_in_schedule')) {
+        if ($request->boolean('include_in_schedule')) {
             $existing = Fee::where('include_in_schedule', true)
                 ->where('id', '!=', $fee->id)
                 ->first();
@@ -200,7 +200,7 @@ class FeeController extends Controller
             'description' => $request->description,
             'status' => $request->status,
             'deduction_criteria' => $request->deduction_criteria,
-            'include_in_schedule' => $request->has('include_in_schedule'),
+            'include_in_schedule' => $request->boolean('include_in_schedule'),
             'company_id' => $companyId,
             'branch_id' => $branchId,
             'updated_by' => $user->id,

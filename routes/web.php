@@ -78,6 +78,7 @@ Route::post('/api/customer/loans', [\App\Http\Controllers\Api\CustomerAuthContro
 Route::post('/api/customer/group-members', [\App\Http\Controllers\Api\CustomerAuthController::class, 'groupMembers']);
 Route::get('/api/customer/loan-products', [\App\Http\Controllers\Api\CustomerAuthController::class, 'loanProducts']);
 Route::post('/api/customer/update-photo', [\App\Http\Controllers\Api\CustomerAuthController::class, 'updatePhoto']);
+Route::post('/api/customer/update-password', [\App\Http\Controllers\Api\CustomerAuthController::class, 'updatePassword']);
 Route::post('/api/customer/contributions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'contributions']);
 Route::post('/api/customer/shares', [\App\Http\Controllers\Api\CustomerAuthController::class, 'shares']);
 Route::post('/api/customer/contribution-transactions', [\App\Http\Controllers\Api\CustomerAuthController::class, 'contributionTransactions']);
@@ -1167,6 +1168,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('loans/chart-accounts/{type}', [LoanController::class, 'getChartAccountsByType'])->name('loans.chart-accounts');
     Route::post('loans/import', [LoanController::class, 'importLoans'])->name('loans.import');
     Route::get('loans/import-template', [LoanController::class, 'downloadTemplate'])->name('loans.import-template');
+    
+    // Bulk Repayment Import Routes
+    Route::post('loans/repayments/bulk-import', [LoanController::class, 'bulkRepaymentImport'])->name('loans.repayments.bulk-import');
+    Route::get('loans/repayments/import-template', [LoanController::class, 'downloadRepaymentTemplate'])->name('loans.repayments.import-template');
+    
     Route::get('loans/status/{status}', [LoanController::class, 'loansByStatus'])->name('loans.by-status');
 
     // Opening Balance Routes for loans
