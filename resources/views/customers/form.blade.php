@@ -62,9 +62,9 @@ $isEdit = isset($customer);
         <div class="col-md-6 mb-3">
             <label class="form-label">Phone Number <span class="text-danger">*</span></label>
             <div class="input-group">
-                <span class="input-group-text">+255</span>
+                <span class="input-group-text">255</span>
                 <input type="text" name="phone1" id="phone1" class="form-control @error('phone1') is-invalid @enderror"
-                    value="{{ old('phone1', $customer->phone1 ?? '') }}" placeholder="712345678" maxlength="9" pattern="[0-9]{9}">
+                    value="{{ old('phone1', isset($customer->phone1) ? preg_replace('/^(\+?255)/', '', $customer->phone1) : '') }}" placeholder="712345678" maxlength="9" pattern="[0-9]{9}">
             </div>
             <small class="form-text text-muted">Enter 9 digits (e.g., 712345678)</small>
             @error('phone1') <div class="invalid-feedback">{{ $message }}</div> @enderror
@@ -74,9 +74,9 @@ $isEdit = isset($customer);
         <div class="col-md-6 mb-3">
             <label class="form-label">Alternative Phone Number</label>
             <div class="input-group">
-                <span class="input-group-text">+255</span>
+                <span class="input-group-text">255</span>
                 <input type="text" name="phone2" id="phone2" class="form-control @error('phone2') is-invalid @enderror"
-                    value="{{ old('phone2', $customer->phone2 ?? '') }}" placeholder="712345678" maxlength="9" pattern="[0-9]{9}">
+                    value="{{ old('phone2', isset($customer->phone2) ? preg_replace('/^(\+?255)/', '', $customer->phone2) : '') }}" placeholder="712345678" maxlength="9" pattern="[0-9]{9}">
             </div>
             <small class="form-text text-muted">Enter 9 digits (e.g., 712345678)</small>
             @error('phone2') <div class="invalid-feedback">{{ $message }}</div> @enderror
@@ -521,25 +521,25 @@ $isEdit = isset($customer);
             });
         }
 
-        // Form submission - add +255 prefix to phone numbers
+        // Form submission - add 255 prefix to phone numbers
         if (form) {
             form.addEventListener('submit', function(e) {
                 if (phone1Input && phone1Input.value && phone1Input.value.length === 9) {
-                    // Create a hidden input with +255 prefix
+                    // Create a hidden input with 255 prefix
                     const hiddenInput = document.createElement('input');
                     hiddenInput.type = 'hidden';
                     hiddenInput.name = 'phone1';
-                    hiddenInput.value = '+255' + phone1Input.value;
+                    hiddenInput.value = '255' + phone1Input.value;
                     form.appendChild(hiddenInput);
                     phone1Input.disabled = true; // Disable original input
                 }
 
                 if (phone2Input && phone2Input.value && phone2Input.value.length === 9) {
-                    // Create a hidden input with +255 prefix
+                    // Create a hidden input with 255 prefix
                     const hiddenInput = document.createElement('input');
                     hiddenInput.type = 'hidden';
                     hiddenInput.name = 'phone2';
-                    hiddenInput.value = '+255' + phone2Input.value;
+                    hiddenInput.value = '255' + phone2Input.value;
                     form.appendChild(hiddenInput);
                     phone2Input.disabled = true; // Disable original input
                 }

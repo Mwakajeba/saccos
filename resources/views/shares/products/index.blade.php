@@ -35,7 +35,6 @@
                                 <th>Share Name</th>
                                 <th>Required Share</th>
                                 <th>Nominal Price</th>
-                                <th>Minimum Active Period</th>
                                 <th>Lockin Period</th>
                                 <th>Status</th>
                                 <th class="text-center">Actions</th>
@@ -107,7 +106,6 @@
                 { data: 'share_name', name: 'share_name', title: 'Share Name' },
                 { data: 'required_share_formatted', name: 'required_share', title: 'Required Share' },
                 { data: 'nominal_price_formatted', name: 'nominal_price', title: 'Nominal Price' },
-                { data: 'minimum_active_period_display', name: 'minimum_active_period', title: 'Minimum Active Period' },
                 { data: 'lockin_period_display', name: 'lockin_period_frequency', title: 'Lockin Period' },
                 { data: 'status_badge', name: 'is_active', title: 'Status' },
                 { data: 'actions', name: 'actions', title: 'Actions', orderable: false, searchable: false }

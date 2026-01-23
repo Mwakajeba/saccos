@@ -55,9 +55,9 @@ class CustomerController extends Controller
     }
 
     /**
-     * Format phone number to ensure 255 prefix
-     * - Input should be 9 digits (from form input)
-     * - Returns 255 followed by the 9 digitsccccccccc
+     * Format phone number to ensure 255 prefix (without +)
+     * - Input should be 12 digits starting with 255 OR 9 digits
+     * - Returns 255 followed by the 9 digits
      */
     private function formatPhoneNumberWithPrefix($phoneNumber)
     {
@@ -66,12 +66,7 @@ class CustomerController extends Controller
         }
 
         // Remove any spaces, dashes, or special characters
-        $phoneNumber = preg_replace("/[^0-9]/", "", $phoneNumber);
-
-        // If it's 9 digits, add 255 prefix
-        if (strlen($phoneNumber) === 9) {
-            return "255" . $phoneNumber;
-        }
+        $phoneNumber = preg_replace("/[^0-9+]/", "", $phoneNumber);
 
         // If it already starts with +255, remove + and return
         if (substr($phoneNumber, 0, 4) === "+255") {
@@ -88,7 +83,12 @@ class CustomerController extends Controller
             return "255" . substr($phoneNumber, 1);
         }
 
-        // Return as is (shouldn't happen with proper validation)
+        // If it's 9 digits, add 255 prefix
+        if (strlen($phoneNumber) === 9) {
+            return "255" . $phoneNumber;
+        }
+
+        // Return as is
         return $phoneNumber;
     }
 

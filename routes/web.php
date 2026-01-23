@@ -1163,6 +1163,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('loans/chart-accounts/{type}', [LoanController::class, 'getChartAccountsByType'])->name('loans.chart-accounts');
     Route::post('loans/import', [LoanController::class, 'importLoans'])->name('loans.import');
     Route::get('loans/import-template', [LoanController::class, 'downloadTemplate'])->name('loans.import-template');
+    
+    // Bulk Repayment Import Routes
+    Route::post('loans/repayments/bulk-import', [LoanController::class, 'bulkRepaymentImport'])->name('loans.repayments.bulk-import');
+    Route::get('loans/repayments/import-template', [LoanController::class, 'downloadRepaymentTemplate'])->name('loans.repayments.import-template');
+    
     Route::get('loans/status/{status}', [LoanController::class, 'loansByStatus'])->name('loans.by-status');
 
     // Opening Balance Routes for loans

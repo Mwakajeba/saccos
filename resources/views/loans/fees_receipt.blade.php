@@ -375,11 +375,20 @@
                 addLineItem();
             });
 
-            // Add initial line item
-            addLineItem();
+            // Add default line items from fees with include_in_schedule = true
+            @if(isset($defaultLineItemFees) && $defaultLineItemFees->isNotEmpty())
+                @foreach($defaultLineItemFees as $defaultFee)
+                    addLineItem({{ $defaultFee->chart_account_id }}, {{ $defaultFee->amount }}, '{{ $defaultFee->description }}');
+                @endforeach
+                calculateTotal();
+            @else
+                // Add initial empty line item if no defaults
+                addLineItem();
+            @endif
 
-            function addLineItem() {
+            function addLineItem(defaultAccountId = null, defaultAmount = null, defaultDescription = null) {
                 lineItemCount++;
+                const selectedAttr = (accountId) => (accountId == defaultAccountId) ? 'selected' : '';
                 const lineItemHtml = `
                                     <div class="line-item-row" id="lineItem_${lineItemCount}">
                                         <div class="row">
@@ -389,7 +398,7 @@
                                                     <select class="form-select chart-account-select select2-single" name="line_items[${lineItemCount}][chart_account_id]" required>
                                                         <option value="">-- Select Chart Account --</option>
                                                         @foreach($chartAccounts as $chartAccount)
-                                                            <option value="{{ $chartAccount->id }}">{{ $chartAccount->account_name }} ({{ $chartAccount->account_code }})</option>
+                                                            <option value="{{ $chartAccount->id }}" ${selectedAttr({{ $chartAccount->id }})}>{{ $chartAccount->account_name }} ({{ $chartAccount->account_code }})</option>
                                                         @endforeach
                                                     </select>
                                                 </div>
@@ -398,14 +407,14 @@
                                                 <div class="mb-3">
                                                     <label class="form-label fw-bold">Amount <span class="text-danger">*</span></label>
                                                     <input type="number" class="form-control amount-input" name="line_items[${lineItemCount}][amount]" 
-                                                           step="0.01" min="0.01" placeholder="0.00" required>
+                                                           step="0.01" min="0.01" placeholder="0.00" value="${defaultAmount || ''}" required>
                                                 </div>
                                             </div>
                                             <div class="col-lg-3">
                                                 <div class="mb-3">
                                                     <label class="form-label fw-bold">Description</label>
                                                     <input type="text" class="form-control" name="line_items[${lineItemCount}][description]" 
-                                                           placeholder="Optional description">
+                                                           placeholder="Optional description" value="${defaultDescription || ''}">
                                                 </div>
                                             </div>
                                             <div class="col-lg-1">

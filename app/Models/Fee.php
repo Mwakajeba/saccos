@@ -28,6 +28,7 @@ class Fee extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'include_in_schedule' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',

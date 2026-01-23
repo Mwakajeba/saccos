@@ -211,23 +211,28 @@ class BulkCustomerImportJob implements ShouldQueue
         // Remove any non-digit characters
         $phone = preg_replace('/[^0-9+]/', '', $phone);
         
-        // If it starts with +255, return as is
+        // If it starts with +255, remove + to get 255
         if (strpos($phone, '+255') === 0) {
+            return substr($phone, 1);
+        }
+        
+        // If it starts with 255, return as is
+        if (strpos($phone, '255') === 0 && strlen($phone) === 12) {
             return $phone;
         }
         
-        // If it starts with 255, add +
-        if (strpos($phone, '255') === 0) {
-            return '+' . $phone;
+        // If it starts with 0, replace with 255
+        if (strpos($phone, '0') === 0 && strlen($phone) === 10) {
+            return '255' . substr($phone, 1);
         }
         
-        // If it starts with 0, replace with +255
-        if (strpos($phone, '0') === 0) {
-            return '+255' . substr($phone, 1);
+        // If 9 digits, add 255 prefix
+        if (strlen($phone) === 9) {
+            return '255' . $phone;
         }
         
-        // Otherwise, add +255 prefix
-        return '+255' . $phone;
+        // Otherwise, add 255 prefix
+        return '255' . $phone;
     }
 
     protected function generateShareAccountNumber()
