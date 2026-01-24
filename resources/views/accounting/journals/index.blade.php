@@ -11,15 +11,14 @@
                     <div class="me-auto">
                         <x-breadcrumbs-with-icons :links="[
                             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+                            ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
                             ['label' => 'Journal Entries', 'url' => '#', 'icon' => 'bx bx-book-open']
                         ]" />
                     </div>
                     <div class="ms-auto">
-                        @can('create journal')
                         <a href="{{ route('accounting.journals.create') }}" class="btn btn-primary">
                             <i class="bx bx-plus"></i> New Journal Entry
                         </a>
-                        @endcan
                     </div>
                 </div>
             </div>
@@ -35,7 +34,7 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
                                 <h6 class="mb-1 text-muted">Total Entries</h6>
-                                <h4 class="mb-0 text-primary">{{ $journals->count() }}</h4>
+                                <h4 class="mb-0 text-primary" id="stat-total-entries">{{ $journals->count() }}</h4>
                             </div>
                             <div class="widgets-icons bg-gradient-primary text-white">
                                 <i class='bx bx-book'></i>
@@ -50,7 +49,7 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
                                 <h6 class="mb-1 text-muted">Total Debit</h6>
-                                <h4 class="mb-0 text-success">TZS {{ number_format($journals->sum('debit_total'), 2) }}</h4>
+                                <h4 class="mb-0 text-success" id="stat-total-debit">TZS {{ number_format($journals->sum('debit_total'), 2) }}</h4>
                             </div>
                             <div class="widgets-icons bg-gradient-success text-white">
                                 <i class='bx bx-plus'></i>
@@ -65,7 +64,7 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
                                 <h6 class="mb-1 text-muted">Total Credit</h6>
-                                <h4 class="mb-0 text-danger">TZS {{ number_format($journals->sum('credit_total'), 2) }}</h4>
+                                <h4 class="mb-0 text-danger" id="stat-total-credit">TZS {{ number_format($journals->sum('credit_total'), 2) }}</h4>
                             </div>
                             <div class="widgets-icons bg-gradient-danger text-white">
                                 <i class='bx bx-minus'></i>
@@ -80,11 +79,11 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
                                 <h6 class="mb-1 text-muted">Balance</h6>
-                                <h4 class="mb-0 {{ $journals->sum('balance') == 0 ? 'text-success' : 'text-warning' }}">
+                                <h4 class="mb-0 {{ $journals->sum('balance') == 0 ? 'text-success' : 'text-warning' }}" id="stat-balance">
                                     TZS {{ number_format($journals->sum('balance'), 2) }}
                                 </h4>
                             </div>
-                            <div class="widgets-icons bg-gradient-{{ $journals->sum('balance') == 0 ? 'success' : 'warning' }} text-white">
+                            <div class="widgets-icons bg-gradient-{{ $journals->sum('balance') == 0 ? 'success' : 'warning' }} text-white" id="stat-balance-icon">
                                 <i class='bx bx-check-circle'></i>
                             </div>
                         </div>
@@ -98,6 +97,13 @@
             <div class="card-header bg-transparent border-0">
                 <div class="d-flex justify-content-between align-items-center">
                     <h6 class="mb-0"><i class="bx bx-list-ul me-2"></i>Journal Entries</h6>
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="journal-branch-filter" class="mb-0 me-1 small text-muted">Branch:</label>
+                        <select id="journal-branch-filter" class="form-select form-select-sm" style="min-width: 180px;">
+                            <option value="default">Current Branch</option>
+                            <option value="all">All Branches</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="card-body">
@@ -111,6 +117,7 @@
                                 <th class="text-end">Debit</th>
                                 <th class="text-end">Credit</th>
                                 <th class="text-center">Balance</th>
+                                <th class="text-center">Status</th>
                                 <th>Created By</th>
                                 <th class="border-0 text-center">
                                     <i class="bx bx-cog me-1"></i>Actions
@@ -118,101 +125,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse($journals as $i => $journal)
-                                <tr class="journal-row">
-                                    <td class="fw-bold text-muted">{{ $i + 1 }}</td>
-                                    <td>
-                                        <div class="d-flex align-items-center">
-                                            <div class="journal-icon me-3">
-                                                <i class="bx bx-book-open text-primary"></i>
-                                            </div>
-                                            <div>
-                                                <a href="{{ route('accounting.journals.show', $journal) }}" 
-                                                   class="text-decoration-none fw-bold text-dark">
-                                                    {{ $journal->reference ?? 'N/A' }}
-                                                </a>
-                                                @if($journal->description)
-                                                    <br>
-                                                    <small class="text-muted">{{ Str::limit($journal->description, 50) }}</small>
-                                                @endif
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-light text-dark">
-                                            {{ $journal->date ? $journal->date->format('M d, Y') : 'N/A' }}
-                                        </span>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="text-success fw-bold">
-                                            TZS {{ number_format($journal->debit_total, 2) }}
-                                        </span>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="text-danger fw-bold">
-                                            TZS {{ number_format($journal->credit_total, 2) }}
-                                        </span>
-                                    </td>
-                                    <td class="text-center">
-                                        @if($journal->balance == 0)
-                                            <span class="badge bg-success">Balanced</span>
-                                        @else
-                                            <span class="badge bg-warning">
-                                                TZS {{ number_format(abs($journal->balance), 2) }}
-                                            </span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        <div class="d-flex align-items-center">
-                                            <div class="avatar-sm me-2">
-                                                <i class="bx bx-user-circle text-primary"></i>
-                                            </div>
-                                            {{ $journal->user->name ?? 'N/A' }}
-                                        </div>
-                                    </td>
-                                    <td class="text-center">
-                                        <div class="btn-group">
-                                            @can('view journal details')
-                                            <a href="{{ route('accounting.journals.show', $journal) }}" 
-                                               class="btn btn-sm btn-primary" 
-                                               title="View Details">
-                                            <i class="bx bx-show"></i>
-                                        </a>
-                                            @endcan
-                                            @can('edit journal')
-                                            <a href="{{ route('accounting.journals.edit', $journal) }}" 
-                                               class="btn btn-sm btn-warning" 
-                                               title="Edit">
-                                            <i class="bx bx-edit"></i>
-                                        </a>
-                                            @endcan
-                                            @can('delete journal')
-                                            <button type="button" 
-                                                    class="btn btn-sm btn-danger" 
-                                                    title="Delete"
-                                                    onclick="confirmDelete('{{ route('accounting.journals.destroy', $journal) }}')">
-                                                <i class="bx bx-trash"></i>
-                                            </button>
-                                            @endcan
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="10" class="text-center py-4">
-                                        <div class="d-flex flex-column align-items-center">
-                                            <i class="bx bx-book-open font-48 text-muted mb-3"></i>
-                                            <h6 class="text-muted">No Journal Entries Found</h6>
-                                            <p class="text-muted mb-3">Start by creating your first journal entry</p>
-                                            @can('create journal')
-                                            <a href="{{ route('accounting.journals.create') }}" class="btn btn-primary">
-                                                <i class="bx bx-plus me-1"></i> Create First Entry
-                                            </a>
-                                            @endcan
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endforelse
+                            <!-- DataTables will populate this body via AJAX -->
                         </tbody>
                     </table>
                 </div>
@@ -341,39 +254,47 @@
     }
 
     $(document).ready(function() {
-        // Destroy existing DataTable if it exists
-        if ($.fn.DataTable.isDataTable('#journalsTable')) {
-            $('#journalsTable').DataTable().destroy();
-        }
-        
-        $('#journalsTable').DataTable({
-            responsive: {
-                details: {
-                    display: $.fn.dataTable.Responsive.display.modal({
-                        header: function(row) {
-                            var data = row.data();
-                            return 'Details for ' + data[1]; // Reference column
-                        }
-                    }),
-                    renderer: $.fn.dataTable.Responsive.renderer.tableAll()
+        const table = $('#journalsTable').DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: '{{ route("accounting.journals.data") }}',
+                type: 'GET',
+                data: function (d) {
+                    const branchFilter = $('#journal-branch-filter').val();
+                    if (branchFilter && branchFilter !== 'default') {
+                        d.branch_id = branchFilter;
+                    }
+                },
+                error: function(xhr, error, thrown) {
+                    console.error('Journals DataTable AJAX error:', error);
+                    console.error('Response:', xhr.responseText);
                 }
             },
-            paging: true,
-            searching: true,
-            ordering: true,
-            info: true,
-            lengthChange: true,
-            pageLength: 10,
-            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
-            order: [[1, 'desc']],
+            columns: [
+                { data: 'index', name: 'index', orderable: false, searchable: false },
+                { data: 'reference', name: 'reference' },
+                { data: 'date', name: 'date' },
+                { data: 'debit', name: 'debit', orderable: false, searchable: false, className: 'text-end' },
+                { data: 'credit', name: 'credit', orderable: false, searchable: false, className: 'text-end' },
+                { data: 'balance_badge', name: 'balance_badge', orderable: false, searchable: false, className: 'text-center' },
+                { data: 'status', name: 'status', orderable: false, searchable: false, className: 'text-center' },
+                { data: 'created_by', name: 'created_by' },
+                { data: 'actions', name: 'actions', orderable: false, searchable: false, className: 'text-center' }
+            ],
+            order: [[2, 'desc']],
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            responsive: true,
             language: {
+                processing: '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>',
+                emptyTable: '<div class="text-center p-4"><i class="bx bx-book-open font-24 text-muted"></i><p class="text-muted mt-2">No Journal Entries Found.</p></div>',
                 search: "",
                 searchPlaceholder: "Search journal entries...",
                 lengthMenu: "Show _MENU_ entries per page",
                 info: "Showing _START_ to _END_ of _TOTAL_ entries",
                 infoEmpty: "Showing 0 to 0 of 0 entries",
                 infoFiltered: "(filtered from _MAX_ total entries)",
-                emptyTable: "No journal entries found",
                 zeroRecords: "No matching journal entries found",
                 paginate: {
                     first: "First",
@@ -381,29 +302,65 @@
                     next: "Next",
                     previous: "Previous"
                 }
-            },
-            columnDefs: [
-                { targets: 0, orderable: false, searchable: false, width: '50px' }, // Row number
-                { targets: -1, orderable: false, searchable: false, width: '120px' } // Actions column
-            ],
-            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
-                 '<"row"<"col-sm-12"tr>>' +
-                 '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
-            initComplete: function() {
-                // Add custom styling
-                $('.dataTables_wrapper').addClass('mt-3');
-                
-                // Ensure search box and length filter are visible
-                $('.dataTables_filter').show();
-                $('.dataTables_length').show();
-                
-                // Ensure action column is properly displayed
-                $('#journalsTable th:last-child').show();
-                $('#journalsTable td:last-child').show();
-                
-                // Fix any responsive issues
-                $(window).trigger('resize');
             }
+        });
+
+        // Function to load and update statistics cards
+        function loadStatistics() {
+            const branchFilter = $('#journal-branch-filter').val();
+            const params = {};
+            if (branchFilter && branchFilter !== 'default') {
+                params.branch_id = branchFilter;
+            }
+
+            $.ajax({
+                url: '{{ route("accounting.journals.statistics") }}',
+                type: 'GET',
+                data: params,
+                success: function(response) {
+                    // Update Total Entries
+                    $('#stat-total-entries').text(response.total_entries);
+                    
+                    // Update Total Debit
+                    $('#stat-total-debit').text('TZS ' + parseFloat(response.total_debit).toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }));
+                    
+                    // Update Total Credit
+                    $('#stat-total-credit').text('TZS ' + parseFloat(response.total_credit).toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }));
+                    
+                    // Update Balance
+                    const balance = parseFloat(response.balance);
+                    const balanceFormatted = 'TZS ' + balance.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                    const $balanceEl = $('#stat-balance');
+                    const $balanceIcon = $('#stat-balance-icon');
+                    
+                    $balanceEl.text(balanceFormatted);
+                    if (response.is_balanced) {
+                        $balanceEl.removeClass('text-warning').addClass('text-success');
+                        $balanceIcon.removeClass('bg-gradient-warning').addClass('bg-gradient-success');
+                    } else {
+                        $balanceEl.removeClass('text-success').addClass('text-warning');
+                        $balanceIcon.removeClass('bg-gradient-success').addClass('bg-gradient-warning');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Failed to load statistics:', error);
+                }
+            });
+        }
+
+        // Reload table and statistics when branch filter changes
+        $('#journal-branch-filter').on('change', function () {
+            table.ajax.reload();
+            loadStatistics();
         });
     });
 

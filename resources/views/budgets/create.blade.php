@@ -13,7 +13,6 @@
         <h6 class="mb-0 text-uppercase">{{ __('app.create_budget') }}</h6>
         <hr />
 
-        @can('create budget')
         <div class="row">
             <div class="col-12">
                 <div class="card">
@@ -43,7 +42,7 @@
                                          </label>
                                          <input type="text" class="form-control @error('name') is-invalid @enderror" 
                                                 name="name" value="{{ old('name') }}" 
-                                                placeholder="Weka jina la bajeti (mfano: Bajeti ya Mwaka 2024)" required>
+                                                placeholder="{{ __('app.budget_name_placeholder') }}" required>
                                          @error('name')
                                              <div class="invalid-feedback">{{ $message }}</div>
                                          @enderror
@@ -55,7 +54,7 @@
                                              <i class="bx bx-calendar me-1"></i>
                                              {{ __('app.budget_year') }} <span class="text-danger">*</span>
                                          </label>
-                                         <select class="form-select select2-single @error('year') is-invalid @enderror" name="year" required>
+                                         <select class="form-select @error('year') is-invalid @enderror" name="year" required>
                                              <option value="">{{ __('app.select') }} {{ __('app.budget_year') }}</option>
                                              @for($year = date('Y') - 2; $year <= date('Y') + 3; $year++)
                                                  <option value="{{ $year }}" {{ old('year') == $year ? 'selected' : '' }}>
@@ -74,8 +73,20 @@
                                              <i class="bx bx-building me-1"></i>
                                              {{ __('app.budget_branch') }}
                                          </label>
-                                         <input type="text" class="form-control" value="{{ Auth::user()->branch->name ?? 'N/A' }}" readonly>
-                                         <small class="text-muted">{{ __('app.budget_branch_automatically_set') }}</small>
+                                         <select class="form-select @error('branch_id') is-invalid @enderror" name="branch_id">
+                                             <option value="all" {{ old('branch_id', 'all') == 'all' ? 'selected' : '' }}>
+                                                 All Branches
+                                             </option>
+                                             @foreach($branches as $branch)
+                                                 <option value="{{ $branch->id }}" {{ old('branch_id') == $branch->id ? 'selected' : '' }}>
+                                                     {{ $branch->name }}
+                                                 </option>
+                                             @endforeach
+                                         </select>
+                                         <small class="text-muted">Select a specific branch or "All Branches" for company-wide budget</small>
+                                         @error('branch_id')
+                                             <div class="invalid-feedback">{{ $message }}</div>
+                                         @enderror
                                      </div>
                                  </div>
                                  <div class="col-12 mt-3">
@@ -86,7 +97,7 @@
                                          </label>
                                          <textarea class="form-control @error('description') is-invalid @enderror" 
                                                    name="description" rows="3" 
-                                                   placeholder="Weka maelezo ya bajeti (si lazima)">{{ old('description') }}</textarea>
+                                                   placeholder="{{ __('app.budget_description_placeholder') }}">{{ old('description') }}</textarea>
                                          @error('description')
                                              <div class="invalid-feedback">{{ $message }}</div>
                                          @enderror
@@ -133,7 +144,7 @@
                                                                         <a href="{{ route('accounting.budgets.index') }}" class="btn btn-secondary">
                                     <i class="bx bx-x"></i> {{ __('app.cancel') }}
                                         </a>
-                                        <button type="submit" id="submitBtn" class="btn btn-primary">
+                                        <button type="submit" class="btn btn-primary">
                                             <i class="bx bx-save"></i> {{ __('app.create_budget') }}
                                         </button>
                                     </div>
@@ -144,12 +155,6 @@
                 </div>
             </div>
         </div>
-        @else
-        <div class="alert alert-warning">
-            <i class="bx bx-lock-open me-2"></i>
-            {{ __('app.create_budget_permission_message') }}
-        </div>
-        @endcan
     </div>
 </div>
 
@@ -198,7 +203,7 @@
                                      <i class="bx bx-category me-1"></i>
                                                                                   {{ __('app.category') }} <span class="text-danger">*</span>
                                  </label>
-                                 <select class="form-select select2-single category-select" name="budget_lines[{index}][category]" required>
+                                 <select class="form-select category-select" name="budget_lines[{index}][category]" required>
                                                                                   <option value="">{{ __('app.select_category') }}</option>
                                                                             <option value="Revenue">{{ __('app.revenue') }}</option>
                                        <option value="Expense">{{ __('app.expense') }}</option>
@@ -232,31 +237,37 @@ $(document).ready(function() {
     let lineIndex = 0;
     const accounts = @json($accounts);
     
-    // Initialize Select2 for existing selects
-    function initSelect2(context) {
-        const scope = context ? $(context) : $(document);
-        scope.find('select.select2-single').select2({ width: '100%' });
+    // Initialize Select2 for account selects
+    function initializeSelect2() {
+        $('.select2-single.account-select').each(function() {
+            if (!$(this).hasClass('select2-hidden-accessible')) {
+                $(this).select2({
+                    theme: 'bootstrap-5',
+                    width: '100%'
+                });
+            }
+        });
     }
-    initSelect2();
-
+    
+    // Initialize Select2 on page load
+    initializeSelect2();
+    
     // Add budget line
     $('#addBudgetLine').click(function() {
         const template = document.getElementById('budgetLineTemplate').innerHTML;
         const newLine = template.replace(/{index}/g, lineIndex);
         
-        const $node = $(newLine);
-        $('#budgetLinesContainer').append($node);
+        $('#budgetLinesContainer').append(newLine);
         lineIndex++;
         
         // Update line numbers
         updateLineNumbers();
         
+        // Initialize Select2 for the new line
+        initializeSelect2();
+        
         // Add animation
-        const $last = $('.budget-line-item').last();
-        $last.hide().fadeIn(300);
-
-        // Initialize select2 on newly added selects
-        initSelect2($last);
+        $('.budget-line-item').last().hide().fadeIn(300);
     });
     
     // Remove budget line
@@ -286,19 +297,9 @@ $(document).ready(function() {
     
     // Form validation
     $('#budgetForm').submit(function(e) {
-        // Disable submit button to prevent double submission
-        const submitBtn = $('#submitBtn');
-        submitBtn.prop('disabled', true);
-        submitBtn.addClass('opacity-50');
-        submitBtn.html('<i class="bx bx-loader-alt bx-spin me-1"></i> {{ __('app.processing') ?? 'Processing...' }}');
-
         const lines = $('.budget-line-item');
         if (lines.length === 0) {
             e.preventDefault();
-            // Re-enable on validation error
-            submitBtn.prop('disabled', false);
-            submitBtn.removeClass('opacity-50');
-            submitBtn.html('<i class="bx bx-save"></i> {{ __('app.create_budget') }}');
             Swal.fire({
                 icon: 'warning',
                 title: '{{ __('app.no_budget_lines') }}',
@@ -325,10 +326,6 @@ $(document).ready(function() {
         
         if (hasDuplicates) {
             e.preventDefault();
-            // Re-enable on validation error
-            submitBtn.prop('disabled', false);
-            submitBtn.removeClass('opacity-50');
-            submitBtn.html('<i class="bx bx-save"></i> {{ __('app.create_budget') }}');
             Swal.fire({
                 icon: 'error',
                 title: '{{ __('app.duplicate_accounts') }}',
@@ -348,7 +345,7 @@ $(document).ready(function() {
     // });
     
     // Auto-select current year
-    $('select[name="year"]').val('{{ date("Y") }}').trigger('change');
+    $('select[name="year"]').val('{{ date("Y") }}');
     
     // Add hover effects
     $('.budget-line-item').hover(

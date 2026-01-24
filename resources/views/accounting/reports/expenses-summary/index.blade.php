@@ -175,20 +175,6 @@
                     </div>
                 </div>
             </div>
-            <div class="col">
-                <div class="card radius-10 border-0 shadow-sm">
-                    <div class="card-body">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <p class="mb-0">Avg per Transaction</p>
-                                <h4 class="font-weight-bold text-warning">{{ number_format($expensesData['summary']['average_per_transaction'], 2) }}</h4>
-                            </div>
-                            <div class="widgets-icons bg-gradient-warning text-white">
-                                <i class='bx bx-calculator'></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 

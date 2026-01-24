@@ -6,19 +6,15 @@
 <div class="page-wrapper">
     <div class="page-content">
         <!-- Breadcrumb -->
-        <div class="page-breadcrumb d-none d-sm-flex align-items-center mb-3">
-            <div class="breadcrumb-title pe-3">Accounting</div>
-            <div class="ps-3">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb mb-0 p-0">
-                        <li class="breadcrumb-item"><a href="{{ route('dashboard') }}"><i class="bx bx-home-alt"></i></a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('accounting.bill-purchases') }}">Bill Purchases</a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('accounting.bill-purchases.show', $billPurchase) }}">{{ $billPurchase->reference }}</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Add Payment</li>
-                    </ol>
-                </nav>
-            </div>
-        </div>
+        <x-breadcrumbs-with-icons :links="[
+            ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Purchases', 'url' => route('purchases.index'), 'icon' => 'bx bx-purchase-tag'],
+            ['label' => 'Bill Purchases', 'url' => route('accounting.bill-purchases'), 'icon' => 'bx bx-receipt'],
+            ['label' => 'Bill #' . $billPurchase->reference, 'url' => route('accounting.bill-purchases.show', $billPurchase), 'icon' => 'bx bx-show'],
+            ['label' => 'Add Payment', 'url' => '#', 'icon' => 'bx bx-plus']
+        ]" />
+        <h6 class="mb-0 text-uppercase">ADD PAYMENT</h6>
+        <hr />
 
         <!-- Page Header -->
         <div class="row">
@@ -144,6 +140,127 @@
                                 </div>
                             </div>
 
+                            <!-- WHT Section -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <div class="card border-info">
+                                        <div class="card-header bg-light">
+                                            <h6 class="mb-0 fw-bold">
+                                                <i class="bx bx-calculator me-2"></i>Withholding Tax (WHT)
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                                <div class="row">
+                                                    <div class="col-md-3 mb-3">
+                                                        <label for="wht_treatment" class="form-label fw-bold">
+                                                            WHT Treatment
+                                                        </label>
+                                                        <select class="form-select @error('wht_treatment') is-invalid @enderror"
+                                                            id="wht_treatment" name="wht_treatment">
+                                                            <option value="EXCLUSIVE" {{ old('wht_treatment', 'EXCLUSIVE') == 'EXCLUSIVE' ? 'selected' : '' }}>Exclusive</option>
+                                                            <option value="INCLUSIVE" {{ old('wht_treatment') == 'INCLUSIVE' ? 'selected' : '' }}>Inclusive</option>
+                                                            <option value="GROSS_UP" {{ old('wht_treatment') == 'GROSS_UP' ? 'selected' : '' }}>Gross-Up</option>
+                                                            <option value="NONE" {{ old('wht_treatment') == 'NONE' ? 'selected' : '' }}>None</option>
+                                                        </select>
+                                                        @error('wht_treatment')
+                                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                        @enderror
+                                                        <small class="form-text text-muted">
+                                                            <strong>Exclusive:</strong> WHT deducted from base<br>
+                                                            <strong>Inclusive:</strong> WHT included in total<br>
+                                                            <strong>Gross-Up:</strong> WHT added on top
+                                                        </small>
+                                                    </div>
+                                                    <div class="col-md-3 mb-3">
+                                                        <label for="wht_rate" class="form-label fw-bold">
+                                                            WHT Rate (%)
+                                                        </label>
+                                                        <input type="number" class="form-control @error('wht_rate') is-invalid @enderror"
+                                                            id="wht_rate" name="wht_rate" value="{{ old('wht_rate', 0) }}"
+                                                            step="0.01" min="0" max="100" placeholder="0.00">
+                                                        @error('wht_rate')
+                                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                        @enderror
+                                                    </div>
+                                                    <div class="col-md-3 mb-3">
+                                                        <label for="vat_mode" class="form-label fw-bold">
+                                                            VAT Mode
+                                                        </label>
+                                                        <select class="form-select @error('vat_mode') is-invalid @enderror"
+                                                            id="vat_mode" name="vat_mode">
+                                                            @php
+                                                                $billVatMode = $billPurchase->vat_mode ?? 'NONE';
+                                                                $selectedVatMode = old('vat_mode', $billVatMode);
+                                                            @endphp
+                                                            <option value="NONE" {{ $selectedVatMode == 'NONE' ? 'selected' : '' }}>None</option>
+                                                            <option value="EXCLUSIVE" {{ $selectedVatMode == 'EXCLUSIVE' ? 'selected' : '' }}>Exclusive</option>
+                                                            <option value="INCLUSIVE" {{ $selectedVatMode == 'INCLUSIVE' ? 'selected' : '' }}>Inclusive</option>
+                                                        </select>
+                                                        @error('vat_mode')
+                                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                        @enderror
+                                                        <small class="form-text text-muted">
+                                                            <strong>Exclusive:</strong> VAT separate from base<br>
+                                                            <strong>Inclusive:</strong> VAT included in total<br>
+                                                            <strong>None:</strong> No VAT
+                                                        </small>
+                                                    </div>
+                                                    <div class="col-md-3 mb-3">
+                                                        <label for="vat_rate" class="form-label fw-bold">
+                                                            VAT Rate (%)
+                                                        </label>
+                                                        @php
+                                                            $billVatRate = $billPurchase->vat_rate ?? get_default_vat_rate();
+                                                            $selectedVatRate = old('vat_rate', $billVatRate);
+                                                        @endphp
+                                                        <input type="number" class="form-control @error('vat_rate') is-invalid @enderror"
+                                                            id="vat_rate" name="vat_rate" value="{{ $selectedVatRate }}"
+                                                            step="0.01" min="0" max="100" placeholder="0.00">
+                                                        @error('vat_rate')
+                                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                        @enderror
+                                                    </div>
+                                                </div>
+                                                <div class="row">
+                                                    <div class="col-md-12 mb-3">
+                                                        <div class="card bg-light">
+                                                            <div class="card-body">
+                                                                <h6 class="mb-2 fw-bold">Calculation Preview</h6>
+                                                                <div class="row">
+                                                                    <div class="col-md-3 mb-2">
+                                                                        <small class="text-muted">Total Amount:</small>
+                                                                        <div class="fw-bold" id="wht_total_amount">0.00</div>
+                                                                    </div>
+                                                                    <div class="col-md-3 mb-2">
+                                                                        <small class="text-muted">Base Amount:</small>
+                                                                        <div class="fw-bold" id="wht_base_amount">0.00</div>
+                                                                    </div>
+                                                                    <div class="col-md-3 mb-2">
+                                                                        <small class="text-muted">VAT Amount:</small>
+                                                                        <div class="fw-bold text-info" id="wht_vat_amount">0.00</div>
+                                                                    </div>
+                                                                    <div class="col-md-3 mb-2">
+                                                                        <small class="text-muted">WHT Amount:</small>
+                                                                        <div class="fw-bold text-danger" id="wht_amount_preview">0.00</div>
+                                                                    </div>
+                                                                    <div class="col-md-3 mb-2">
+                                                                        <small class="text-muted">Net Payable:</small>
+                                                                        <div class="fw-bold text-success" id="wht_net_payable">0.00</div>
+                                                                    </div>
+                                                                    <div class="col-md-3 mb-2" id="wht_total_cost_container" style="display: none;">
+                                                                        <small class="text-muted">Total Cost:</small>
+                                                                        <div class="fw-bold text-primary" id="wht_total_cost">0.00</div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
 
 
                             <!-- Summary -->
@@ -212,6 +329,93 @@ $(document).ready(function() {
 
     // Initialize
     $('#displayPaymentAmount').text(parseFloat($('#paymentAmount').val() || 0).toFixed(2));
+
+    // WHT Calculation
+    function calculateWHT() {
+        const totalAmount = parseFloat($('#paymentAmount').val()) || 0;
+        const treatment = $('#wht_treatment').val() || 'EXCLUSIVE';
+        const whtRate = parseFloat($('#wht_rate').val()) || 0;
+        const vatMode = $('#vat_mode').val() || 'NONE';
+        const vatRate = parseFloat($('#vat_rate').val()) || {{ $billPurchase->vat_rate ?? get_default_vat_rate() }};
+
+        // Calculate base amount (excluding VAT) based on VAT mode
+        let baseAmount = totalAmount;
+        let vatAmount = 0;
+
+        if (vatMode === 'INCLUSIVE' && vatRate > 0) {
+            // VAT is included in total, extract base
+            baseAmount = totalAmount / (1 + (vatRate / 100));
+            vatAmount = totalAmount - baseAmount;
+        } else if (vatMode === 'EXCLUSIVE' && vatRate > 0) {
+            // VAT is separate, total is base + VAT
+            baseAmount = totalAmount / (1 + (vatRate / 100));
+            vatAmount = totalAmount - baseAmount;
+        }
+
+        // Round to 2 decimal places
+        baseAmount = Math.round(baseAmount * 100) / 100;
+        vatAmount = Math.round(vatAmount * 100) / 100;
+
+        // Update display
+        $('#wht_total_amount').text(totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        $('#wht_base_amount').text(baseAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        $('#wht_vat_amount').text(vatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+        if (whtRate <= 0 || treatment === 'NONE') {
+            $('#wht_amount_preview').text('0.00');
+            let netPayable = totalAmount;
+            if (vatMode === 'EXCLUSIVE' && vatAmount > 0) {
+                netPayable = baseAmount + vatAmount;
+            }
+            $('#wht_net_payable').text(netPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            $('#wht_total_cost_container').hide();
+            return;
+        }
+
+        // Calculate WHT on base amount (never on VAT)
+        let wht = 0;
+        let net = baseAmount;
+        let totalCost = baseAmount;
+
+        const rateDecimal = whtRate / 100;
+        
+        if (treatment === 'EXCLUSIVE') {
+            wht = baseAmount * rateDecimal;
+            net = baseAmount - wht;
+            totalCost = baseAmount;
+        } else if (treatment === 'INCLUSIVE') {
+            wht = baseAmount * (rateDecimal / (1 + rateDecimal));
+            net = baseAmount - wht;
+            totalCost = baseAmount;
+        } else if (treatment === 'GROSS_UP') {
+            wht = baseAmount * (rateDecimal / (1 - rateDecimal));
+            net = baseAmount;
+            totalCost = baseAmount + wht;
+            $('#wht_total_cost_container').show();
+        }
+
+        // Round WHT calculations
+        wht = Math.round(wht * 100) / 100;
+        net = Math.round(net * 100) / 100;
+        totalCost = Math.round(totalCost * 100) / 100;
+
+        // For net payable, add VAT back if VAT is exclusive
+        let netPayable = net;
+        if (vatMode === 'EXCLUSIVE' && vatAmount > 0) {
+            netPayable = net + vatAmount;
+        }
+
+        $('#wht_amount_preview').text(wht.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        $('#wht_net_payable').text(netPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        $('#wht_total_cost').text(totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+        if (treatment !== 'GROSS_UP') {
+            $('#wht_total_cost_container').hide();
+        }
+    }
+
+    $('#paymentAmount, #wht_treatment, #wht_rate, #vat_mode, #vat_rate').on('change input', calculateWHT);
+    calculateWHT();
 });
 </script>
 @endpush 

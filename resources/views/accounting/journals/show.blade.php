@@ -7,6 +7,7 @@
         <!-- Breadcrumb -->
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
             ['label' => 'Journal Entries', 'url' => route('accounting.journals.index'), 'icon' => 'bx bx-book-open'],
             ['label' => 'Journal Entry #' . $journal->reference, 'url' => '#', 'icon' => 'bx bx-show']
         ]" />
@@ -27,20 +28,64 @@
                                 <p class="mb-0 text-muted">View complete details of this journal entry</p>
                             </div>
                             <div class="col-md-4 text-end">
-                                <div class="d-flex gap-2 justify-content-end">
+                                <div class="d-flex gap-2 justify-content-end flex-wrap">
+                                    @if($journal->approved)
+                                        <span class="badge bg-success align-self-center me-2">
+                                            <i class="bx bx-check-circle me-1"></i>Approved
+                                        </span>
+                                        @if($journal->gl_posted ?? false)
+                                            <span class="badge bg-success align-self-center">
+                                                GL Posted
+                                            </span>
+                                        @else
+                                            <span class="badge bg-warning text-dark align-self-center" title="Journal is approved but not yet posted to GL. This may be due to a locked period or configuration issue.">
+                                                Not Posted to GL
+                                            </span>
+                                        @endif
+                                    @elseif($journal->isRejected())
+                                        <span class="badge bg-danger align-self-center me-2">
+                                            <i class="bx bx-x-circle me-1"></i>Rejected
+                                        </span>
+                                    @elseif($currentApproval && $canApprove)
+                                        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+                                            <i class="bx bx-check me-1"></i>Approve
+                                        </button>
+                                        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                                            <i class="bx bx-x me-1"></i>Reject
+                                        </button>
+                                    @elseif($currentApproval)
+                                        <span class="badge bg-warning align-self-center me-2">
+                                            <i class="bx bx-time me-1"></i>Pending Approval (Level {{ $currentApproval->approval_level }})
+                                        </span>
+                                    @elseif(!$journal->approved && !$journal->isRejected())
+                                        {{-- Debug info: Show why approval button is not showing --}}
+                                        @if(config('app.debug'))
+                                            <div class="alert alert-info alert-sm mb-2">
+                                                <small>
+                                                    <strong>Debug Info:</strong><br>
+                                                    Settings: {{ $settings ? 'Yes' : 'No' }}<br>
+                                                    Current Approval: {{ $currentApproval ? 'Yes (Level ' . $currentApproval->approval_level . ')' : 'No' }}<br>
+                                                    Can Approve: {{ $canApprove ? 'Yes' : 'No' }}<br>
+                                                    Approvals Count: {{ $journal->approvals->count() }}<br>
+                                                    Pending Approvals: {{ $journal->approvals->where('status', 'pending')->count() }}
+                                                </small>
+                                            </div>
+                                        @endif
+                                        <span class="badge bg-secondary align-self-center me-2">
+                                            <i class="bx bx-file me-1"></i>Draft
+                                        </span>
+                                    @endif
                                     <a href="{{ route('accounting.journals.export-pdf', $journal) }}" class="btn btn-danger">
                                         <i class="bx bx-file-pdf me-1"></i> Export PDF
                                     </a>
-                                    @can('edit journal')
-                                    <a href="{{ route('accounting.journals.edit', $journal) }}" class="btn btn-warning">
-                                        <i class="bx bx-edit me-1"></i> Edit
-                                    </a>
-                                    @endcan
-                                    @can('view journals')
+                                    @if(!$journal->approved && !$journal->isRejected())
+                                        <a href="{{ route('accounting.journals.edit', $journal) }}" class="btn btn-warning">
+                                            <i class="bx bx-edit me-1"></i> Edit
+                                        </a>
+                                    @endif
                                     <a href="{{ route('accounting.journals.index') }}" class="btn btn-outline-secondary">
                                         <i class="bx bx-arrow-back me-1"></i> Back
                                     </a>
-                                    @endcan
                                 </div>
                             </div>
                         </div>
@@ -73,6 +118,39 @@
                                 </p>
                             </div>
                             <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Status</label>
+                                <p class="form-control-plaintext">
+                                    @if($journal->approved)
+                                        <span class="badge bg-success">
+                                            <i class="bx bx-check-circle me-1"></i>Approved
+                                        </span>
+                                        @if($journal->approved_at)
+                                            <br><small class="text-muted">Approved on {{ $journal->approved_at->format('M d, Y \a\t g:i A') }}</small>
+                                        @endif
+                                    @elseif($journal->isRejected())
+                                        <span class="badge bg-danger">
+                                            <i class="bx bx-x-circle me-1"></i>Rejected
+                                        </span>
+                                    @elseif($currentApproval)
+                                        <span class="badge bg-warning">
+                                            <i class="bx bx-time me-1"></i>Pending Approval (Level {{ $currentApproval->approval_level }})
+                                        </span>
+                                    @else
+                                        <span class="badge bg-secondary">
+                                            <i class="bx bx-file me-1"></i>Draft
+                                        </span>
+                                    @endif
+                                </p>
+                            </div>
+                            @if($journal->approved && $journal->approvedBy)
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Approved By</label>
+                                <p class="form-control-plaintext">
+                                    {{ $journal->approvedBy->name }}
+                                </p>
+                            </div>
+                            @endif
+                            <div class="col-md-6 mb-3">
                                 <label class="form-label fw-bold">Branch</label>
                                 <p class="form-control-plaintext">
                                     <span class="badge bg-info">
@@ -101,8 +179,8 @@
                                 <div class="col-12 mb-3">
                                     <label class="form-label fw-bold">Attachment</label>
                                     <p class="form-control-plaintext">
-                                        <a href="{{ asset('storage/' . $journal->attachment) }}" 
-                                           target="_blank" 
+                                        <a href="{{ asset('storage/' . $journal->attachment) }}"
+                                           target="_blank"
                                            class="btn btn-sm btn-outline-primary">
                                             <i class="bx bx-download me-1"></i>View Attachment
                                         </a>
@@ -193,7 +271,7 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="text-center">
                             <div class="p-3 bg-light rounded">
                                 <h6 class="text-muted mb-1">Balance</h6>
@@ -218,19 +296,86 @@
                     </div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
-                            @can('edit journal')
                             <a href="{{ route('accounting.journals.edit', $journal) }}" class="btn btn-warning">
                                 <i class="bx bx-edit me-1"></i> Edit Entry
                             </a>
-                            @endcan
-                            @can('delete journal')
                             <button type="button" class="btn btn-outline-danger" onclick="confirmDelete()">
                                 <i class="bx bx-trash me-1"></i> Delete Entry
                             </button>
-                            @endcan
                         </div>
                     </div>
                 </div>
+
+                <!-- Approval History -->
+                @if($journal->approvals && $journal->approvals->count() > 0)
+                <div class="card radius-10 border-0 shadow-sm mb-4">
+                    <div class="card-header bg-transparent border-0">
+                        <h6 class="mb-0"><i class="bx bx-check-shield me-2"></i>Approval History</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="timeline">
+                            @foreach($journal->approvals->sortBy('approval_level') as $approval)
+                                <div class="timeline-item mb-3">
+                                    <div class="d-flex">
+                                        <div class="timeline-marker me-3">
+                                            @if($approval->status === 'approved')
+                                                <div class="avatar avatar-sm bg-success rounded-circle d-flex align-items-center justify-content-center">
+                                                    <i class="bx bx-check text-white"></i>
+                                                </div>
+                                            @elseif($approval->status === 'rejected')
+                                                <div class="avatar avatar-sm bg-danger rounded-circle d-flex align-items-center justify-content-center">
+                                                    <i class="bx bx-x text-white"></i>
+                                                </div>
+                                            @else
+                                                <div class="avatar avatar-sm bg-warning rounded-circle d-flex align-items-center justify-content-center">
+                                                    <i class="bx bx-time text-white"></i>
+                                                </div>
+                                            @endif
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <h6 class="mb-1">
+                                                        Level {{ $approval->approval_level }} - {{ $approval->approver_name }}
+                                                        @if($approval->approver_type === 'role')
+                                                            <span class="badge bg-info ms-2">Role</span>
+                                                        @else
+                                                            <span class="badge bg-primary ms-2">User</span>
+                                                        @endif
+                                                    </h6>
+                                                    <p class="text-muted mb-1 small">
+                                                        @if($approval->status === 'approved' && $approval->approved_at)
+                                                            Approved on {{ $approval->approved_at->format('M d, Y \a\t g:i A') }}
+                                                        @elseif($approval->status === 'rejected' && $approval->rejected_at)
+                                                            Rejected on {{ $approval->rejected_at->format('M d, Y \a\t g:i A') }}
+                                                        @else
+                                                            Pending approval
+                                                        @endif
+                                                    </p>
+                                                    @if($approval->notes)
+                                                        <p class="mb-0 small">
+                                                            <strong>Notes:</strong> {{ $approval->notes }}
+                                                        </p>
+                                                    @endif
+                                                </div>
+                                                <div>
+                                                    @if($approval->status === 'approved')
+                                                        <span class="badge bg-success">Approved</span>
+                                                    @elseif($approval->status === 'rejected')
+                                                        <span class="badge bg-danger">Rejected</span>
+                                                    @else
+                                                        <span class="badge bg-warning">Pending</span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+                @endif
 
                 <!-- Entry Details -->
                 <div class="card radius-10 border-0 shadow-sm">
@@ -264,6 +409,71 @@
         </div>
     </div>
 </div>
+
+<!-- Approve Modal -->
+@if($currentApproval && $canApprove)
+<div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ route('accounting.journals.approve.store', $journal) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Approve Journal Entry</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bx bx-info-circle me-2"></i>
+                        You are approving this journal entry at <strong>Level {{ $currentApproval->approval_level }}</strong>.
+                    </div>
+                    <div class="mb-3">
+                        <label for="approval_notes" class="form-label">Approval Notes (Optional)</label>
+                        <textarea name="notes" id="approval_notes" class="form-control" rows="3" placeholder="Add any notes about this approval..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bx bx-check me-1"></i>Approve
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reject Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ route('accounting.journals.reject', $journal) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Reject Journal Entry</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bx bx-error-circle me-2"></i>
+                        <strong>Warning:</strong> This action will reject the journal entry. Please provide a reason for rejection.
+                    </div>
+                    <div class="mb-3">
+                        <label for="rejection_notes" class="form-label">Rejection Reason <span class="text-danger">*</span></label>
+                        <textarea name="notes" id="rejection_notes" class="form-control" rows="4" required placeholder="Please provide a detailed reason for rejecting this journal entry..."></textarea>
+                        <div class="form-text">This reason will be recorded and visible to the preparer.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bx bx-x me-1"></i>Reject
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">

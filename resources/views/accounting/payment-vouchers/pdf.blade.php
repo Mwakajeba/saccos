@@ -1,406 +1,474 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Voucher #{{ $paymentVoucher->reference }}</title>
+    <meta charset="utf-8">
+    <title>Payment Voucher - {{ $paymentVoucher->reference }}</title>
     <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 10px;
-            color: #333;
+            font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
+            color: #000;
         }
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 2px solid #dc3545;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
+
+        .container {
+            width: 100%;
         }
-        .header-left {
-            display: flex;
-            align-items: center;
+
+        .text-center {
+            text-align: center;
         }
-        .logo {
-            width: 50px;
-            height: 50px;
+
+        .text-right {
+            text-align: right;
+        }
+
+        hr {
+            border: none;
+            border-top: 2px solid #3b82f6;
+            margin: 8px 0;
+        }
+
+        /* Header */
+        .logo-section {
+            margin-bottom: 10px;
+        }
+
+        .company-logo {
+            max-height: 80px;
+            max-width: 120px;
             object-fit: contain;
-            margin-right: 12px;
         }
-        .company-info {
-            flex: 1;
-        }
+
         .company-name {
             font-size: 18px;
             font-weight: bold;
-            color: #dc3545;
-            margin-bottom: 2px;
+            color: #1e40af;
         }
-        .document-title {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-        .header-right {
-            text-align: right;
-            font-size: 10px;
-            color: #666;
-        }
-        .voucher-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 15px;
+
+        .company-details {
             font-size: 10px;
         }
-        .info-section {
-            background-color: #ffffff;
-            border: 1px solid #e9ecef;
-            border-radius: 4px;
+
+        /* Payment methods */
+        .payment-methods {
+            font-size: 10px;
+            margin: 8px 0;
+        }
+
+        .payment-method-bar {
+            background-color: #1e3a8a;
+            color: #fff;
             padding: 8px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-        .info-label {
             font-weight: bold;
-            color: #666;
-            font-size: 10px;
-            text-transform: uppercase;
-            margin-bottom: 2px;
+            margin-top: 10px;
         }
-        .section-title {
-            font-size: 11px;
+
+        .payment-details {
+            padding: 8px;
+            background-color: #f8fafc;
+        }
+
+        .payment-details strong {
+            color: #1e40af;
+        }
+
+        /* Voucher title */
+        .voucher-title {
             font-weight: bold;
-            color: #dc3545;
-            margin-bottom: 6px;
-            padding-bottom: 3px;
-            border-bottom: 1px solid #dc3545;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            text-align: center;
+            font-size: 18px;
+            margin: 10px 0;
+            color: #1e40af;
         }
-        .info-value {
-            font-size: 11px;
-            margin-bottom: 8px;
-        }
-        .info-row {
+
+        /* Info section */
+        .info-section {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 6px;
-            padding: 4px 8px;
-            background-color: #f8f9fa;
-            border-radius: 3px;
-            border-left: 3px solid #dc3545;
+            margin-bottom: 10px;
         }
-        .info-row:last-child {
-            margin-bottom: 0;
-        }
-        .info-row .info-label {
-            flex: 0 0 35%;
-            margin-bottom: 0;
-            font-weight: bold;
-            color: #495057;
-            font-size: 9px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }
-        .info-row .info-value {
-            flex: 0 0 63%;
-            margin-bottom: 0;
-            text-align: right;
+
+        .pay-to {
+            width: 48%;
             font-size: 10px;
-            font-weight: 500;
-            color: #212529;
         }
-        .amount-section {
+
+        .pay-to strong {
+            color: #1e40af;
+        }
+
+        .voucher-box {
+            width: 48%;
             text-align: right;
-            background-color: #f8f9fa;
-            padding: 8px;
-            border-radius: 4px;
-            margin-bottom: 15px;
         }
-        .amount-label {
-            font-size: 12px;
-            font-weight: bold;
-            color: #dc3545;
-        }
-        .amount-value {
-            font-size: 18px;
-            font-weight: bold;
-            color: #dc3545;
-        }
-        .line-items {
-            margin-bottom: 15px;
-        }
-        .line-items h3 {
-            color: #dc3545;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 3px;
-            margin-bottom: 8px;
-            font-size: 12px;
-        }
-        table {
+
+        .voucher-box table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 10px;
-            font-size: 9px;
+            font-size: 10px;
+            margin-left: auto;
         }
-        th, td {
-            border: 1px solid #ddd;
+
+        .voucher-box td {
+            border: 1px solid #cbd5e1;
             padding: 4px;
-            text-align: left;
         }
-        th {
-            background-color: #f8f9fa;
+
+        .voucher-box td:nth-child(even) {
+            text-align: right;
+        }
+
+        .voucher-box strong {
+            color: #1e40af;
+        }
+
+        /* Items table */
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-top: 10px;
+        }
+
+        .items-table th,
+        .items-table td {
+            border: 1px solid #cbd5e1;
+            padding: 5px;
+        }
+
+        .items-table th {
+            text-align: center;
             font-weight: bold;
-            color: #333;
+            background-color: #1e3a8a;
+            color: #fff;
+        }
+
+        .items-table tbody tr:nth-child(even) {
+            background-color: #dbeafe;
+        }
+
+        .items-table tbody tr:nth-child(odd) {
+            background-color: #fff;
+        }
+
+        /* Totals */
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-top: 10px;
+        }
+
+        .totals-table td {
+            padding: 4px 5px;
+            border: none;
+        }
+
+        .totals-table td:last-child {
+            text-align: right;
+            padding-right: 5px;
+        }
+
+        .totals-table tr:last-child td {
+            background-color: #1e3a8a;
+            color: #fff;
+            font-weight: bold;
+            padding: 8px 5px;
+        }
+
+        .totals-table tr:last-child td:last-child {
+            background-color: #dbeafe;
+            color: #1e40af;
+            padding: 8px;
+            border-radius: 3px;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 20px;
             font-size: 10px;
         }
-        .total-row {
-            background-color: #f8f9fa;
-            font-weight: bold;
+
+        .footer strong {
+            color: #1e40af;
         }
-        .footer {
-            margin-top: 15px;
-            border-top: 1px solid #ddd;
-            padding-top: 10px;
+
+        .signature {
+            margin-top: 20px;
         }
+
+        .footer hr {
+            border-top: 1px solid #dbeafe;
+            margin: 15px 0;
+        }
+
         .signature-section {
             display: flex;
             justify-content: space-between;
-            margin-top: 15px;
+            margin-top: 20px;
         }
+
         .signature-box {
             text-align: center;
-            width: 120px;
+            width: 30%;
         }
+
         .signature-line {
             border-top: 1px solid #333;
-            margin-top: 20px;
+            margin-top: 40px;
             padding-top: 2px;
         }
-        .page-break {
-            page-break-before: always;
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .status-approved {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .status-pending {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        .status-rejected {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        .notes-section {
-            margin-bottom: 10px;
-        }
-        .notes-section h3 {
-            color: #dc3545;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 3px;
-            margin-bottom: 6px;
-            font-size: 11px;
-        }
-        .notes-content {
-            background-color: #f8f9fa;
-            padding: 6px;
-            border-radius: 3px;
-            font-size: 9px;
-        }
+
     </style>
+
 </head>
 <body>
-    <div class="header">
-        <div class="header-left">
-            @php
-                $company = $paymentVoucher->user->company ?? null;
-                $logoPath = $company && !empty($company->logo) ? public_path('storage/' . $company->logo) : null;
-            @endphp
-            @if($logoPath && file_exists($logoPath))
-                <img src="file://{{ $logoPath }}" alt="Company Logo" class="logo">
-            @endif
-            <div class="company-info">
-                <div class="company-name">{{ $company->name ?? 'SmartFinance' }}</div>
-                <div class="document-title">PAYMENT VOUCHER</div>
-            </div>
-        </div>
-        <div class="header-right">
-            <div>Generated on {{ date('F d, Y \a\t g:i A') }}</div>
-            <div>Voucher #{{ $paymentVoucher->reference }}</div>
-        </div>
-    </div>
+    <div class="container">
 
-    <div class="voucher-info">
-        <div class="info-section">
-            <div class="section-title">Voucher Details</div>
-            <div class="info-row">
-                <div class="info-label">Reference</div>
-                <div class="info-value">{{ $paymentVoucher->reference }}</div>
+        {{-- Header --}}
+        <div class="text-left">
+            @php
+            $company = $paymentVoucher->user->company ?? null;
+            @endphp
+            @if($company && $company->logo)
+            @php
+            // Logo is stored in storage/app/public (via "public" disk)
+            $logo = $company->logo; // e.g. "uploads/companies/company_1_1768466462.png"
+            $logoPath = public_path('storage/' . ltrim($logo, '/'));
+
+            // Convert image to base64 for DomPDF compatibility
+            $logoBase64 = null;
+            if (file_exists($logoPath)) {
+            $imageData = file_get_contents($logoPath);
+            $imageInfo = getimagesize($logoPath);
+            if ($imageInfo !== false) {
+            $mimeType = $imageInfo['mime'];
+            $logoBase64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+            }
+            }
+            @endphp
+            @if($logoBase64)
+            <div class="logo-section" style="float: left; width: 45%;">
+                <img src="{{ $logoBase64 }}" alt="{{ $company->name . ' logo' }}" class="company-logo">
             </div>
-            
-            <div class="info-row">
-                <div class="info-label">Date</div>
-                <div class="info-value">{{ $paymentVoucher->formatted_date }}</div>
-            </div>
-            
-            <div class="info-row">
-                <div class="info-label">Bank Account</div>
-                <div class="info-value">
-                    {{ $paymentVoucher->bankAccount->name ?? 'N/A' }}<br>
-                    <small>{{ $paymentVoucher->bankAccount->account_number ?? 'N/A' }}</small>
-                </div>
-            </div>
-        </div>
-        
-        <div class="info-section">
-            <div class="section-title">Contact Information</div>
-            <div class="info-row">
-                <div class="info-label">Customer</div>
-                <div class="info-value">
-                    @if($paymentVoucher->customer)
-                        {{ $paymentVoucher->customer->name ?? 'N/A' }}<br>
-                        <small>{{ $paymentVoucher->customer->customerNo ?? 'N/A' }}</small>
-                    @else
-                        <span style="color: #999;">No customer selected</span>
+            @endif
+            @endif
+            <div style="float: right; width: 50%; text-align: left; margin-left: 15%;">
+                <div class="company-name">{{ $company->name ?? 'SmartFinance' }}</div>
+                <div class="company-details">
+                    @if($company && $company->address)
+                    P.O Box: {{ $company->address }} <br>
+                    @endif
+                    @if($company && $company->phone)
+                    Phone: {{ $company->phone }} <br>
+                    @endif
+                    @if($company && $company->email)
+                    Email: {{ $company->email }}
                     @endif
                 </div>
             </div>
-            
-            <div class="info-row">
-                <div class="info-label">Branch</div>
-                <div class="info-value">{{ $paymentVoucher->branch->name ?? 'N/A' }}</div>
-            </div>
-            
-            <div class="info-row">
-                <div class="info-label">Created By</div>
-                <div class="info-value">{{ $paymentVoucher->user->name ?? 'N/A' }}</div>
-            </div>
         </div>
-        
+        <div style="clear: both;"></div>
+
+
+        <div class="voucher-title">PAYMENT VOUCHER</div>
+        <hr>
+        {{-- Pay To + Voucher Info --}}
         <div class="info-section">
-            <div class="section-title">Notes</div>
-            
-            <div class="info-row">
-                <div class="info-label">Description</div>
-                <div class="info-value">
-                    {{ $paymentVoucher->description ?: 'No description provided' }}
-                </div>
+            <div class="pay-to" style="float: left; width: 48%;">
+                <strong>Pay to :</strong><br>
+                @if($paymentVoucher->payee_type === 'customer' && $paymentVoucher->customer)
+                <strong>{{ $paymentVoucher->customer->name }}</strong><br>
+                @if($paymentVoucher->customer->phone)
+                {{ $paymentVoucher->customer->phone }}<br>
+                @endif
+                @if($paymentVoucher->customer->email)
+                {{ $paymentVoucher->customer->email }}<br>
+                @endif
+                @if($paymentVoucher->customer->address)
+                {{ $paymentVoucher->customer->address }}<br>
+                @endif
+                @elseif($paymentVoucher->payee_type === 'supplier' && $paymentVoucher->supplier)
+                <strong>{{ $paymentVoucher->supplier->name }}</strong><br>
+                @if($paymentVoucher->supplier->phone)
+                {{ $paymentVoucher->supplier->phone }}<br>
+                @endif
+                @if($paymentVoucher->supplier->email)
+                {{ $paymentVoucher->supplier->email }}<br>
+                @endif
+                @if($paymentVoucher->supplier->address)
+                {{ $paymentVoucher->supplier->address }}<br>
+                @endif
+                @elseif($paymentVoucher->payee_type === 'employee' && $paymentVoucher->employee)
+                <strong>{{ $paymentVoucher->employee->full_name }}</strong><br>
+                @if($paymentVoucher->employee->employee_number)
+                Employee No: {{ $paymentVoucher->employee->employee_number }}<br>
+                @endif
+                @elseif($paymentVoucher->payee_type === 'other')
+                <strong>{{ $paymentVoucher->payee_name ?? 'N/A' }}</strong><br>
+                @else
+                <strong>N/A</strong><br>
+                @endif
+                <br>
+                <strong>Created By:</strong><br>
+                @php
+                $creator = $paymentVoucher->user ?? null;
+                $creatorRole = $creator && method_exists($creator, 'roles') ? $creator->roles->first() : null;
+                @endphp
+                @if($creator)
+                {{ $creator->name }}
+                @if($creatorRole)
+                ({{ $creatorRole->name }})
+                @endif
+                @else
+                System
+                @endif
+            </div>
+
+            <div class="voucher-box" style="text-align: right; float: left; width: 48%;">
+                <table style="margin-top: 8px;">
+                    <tr>
+                        <td><strong>Voucher no:</strong></td>
+                        <td>{{ $paymentVoucher->reference }}</td>
+                        <td><strong>Date :</strong></td>
+                        <td>{{ $paymentVoucher->date ? $paymentVoucher->date->format('d F Y') : 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Currency:</strong></td>
+                        <td>{{ $paymentVoucher->currency ?? 'TZS' }}</td>
+                        <td><strong>Ex Rate:</strong></td>
+                        <td>{{ number_format($paymentVoucher->exchange_rate ?? 1, 2) }}</td>
+                    </tr>
+                    @if($paymentVoucher->branch)
+                    <tr>
+                        <td><strong>Branch:</strong></td>
+                        <td colspan="3">{{ $paymentVoucher->branch->name ?? 'N/A' }}</td>
+                    </tr>
+                    @endif
+                    <tr>
+                        <td><strong>Time:</strong></td>
+                        <td colspan="3">{{ $paymentVoucher->created_at->format('H:i:s') }}</td>
+                    </tr>
+                </table>
             </div>
         </div>
-    </div>
 
-    <div class="amount-section">
-        <div class="amount-label">Total Amount</div>
-        <div class="amount-value">TZS {{ number_format($paymentVoucher->amount, 2) }}</div>
-    </div>
+        @if($paymentVoucher->description)
+        <div class="notes" style="clear: both;">
+            <strong>Description:</strong><br>
+            {{ $paymentVoucher->description }}
+        </div>
+        @endif
 
-    <div class="line-items">
-        <h3>Payment Details</h3>
-        <table>
+        {{-- Items --}}
+        <table class="items-table">
             <thead>
                 <tr>
-                    <th width="8%">#</th>
-                    <th width="50%">Account</th>
-                    <th width="25%">Description</th>
-                    <th width="17%">Amount</th>
+                    <th>#</th>
+                    <th>Account</th>
+                    <th>Account Code</th>
+                    <th>Description</th>
+                    <th>Amount</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($paymentVoucher->paymentItems as $index => $item)
-                    <tr>
-                        <td>{{ $index + 1 }}</td>
-                        <td>
-                            <strong>{{ $item->chartAccount->account_name ?? 'N/A' }}</strong><br>
-                            <small>{{ $item->chartAccount->account_code ?? 'N/A' }}</small>
-                        </td>
-                        <td>{{ $item->description ?: 'No description' }}</td>
-                        <td style="text-align: right;">TZS {{ number_format($item->amount, 2) }}</td>
-                    </tr>
+                <tr>
+                    <td class="text-center">{{ $index + 1 }}</td>
+                    <td>{{ $item->chartAccount->account_name ?? 'N/A' }}</td>
+                    <td class="text-center">{{ $item->chartAccount->account_code ?? 'N/A' }}</td>
+                    <td>{{ $item->description ?: '-' }}</td>
+                    <td class="text-right">{{ number_format($item->amount, 2) }}</td>
+                </tr>
                 @empty
-                    <tr>
-                        <td colspan="4" style="text-align: center; color: #999;">
-                            No line items found
-                        </td>
-                    </tr>
+                <tr>
+                    <td colspan="5" class="text-center">No payment items found</td>
+                </tr>
                 @endforelse
             </tbody>
-            <tfoot>
-                <tr class="total-row">
-                    <td colspan="3" style="text-align: right;"><strong>Total:</strong></td>
-                    <td style="text-align: right;"><strong>TZS {{ number_format($paymentVoucher->amount, 2) }}</strong></td>
-                </tr>
-            </tfoot>
         </table>
-    </div>
 
-    @if($paymentVoucher->notes)
-        <div class="notes-section">
-            <h3>Notes</h3>
-            <div class="notes-content">
-                {{ $paymentVoucher->notes }}
-            </div>
+        {{-- Totals --}}
+        @php
+        $colspan = 4;
+        @endphp
+        <table class="totals-table">
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align: right;"><strong>GRAND TOTAL: </strong></td>
+                <td><strong>{{ number_format($paymentVoucher->amount, 2) }}</strong></td>
+            </tr>
+        </table>
+
+        @if(method_exists($paymentVoucher, 'getAmountInWords'))
+        <div style="margin-top:5px;font-style:italic;">
+            <strong>{{ ucwords($paymentVoucher->getAmountInWords()) }}</strong>
         </div>
-    @endif
+        @endif
 
-    <div class="footer">
-        <div class="signature-section">
-            <div class="signature-box">
-                <div class="signature-line"></div>
-                <div style="margin-top: 5px; font-size: 12px;">Prepared By</div>
-                <div style="margin-top: 2px; font-size: 10px; color: #666;">
-                    {{ $paymentVoucher->user->name ?? 'N/A' }}
-                </div>
-            </div>
-            
-            <div class="signature-box">
-                <div class="signature-line"></div>
-                <div style="margin-top: 5px; font-size: 12px;">Approved By</div>
-                <div style="margin-top: 2px; font-size: 10px; color: #666;">
-                    @if($paymentVoucher->approved && $paymentVoucher->approvedBy)
-                        {{ $paymentVoucher->approvedBy->name }}
-                    @elseif($paymentVoucher->approved)
+        @if($paymentVoucher->notes)
+        <div style="margin-top:10px; font-size: 10px;">
+            <strong>Notes:</strong><br>
+            {{ $paymentVoucher->notes }}
+        </div>
+        @endif
+
+        {{-- Footer --}}
+        <hr>
+        <div class="footer">
+            <div class="signature-section">
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Prepared By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
                         {{ $paymentVoucher->user->name ?? 'N/A' }}
-                    @else
+                    </div>
+                </div>
+                
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Approved By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
+                        @if($paymentVoucher->approved && $paymentVoucher->approvedBy)
+                        {{ $paymentVoucher->approvedBy->name }}
+                        @elseif($paymentVoucher->approved)
+                        {{ $paymentVoucher->user->name ?? 'N/A' }}
+                        @else
                         <span style="color: #999;">Pending Approval</span>
-                    @endif
+                        @endif
+                    </div>
                 </div>
-            </div>
-            
-            <div class="signature-box">
-                <div class="signature-line"></div>
-                <div style="margin-top: 5px; font-size: 12px;">Received By</div>
-                <div style="margin-top: 2px; font-size: 10px; color: #666;">
-                    @if($paymentVoucher->payee_type === 'customer' && $paymentVoucher->customer)
+                
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Received By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
+                        @if($paymentVoucher->payee_type === 'customer' && $paymentVoucher->customer)
                         {{ $paymentVoucher->customer->name }}
-                    @elseif($paymentVoucher->payee_type === 'supplier' && $paymentVoucher->supplier)
+                        @elseif($paymentVoucher->payee_type === 'supplier' && $paymentVoucher->supplier)
                         {{ $paymentVoucher->supplier->name }}
-                    @elseif($paymentVoucher->payee_type === 'other')
+                        @elseif($paymentVoucher->payee_type === 'employee' && $paymentVoucher->employee)
+                        {{ $paymentVoucher->employee->full_name }}
+                        @elseif($paymentVoucher->payee_type === 'other')
                         {{ $paymentVoucher->payee_name ?? 'N/A' }}
-                    @else
+                        @else
                         <span style="color: #999;">N/A</span>
-                    @endif
+                        @endif
+                    </div>
                 </div>
             </div>
+
+            <div class="text-center" style="font-size:9px; margin-top: 20px;">
+                Payment Voucher No: {{ $paymentVoucher->reference }} <br>
+                Page 1 of 1
+            </div>
         </div>
-        
-        <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">
-            <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-            <p>This is a computer generated document. No signature is required.</p>
-            <p>Payment Voucher #{{ $paymentVoucher->reference }} | Generated on {{ date('F d, Y \a\t g:i A') }}</p>
-        </div>
+
     </div>
+
 </body>
 </html>

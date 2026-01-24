@@ -8,6 +8,7 @@
         <!-- Breadcrumb -->
         <x-breadcrumbs-with-icons :links="[
                 ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+                ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
                 ['label' => 'Payment Vouchers', 'url' => route('accounting.payment-vouchers.index'), 'icon' => 'bx bx-receipt'],
                 ['label' => 'Payment Voucher #' . $paymentVoucher->reference, 'url' => '#', 'icon' => 'bx bx-show']
             ]" />
@@ -29,7 +30,7 @@
 
         <!-- Approval Status Notice -->
         @if($paymentVoucher->reference_type === 'manual' && $paymentVoucher->isFullyApproved())
-        <div class="alert alert-info alert-dismissible fade show mb-4" role="alert">
+        <!-- <div class="alert alert-info alert-dismissible fade show mb-4" role="alert">
             <div class="d-flex align-items-center">
                 <i class="bx bx-lock font-size-24 me-3"></i>
                 <div>
@@ -38,7 +39,7 @@
                 </div>
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
+        </div> -->
         @elseif($paymentVoucher->reference_type === 'manual' && $paymentVoucher->requiresApproval() && !$paymentVoucher->isFullyApproved())
         <div class="alert alert-warning alert-dismissible fade show mb-4" role="alert">
             <div class="d-flex align-items-center">
@@ -53,7 +54,7 @@
         @endif
 
         <!-- Prominent Header Card -->
-        <div class="card radius-10 bg-gradient-danger text-white mb-4">
+        <div class="card radius-10 bg-primary text-white mb-4">
             <div class="card-body">
                 <div class="d-flex align-items-center">
                     <div
@@ -98,15 +99,89 @@
                                 <p class="form-control-plaintext">{{ $paymentVoucher->reference }}</p>
                             </div>
                             <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Payment Method</label>
+                                <p class="form-control-plaintext">
+                                    @if($paymentVoucher->payment_method === 'cheque')
+                                        <span class="badge bg-info">Cheque</span>
+                                    @elseif($paymentVoucher->payment_method === 'cash_deposit')
+                                        <span class="badge bg-success">Cash Deposit</span>
+                                    @else
+                                        <span class="badge bg-primary">Bank Transfer</span>
+                                    @endif
+                                </p>
+                            </div>
+                            @if($paymentVoucher->payment_method === 'bank_transfer' || $paymentVoucher->payment_method === 'cheque')
+                            <div class="col-md-6 mb-3">
                                 <label class="form-label fw-bold">Bank Account</label>
                                 <p class="form-control-plaintext">{{ $paymentVoucher->bankAccount->name ?? 'N/A' }} -
                                     {{ $paymentVoucher->bankAccount->account_number ?? 'N/A' }}
                                 </p>
                             </div>
+                            @endif
+                            @if($paymentVoucher->payment_method === 'cash_deposit' && $paymentVoucher->cashDeposit)
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Cash Deposit</label>
+                                <p class="form-control-plaintext">
+                                    {{ $paymentVoucher->cashDeposit->deposit_number ?? 'N/A' }}
+                                </p>
+                            </div>
+                            @endif
+                            @if($paymentVoucher->payment_method === 'cheque' && $paymentVoucher->cheque)
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Cheque Number</label>
+                                <p class="form-control-plaintext">{{ $paymentVoucher->cheque->cheque_number ?? 'N/A' }}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Cheque Date</label>
+                                <p class="form-control-plaintext">{{ $paymentVoucher->cheque->cheque_date ? \Carbon\Carbon::parse($paymentVoucher->cheque->cheque_date)->format('M d, Y') : 'N/A' }}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Cheque Status</label>
+                                <p class="form-control-plaintext">
+                                    @if($paymentVoucher->cheque->status === 'issued')
+                                        <span class="badge bg-warning">Issued</span>
+                                    @elseif($paymentVoucher->cheque->status === 'cleared')
+                                        <span class="badge bg-success">Cleared</span>
+                                    @elseif($paymentVoucher->cheque->status === 'bounced')
+                                        <span class="badge bg-danger">Bounced</span>
+                                    @elseif($paymentVoucher->cheque->status === 'cancelled')
+                                        <span class="badge bg-secondary">Cancelled</span>
+                                    @elseif($paymentVoucher->cheque->status === 'stale')
+                                        <span class="badge bg-dark">Stale</span>
+                                    @else
+                                        <span class="badge bg-secondary">{{ ucfirst($paymentVoucher->cheque->status ?? 'N/A') }}</span>
+                                    @endif
+                                </p>
+                            </div>
+                            @can('edit payment voucher')
+                            @if($paymentVoucher->cheque->status === 'issued')
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label fw-bold">Cheque Actions</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button type="button" class="btn btn-success btn-sm" onclick="clearCheque()">
+                                        <i class="bx bx-check-circle me-1"></i>Mark as Cleared
+                                    </button>
+                                    <button type="button" class="btn btn-danger btn-sm" onclick="bounceCheque()">
+                                        <i class="bx bx-x-circle me-1"></i>Mark as Bounced
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="cancelCheque()">
+                                        <i class="bx bx-stop-circle me-1"></i>Cancel Cheque
+                                    </button>
+                                    <button type="button" class="btn btn-dark btn-sm" onclick="markChequeStale()">
+                                        <i class="bx bx-time-five me-1"></i>Mark as Stale
+                                    </button>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    Use these actions when the bank confirms the cheque is cleared, bounced, cancelled, or has become stale.
+                                </small>
+                            </div>
+                            @endif
+                            @endcan
+                            @endif
                             <div class="col-md-6 mb-3">
                                 <label class="form-label fw-bold">Payee Type</label>
                                 <p class="form-control-plaintext">
-                                    <span class="badge bg-{{ $paymentVoucher->payee_type == 'customer' ? 'primary' : ($paymentVoucher->payee_type == 'supplier' ? 'success' : 'warning') }}">
+                                    <span class="badge bg-{{ $paymentVoucher->payee_type == 'customer' ? 'primary' : ($paymentVoucher->payee_type == 'supplier' ? 'success' : ($paymentVoucher->payee_type == 'employee' ? 'info' : 'warning')) }}">
                                         {{ ucfirst($paymentVoucher->payee_type ?? 'N/A') }}
                                     </span>
                                 </p>
@@ -119,6 +194,8 @@
                                     ({{ $paymentVoucher->customer->customerNo ?? 'N/A' }})
                                     @elseif($paymentVoucher->payee_type == 'supplier' && $paymentVoucher->supplier)
                                     {{ $paymentVoucher->supplier->name ?? 'N/A' }}
+                                    @elseif($paymentVoucher->payee_type == 'employee' && $paymentVoucher->employee)
+                                    {{ $paymentVoucher->employee->full_name }}@if($paymentVoucher->employee->employee_number) ({{ $paymentVoucher->employee->employee_number }})@endif
                                     @elseif($paymentVoucher->payee_type == 'other')
                                     {{ $paymentVoucher->payee_name ?? 'N/A' }}
                                     @else
@@ -702,6 +779,182 @@ $settings = \App\Models\PaymentVoucherApprovalSetting::where('company_id', auth(
         });
     }
 
+    function clearCheque() {
+        Swal.fire({
+            title: 'Mark Cheque as Cleared',
+            text: 'This will mark the cheque as cleared and post the clearing journal entry (Dr Cheque Issued, Cr Bank).',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#198754',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, mark as cleared',
+            cancelButtonText: 'Cancel',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: '{{ route("accounting.payment-vouchers.cheque.clear", $paymentVoucher->id) }}',
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    success: function (resp) {
+                        if (resp.success) {
+                            Swal.fire('Success', resp.message, 'success').then(() => {
+                                window.location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error', resp.message || 'Failed to clear cheque.', 'error');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Failed to clear cheque.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            }
+        });
+    }
+
+    function bounceCheque() {
+        Swal.fire({
+            title: 'Mark Cheque as Bounced',
+            input: 'text',
+            inputLabel: 'Reason for bounce',
+            inputPlaceholder: 'Enter reason (e.g. Insufficient funds)',
+            inputValidator: (value) => {
+                if (!value) {
+                    return 'Reason is required.';
+                }
+            },
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Mark as Bounced',
+            cancelButtonText: 'Cancel',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: '{{ route("accounting.payment-vouchers.cheque.bounce", $paymentVoucher->id) }}',
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        reason: result.value
+                    },
+                    success: function (resp) {
+                        if (resp.success) {
+                            Swal.fire('Success', resp.message, 'success').then(() => {
+                                window.location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error', resp.message || 'Failed to mark cheque as bounced.', 'error');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Failed to mark cheque as bounced.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            }
+        });
+    }
+
+    function cancelCheque() {
+        Swal.fire({
+            title: 'Cancel Cheque',
+            input: 'text',
+            inputLabel: 'Reason for cancellation',
+            inputPlaceholder: 'Enter reason (e.g. Cheque lost, reissued)',
+            inputValidator: (value) => {
+                if (!value) {
+                    return 'Reason is required.';
+                }
+            },
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#6c757d',
+            cancelButtonColor: '#dc3545',
+            confirmButtonText: 'Cancel Cheque',
+            cancelButtonText: 'Close',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: '{{ route("accounting.payment-vouchers.cheque.cancel", $paymentVoucher->id) }}',
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        reason: result.value
+                    },
+                    success: function (resp) {
+                        if (resp.success) {
+                            Swal.fire('Success', resp.message, 'success').then(() => {
+                                window.location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error', resp.message || 'Failed to cancel cheque.', 'error');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Failed to cancel cheque.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            }
+        });
+    }
+
+    function markChequeStale() {
+        Swal.fire({
+            title: 'Mark Cheque as Stale',
+            text: 'This will mark the cheque as stale (e.g. after 6 months) and prevent it from being reused.',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonColor: '#343a40',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Mark as Stale',
+            cancelButtonText: 'Cancel',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: '{{ route("accounting.payment-vouchers.cheque.stale", $paymentVoucher->id) }}',
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    success: function (resp) {
+                        if (resp.success) {
+                            Swal.fire('Success', resp.message, 'success').then(() => {
+                                window.location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error', resp.message || 'Failed to mark cheque as stale.', 'error');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Failed to mark cheque as stale.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            }
+        });
+    }
+
     function deleteAttachment() {
         Swal.fire({
             title: 'Remove Attachment',
@@ -868,6 +1121,11 @@ $settings = \App\Models\PaymentVoucherApprovalSetting::where('company_id', auth(
 <style>
     .bg-gradient-danger {
         background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+    }
+
+    /* Payment Voucher Header Background */
+    .card.bg-primary {
+        background-color: #0d6efd !important;
     }
 
     .font-size-32 {

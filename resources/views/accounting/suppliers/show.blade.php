@@ -11,6 +11,7 @@
         <div class="page-content">
             <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Purchases', 'url' => route('purchases.index'), 'icon' => 'bx bx-shopping-bag'],
             ['label' => 'Suppliers', 'url' => route('accounting.suppliers.index'), 'icon' => 'bx bx-store'],
             ['label' => 'Supplier Details', 'url' => '#', 'icon' => 'bx bx-info-circle']
         ]" />
@@ -21,17 +22,13 @@
                     <p class="text-muted mb-0">View supplier information</p>
                 </div>
                 <div>
-                    @can('edit supplier')
                     <a href="{{ route('accounting.suppliers.edit', Hashids::encode($supplier->id)) }}"
                         class="btn btn-primary me-2">
                         Edit Supplier
                     </a>
-                    @endcan
-                    @can('view suppliers')
                     <a href="{{ route('accounting.suppliers.index') }}" class="btn btn-secondary">
                         Back to Suppliers
                     </a>
-                    @endcan
                 </div>
             </div>
             <hr />
@@ -270,12 +267,11 @@
                                     <p class="text-muted mb-0">Manage this supplier</p>
                                 </div>
                                 <div>
-                                    <a href="{{ route('accounting.suppliers.edit', $supplier) }}"
+                                    <a href="{{ route('accounting.suppliers.edit', Hashids::encode($supplier->id)) }}"
                                         class="btn btn-primary me-2">
                                         Edit Supplier
                                     </a>
 
-                                    @can('change supplier status')
                                     <!-- Status Change Dropdown -->
                                     <div class="btn-group" role="group">
                                         <button type="button" class="btn btn-outline-secondary dropdown-toggle"
@@ -294,14 +290,11 @@
                                                 </a></li>
                                         </ul>
                                     </div>
-                                    @endcan
 
-                                    @can('delete supplier')
                                     <button type="button" class="btn btn-outline-danger ms-2 delete-supplier-btn"
                                         data-supplier-id="{{ $supplier->id }}" data-supplier-name="{{ $supplier->name }}">
                                         Delete
                                     </button>
-                                    @endcan
                                 </div>
                             </div>
                         </div>
@@ -340,7 +333,7 @@
             }).then((result) => {
                 if (result.isConfirmed) {
                     document.getElementById('statusInput').value = status;
-                    document.getElementById('statusForm').action = '{{ route("accounting.suppliers.changeStatus", $supplier) }}';
+                    document.getElementById('statusForm').action = '{{ route("accounting.suppliers.changeStatus", Hashids::encode($supplier->id)) }}';
                     document.getElementById('statusForm').submit();
                 }
             });
@@ -365,7 +358,7 @@
                     // Create a form and submit it
                     const form = $('<form>', {
                         'method': 'POST',
-                        'action': `/accounting/suppliers/${supplierId}`
+                        'action': `{{ route('accounting.suppliers.destroy', Hashids::encode($supplier->id)) }}`
                     });
 
                     form.append($('<input>', {

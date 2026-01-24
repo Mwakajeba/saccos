@@ -11,7 +11,7 @@
                 <h5 class="page-title text-dark fw-semibold fs-3">Bank Reconciliation Report Results</h5>
                 <ul class="breadcrumb">
                     <li class="breadcrumb-item"><a href="{{ route('dashboard') }}">Dashboard</a></li>
-                    <li class="breadcrumb-item"><a href="{{ route('accounting.reports.index') }}">Reports</a></li>
+                    <li class="breadcrumb-item"><a href="{{ route('reports.index') }}">Reports</a></li>
                     <li class="breadcrumb-item"><a href="{{ route('accounting.reports.bank-reconciliation-report') }}">Bank Reconciliation Report</a></li>
                     <li class="breadcrumb-item active">Results</li>
                 </ul>

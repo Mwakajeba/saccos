@@ -12,18 +12,19 @@
 
     <div class="row mb-3">
         <div class="col-md-6">
-            <label class="form-label">Select Account Class</label>
-            <select class="form-select" name="class_id" required>
-                <option value="">-- Choose Account Class --</option>
-                @foreach($accountClasses as $accountClass)
-                    <option value="{{ $accountClass->id }}" {{ (old('class_id') == $accountClass->id || (isset($accountClassGroup) && $accountClassGroup->class_id == $accountClass->id)) ? 'selected' : '' }}>
-                        {{ $accountClass->name }}
+            <label class="form-label">Select Main Group <span class="text-danger">*</span></label>
+            <select class="form-select" name="main_group_id" required>
+                <option value="">-- Choose Main Group --</option>
+                @foreach($mainGroups as $mainGroup)
+                    <option value="{{ $mainGroup->id }}" {{ (old('main_group_id') == $mainGroup->id || (isset($accountClassGroup) && $accountClassGroup->main_group_id == $mainGroup->id)) ? 'selected' : '' }}>
+                        {{ $mainGroup->name }} ({{ $mainGroup->accountClass->name ?? 'N/A' }})
                     </option>
                 @endforeach
             </select>
-            @error('class_id')
+            @error('main_group_id')
                 <div class="text-danger">{{ $message }}</div>
             @enderror
+            <small class="text-muted">The account class will be inherited from the selected main group</small>
         </div>
 
         <div class="col-md-6">
@@ -33,22 +34,24 @@
             @error('group_code')
                 <div class="text-danger">{{ $message }}</div>
             @enderror
+            <small class="text-muted">Optional unique identifier for this group</small>
         </div>
     </div>
 
     <div class="mb-3">
-        <label class="form-label">Group Name</label>
+        <label class="form-label">Group Name (FSLI) <span class="text-danger">*</span></label>
         <input type="text" class="form-control" name="name" value="{{ $accountClassGroup->name ?? old('name') }}"
-            required placeholder="e.g., Current Assets, Long-term Liabilities, etc.">
+            required placeholder="e.g., Current Assets, Long-term Liabilities, Operating Revenue, etc.">
         @error('name')
             <div class="text-danger">{{ $message }}</div>
         @enderror
+        <small class="text-muted">This will appear as a Financial Statement Line Item (FSLI)</small>
     </div>
 
     <div class="d-flex justify-content-end">
         <a href="{{ route('accounting.account-class-groups.index') }}" class="btn btn-secondary me-2">Cancel</a>
         <button type="submit" class="btn btn-{{ isset($accountClassGroup) ? 'primary' : 'success' }}">
-            {{ isset($accountClassGroup) ? 'Update Group' : 'Create Group' }}
+            {{ isset($accountClassGroup) ? 'Update FSLI' : 'Create FSLI' }}
         </button>
     </div>
 </form>
