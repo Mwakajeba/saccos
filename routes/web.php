@@ -60,6 +60,29 @@ use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\LaravelLogsController;
 use App\Http\Controllers\ContributionController;
 use App\Http\Controllers\ContributionAccountController;
+
+//Sales,purchases and invntory
+use App\Http\Controllers\Inventory\ItemController;
+use App\Http\Controllers\Inventory\CategoryController;
+use App\Http\Controllers\Inventory\MovementController;
+use App\Http\Controllers\Inventory\TransferController;
+use App\Http\Controllers\Inventory\WriteOffController;
+use App\Http\Controllers\TransferRequestController;
+use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\Purchase\PurchaseRequisitionController;
+use App\Http\Controllers\Purchase\QuotationController;
+use App\Http\Controllers\Purchase\OrderController;
+use App\Http\Controllers\Sales\DeliveryController;
+use App\Http\Controllers\Sales\SalesInvoiceController;
+use App\Http\Controllers\Sales\CreditNoteController;
+use App\Http\Controllers\Sales\SalesOrderController;
+use App\Http\Controllers\Sales\SalesProformaController;
+use App\Http\Controllers\Sales\CashSaleController;
+use App\Http\Controllers\Sales\PosSaleController;
+use App\Http\Controllers\ChangeBranchController;
+use App\Http\Controllers\Inventory\OpeningBalanceController;
+
 // Add other main app routes here
 Route::get('/dashboard/loan-product-disbursement', [DashboardController::class, 'loanProductDisbursement'])->middleware('auth');
 Route::get('/dashboard/delinquency-loan-buckets', [DashboardController::class, 'delinquencyLoanBuckets'])->middleware('auth');
@@ -238,6 +261,7 @@ Route::get('/reports', [App\Http\Controllers\ReportsController::class, 'index'])
 Route::get('/reports/loans', [App\Http\Controllers\ReportsController::class, 'loans'])->middleware('auth')->name('reports.loans');
 Route::get('/reports/customers', [App\Http\Controllers\ReportsController::class, 'customers'])->middleware('auth')->name('reports.customers');
 Route::get('/reports/shares', [App\Http\Controllers\ReportsController::class, 'shares'])->middleware('auth')->name('reports.shares');
+Route::get('/reports/contributions', [App\Http\Controllers\ReportsController::class, 'contributions'])->middleware('auth')->name('reports.contributions');
 Route::get("/reports/customers/list", [App\Http\Controllers\Reports\CustomerListReportController::class, "index"])->middleware("auth")->name("reports.customers.list");
 Route::get("/reports/customers/list/export", [App\Http\Controllers\Reports\CustomerListReportController::class, "export"])->middleware("auth")->name("reports.customers.list.export");
 Route::get("/reports/customers/list/export-pdf", [App\Http\Controllers\Reports\CustomerListReportController::class, "exportPdf"])->middleware("auth")->name("reports.customers.list.export-pdf");
@@ -261,6 +285,12 @@ Route::get("/reports/customers/communication/export-pdf", [App\Http\Controllers\
 Route::prefix('reports/shares')->middleware('auth')->name('reports.shares.')->group(function () {
     Route::get('/share-register', [App\Http\Controllers\Reports\ShareReportController::class, 'shareRegister'])->name('share-register');
     Route::get('/member-ledger', [App\Http\Controllers\Reports\ShareReportController::class, 'memberLedger'])->name('member-ledger');
+});
+
+// Contribution Reports Routes
+Route::prefix('reports/contributions')->middleware('auth')->name('reports.contributions.')->group(function () {
+    Route::get('/contribution-register', [App\Http\Controllers\Reports\ContributionReportController::class, 'contributionRegister'])->name('contribution-register');
+    Route::get('/member-ledger', [App\Http\Controllers\Reports\ContributionReportController::class, 'memberLedger'])->name('member-ledger');
 });
 
 Route::get('/reports/bot', [App\Http\Controllers\ReportsController::class, 'bot'])->middleware('auth')->name('reports.bot');
@@ -430,6 +460,19 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     Route::get('/opening-balance-logs', [SettingsController::class, 'openingBalanceLogsIndex'])->name('opening-balance-logs.index');
     Route::get('/opening-balance-logs/data', [SettingsController::class, 'getOpeningBalanceLogsData'])->name('opening-balance-logs.data');
 
+        // Inventory Settings
+    Route::get('/inventory', [SettingsController::class, 'inventorySettings'])->name('inventory');
+    Route::put('/inventory', [SettingsController::class, 'updateInventorySettings'])->name('inventory.update');
+
+    // Inventory Locations
+    Route::get('/inventory-settings/locations', [SettingsController::class, 'inventoryLocations'])->name('inventory.locations.index');
+    Route::get('/inventory-settings/locations/create', [SettingsController::class, 'createInventoryLocation'])->name('inventory.locations.create');
+    Route::post('/inventory-settings/locations', [SettingsController::class, 'storeInventoryLocation'])->name('inventory.locations.store');
+    Route::get('/inventory-settings/locations/{location}', [SettingsController::class, 'showInventoryLocation'])->name('inventory.locations.show');
+    Route::get('/inventory-settings/locations/{location}/edit', [SettingsController::class, 'editInventoryLocation'])->name('inventory.locations.edit');
+    Route::put('/inventory-settings/locations/{location}', [SettingsController::class, 'updateInventoryLocation'])->name('inventory.locations.update');
+    Route::delete('/inventory-settings/locations/{location}', [SettingsController::class, 'destroyInventoryLocation'])->name('inventory.locations.destroy');
+
     // Bulk Email Settings (Super Admin only)
     Route::middleware(['role:super-admin'])->group(function () {
         Route::get('/bulk-email', [\App\Http\Controllers\BulkEmailController::class, 'index'])->name('bulk-email');
@@ -439,6 +482,238 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
 });
 
 ////////////////////////////////////////////// END SETTINGS ROUTES /////////////////////////////////////////////
+
+
+////////////////////////////////////////////// INVENTORY MANAGEMENT ///////////////////////////////////////////
+
+Route::prefix('inventory')->name('inventory.')->middleware(['auth', 'company.scope'])->group(function () {
+    // Inventory Management Dashboard
+    Route::get('/', [InventoryController::class, 'index'])->name('index');
+
+    // Inventory Items
+    Route::get('/items', [ItemController::class, 'index'])->name('items.index');
+    Route::get('/items/create', [ItemController::class, 'create'])->name('items.create');
+    Route::post('/items', [ItemController::class, 'store'])->name('items.store');
+    Route::post('/items/import', [ItemController::class, 'import'])->name('items.import');
+    Route::get('/items/import-status/{batchId}', [ItemController::class, 'importStatus'])->name('items.import-status');
+    Route::get('/items/download-template', [ItemController::class, 'downloadTemplate'])->name('items.download-template');
+    Route::get('/items/export', [ItemController::class, 'export'])->name('items.export');
+    Route::get('/items/{encodedId}', [ItemController::class, 'show'])->name('items.show');
+    Route::get('/items/{encodedId}/movements', [ItemController::class, 'movements'])->name('items.movements');
+    Route::get('/items/{encodedId}/stock', [ItemController::class, 'getItemStock'])->name('items.stock');
+    Route::get('/items/{encodedId}/edit', [ItemController::class, 'edit'])->name('items.edit');
+    Route::put('/items/{encodedId}', [ItemController::class, 'update'])->name('items.update');
+    Route::delete('/items/{encodedId}', [ItemController::class, 'destroy'])->name('items.destroy');
+
+    // Stock Reports
+    Route::get('/stock-report', [ItemController::class, 'getStockReport'])->name('stock.report');
+    Route::get('/location/{locationId}/stock', [ItemController::class, 'getLocationStock'])->name('location.stock');
+
+    // Inventory Categories (use hash ids)
+    Route::get('/categories', [CategoryController::class, 'index'])->name('categories.index');
+    Route::get('/categories/create', [CategoryController::class, 'create'])->name('categories.create');
+    Route::post('/categories', [CategoryController::class, 'store'])->name('categories.store');
+    Route::get('/categories/{encodedId}', [CategoryController::class, 'show'])->name('categories.show');
+    Route::get('/categories/{encodedId}/edit', [CategoryController::class, 'edit'])->name('categories.edit');
+    Route::put('/categories/{encodedId}', [CategoryController::class, 'update'])->name('categories.update');
+    Route::delete('/categories/{encodedId}', [CategoryController::class, 'destroy'])->name('categories.destroy');
+
+    // Stock Movements
+    Route::get('/movements', [MovementController::class, 'index'])->name('movements.index');
+    Route::get('/movements/create', [MovementController::class, 'create'])->name('movements.create');
+    Route::post('/movements', [MovementController::class, 'store'])->name('movements.store');
+    Route::get('/movements/{movement}', [MovementController::class, 'show'])->name('movements.show');
+    Route::get('/movements/{movement}/edit', [MovementController::class, 'edit'])->name('movements.edit');
+    Route::put('/movements/{movement}', [MovementController::class, 'update'])->name('movements.update');
+    Route::delete('/movements/{movement}', [MovementController::class, 'destroy'])->name('movements.destroy');
+
+    // Write-offs
+    Route::get('/write-offs', [WriteOffController::class, 'index'])->name('write-offs.index');
+    Route::get('/write-offs/create', [WriteOffController::class, 'create'])->name('write-offs.create');
+    Route::post('/write-offs', [WriteOffController::class, 'store'])->name('write-offs.store');
+    Route::get('/write-offs/{movement}', [WriteOffController::class, 'show'])->name('write-offs.show');
+    Route::get('/write-offs/{movement}/edit', [WriteOffController::class, 'edit'])->name('write-offs.edit');
+    Route::put('/write-offs/{movement}', [WriteOffController::class, 'update'])->name('write-offs.update');
+    Route::delete('/write-offs/{movement}', [WriteOffController::class, 'destroy'])->name('write-offs.destroy');
+
+    // Opening Balances
+    Route::get('/opening-balances', [OpeningBalanceController::class, 'index'])->name('opening-balances.index');
+    Route::get('/opening-balances/create', [OpeningBalanceController::class, 'create'])->name('opening-balances.create');
+    Route::post('/opening-balances', [OpeningBalanceController::class, 'store'])->name('opening-balances.store');
+    Route::post('/opening-balances/import', [OpeningBalanceController::class, 'import'])->name('opening-balances.import');
+    Route::get('/opening-balances/download-template', [OpeningBalanceController::class, 'downloadTemplate'])->name('opening-balances.download-template');
+    Route::get('/opening-balances/{openingBalance}', [OpeningBalanceController::class, 'show'])->name('opening-balances.show');
+    Route::get('/opening-balances/{openingBalance}/edit', [OpeningBalanceController::class, 'edit'])->name('opening-balances.edit');
+    Route::put('/opening-balances/{openingBalance}', [OpeningBalanceController::class, 'update'])->name('opening-balances.update');
+    Route::delete('/opening-balances/{openingBalance}', [OpeningBalanceController::class, 'destroy'])->name('opening-balances.destroy');
+
+    // API: Get locations by branch (must be before parameterized routes)
+    Route::get('/api/branches/{branchId}/locations', [TransferController::class, 'getBranchLocations'])->name('api.branches.locations');
+
+    // Transfers
+    Route::get('/transfers', [TransferController::class, 'index'])->name('transfers.index');
+    Route::get('/transfers/create', [TransferController::class, 'create'])->name('transfers.create');
+    Route::post('/transfers', [TransferController::class, 'store'])->name('transfers.store');
+    Route::get('/transfers/{transfer}', [TransferController::class, 'show'])->name('transfers.show');
+    Route::get('/transfers/{transfer}/edit', [TransferController::class, 'edit'])->name('transfers.edit');
+    Route::put('/transfers/{transfer}', [TransferController::class, 'update'])->name('transfers.update');
+    Route::delete('/transfers/{transfer}', [TransferController::class, 'destroy'])->name('transfers.destroy');
+
+    // Bulk Transfer Operations
+    Route::post('/transfers/bulk-delete', [TransferController::class, 'bulkDelete'])->name('transfers.bulk-delete');
+    Route::get('/transfers/bulk-edit', [TransferController::class, 'bulkEdit'])->name('transfers.bulk-edit');
+    Route::put('/transfers/bulk-update', [TransferController::class, 'bulkUpdate'])->name('transfers.bulk-update');
+
+    // Transfer Requests
+    Route::get('/transfer-requests', [TransferRequestController::class, 'index'])->name('transfer-requests.index');
+    Route::get('/transfer-requests/create', [TransferRequestController::class, 'create'])->name('transfer-requests.create');
+    Route::post('/transfer-requests', [TransferRequestController::class, 'store'])->name('transfer-requests.store');
+    Route::get('/transfer-requests/{transferRequest}', [TransferRequestController::class, 'show'])->name('transfer-requests.show');
+    Route::get('/transfer-requests/{transferRequest}/edit', [TransferRequestController::class, 'edit'])->name('transfer-requests.edit');
+    Route::put('/transfer-requests/{transferRequest}', [TransferRequestController::class, 'update'])->name('transfer-requests.update');
+    Route::post('/transfer-requests/{transferRequest}/approve', [TransferRequestController::class, 'approve'])->name('transfer-requests.approve');
+    Route::post('/transfer-requests/{transferRequest}/reject', [TransferRequestController::class, 'reject'])->name('transfer-requests.reject');
+
+
+    // Inventory Count Routes
+    Route::prefix('counts')->name('counts.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Inventory\InventoryCountController::class, 'index'])->name('index');
+
+        // Count Periods
+        Route::get('/periods/create', [App\Http\Controllers\Inventory\InventoryCountController::class, 'createPeriod'])->name('periods.create');
+        Route::post('/periods', [App\Http\Controllers\Inventory\InventoryCountController::class, 'storePeriod'])->name('periods.store');
+        Route::get('/periods/{encodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'showPeriod'])->name('periods.show');
+
+        // Count Sessions
+        Route::get('/sessions/create/{periodEncodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'createSession'])->name('sessions.create');
+        Route::post('/sessions/{periodEncodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'storeSession'])->name('sessions.store');
+        Route::get('/sessions/{encodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'showSession'])->name('sessions.show');
+        Route::post('/sessions/{encodedId}/freeze', [App\Http\Controllers\Inventory\InventoryCountController::class, 'freezeSession'])->name('sessions.freeze');
+        Route::post('/sessions/{encodedId}/start-counting', [App\Http\Controllers\Inventory\InventoryCountController::class, 'startCounting'])->name('sessions.start-counting');
+        Route::post('/sessions/{encodedId}/complete-counting', [App\Http\Controllers\Inventory\InventoryCountController::class, 'completeCounting'])->name('sessions.complete-counting');
+        Route::post('/sessions/{encodedId}/approve', [App\Http\Controllers\Inventory\InventoryCountController::class, 'approveCountSession'])->name('sessions.approve');
+        Route::post('/sessions/{encodedId}/reject', [App\Http\Controllers\Inventory\InventoryCountController::class, 'rejectCountSession'])->name('sessions.reject');
+        Route::get('/sessions/{encodedId}/variances', [App\Http\Controllers\Inventory\InventoryCountController::class, 'showVariances'])->name('sessions.variances');
+        Route::get('/sessions/{encodedId}/export-counting-sheets-pdf', [App\Http\Controllers\Inventory\InventoryCountController::class, 'exportCountingSheetsPdf'])->name('sessions.export-counting-sheets-pdf');
+        Route::get('/sessions/{encodedId}/export-counting-sheets-excel', [App\Http\Controllers\Inventory\InventoryCountController::class, 'exportCountingSheetsExcel'])->name('sessions.export-counting-sheets-excel');
+        Route::get('/sessions/{encodedId}/assign-team', [App\Http\Controllers\Inventory\InventoryCountController::class, 'showTeamAssignment'])->name('sessions.assign-team');
+        Route::post('/sessions/{encodedId}/assign-team', [App\Http\Controllers\Inventory\InventoryCountController::class, 'assignTeam'])->name('sessions.assign-team.store');
+        Route::get('/sessions/{encodedId}/download-counting-template', [App\Http\Controllers\Inventory\InventoryCountController::class, 'downloadCountingTemplate'])->name('sessions.download-counting-template');
+        Route::post('/sessions/{encodedId}/upload-counting-excel', [App\Http\Controllers\Inventory\InventoryCountController::class, 'uploadCountingExcel'])->name('sessions.upload-counting-excel');
+
+        // Count Entries
+        Route::get('/entries/{encodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'showEntry'])->name('entries.show');
+        Route::post('/entries/{encodedId}/update-physical-qty', [App\Http\Controllers\Inventory\InventoryCountController::class, 'updatePhysicalQuantity'])->name('entries.update-physical-qty');
+        Route::post('/entries/{encodedId}/recount', [App\Http\Controllers\Inventory\InventoryCountController::class, 'requestRecount'])->name('entries.recount');
+        Route::post('/entries/{encodedId}/verify', [App\Http\Controllers\Inventory\InventoryCountController::class, 'verifyEntry'])->name('entries.verify');
+
+        // Variances
+        Route::post('/variances/{encodedId}/investigation', [App\Http\Controllers\Inventory\InventoryCountController::class, 'updateVarianceInvestigation'])->name('variances.investigation');
+
+        // Adjustments
+        Route::get('/sessions/{encodedId}/adjustments', [App\Http\Controllers\Inventory\InventoryCountController::class, 'showAdjustments'])->name('sessions.adjustments');
+        Route::get('/adjustments/create/{varianceId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'createAdjustmentForm'])->name('adjustments.create-form');
+        Route::post('/adjustments/create/{varianceId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'createAdjustment'])->name('adjustments.create');
+        Route::post('/adjustments/bulk-create/{encodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'bulkCreateAdjustments'])->name('adjustments.bulk-create');
+        Route::post('/adjustments/bulk-approve/{encodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'bulkApproveAdjustments'])->name('adjustments.bulk-approve');
+        Route::post('/adjustments/bulk-post/{encodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'bulkPostAdjustmentsToGL'])->name('adjustments.bulk-post');
+        Route::get('/adjustments/{encodedId}', [App\Http\Controllers\Inventory\InventoryCountController::class, 'showAdjustment'])->name('adjustments.show');
+        Route::post('/adjustments/{encodedId}/approve', [App\Http\Controllers\Inventory\InventoryCountController::class, 'approveAdjustment'])->name('adjustments.approve');
+        Route::post('/adjustments/{encodedId}/reject', [App\Http\Controllers\Inventory\InventoryCountController::class, 'rejectAdjustment'])->name('adjustments.reject');
+        Route::post('/adjustments/{encodedId}/post-to-gl', [App\Http\Controllers\Inventory\InventoryCountController::class, 'postAdjustmentToGL'])->name('adjustments.post-to-gl');
+    });
+
+    // Inventory Reports Routes
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Inventory\InventoryReportController::class, 'index'])->name('index');
+        Route::get('/stock-on-hand', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockOnHand'])->name('stock-on-hand');
+        Route::get('/stock-on-hand/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockOnHandExportExcel'])->name('stock-on-hand.export.excel');
+        Route::get('/stock-on-hand/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockOnHandExportPdf'])->name('stock-on-hand.export.pdf');
+        Route::get('/stock-valuation', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockValuation'])->name('stock-valuation');
+        Route::get('/movement-register', [App\Http\Controllers\Inventory\InventoryReportController::class, 'movementRegister'])->name('movement-register');
+        Route::get('/movement-register/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'movementRegisterExportExcel'])->name('movement-register.export.excel');
+        Route::get('/movement-register/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'movementRegisterExportPdf'])->name('movement-register.export.pdf');
+        Route::get('/aging-stock', [App\Http\Controllers\Inventory\InventoryReportController::class, 'agingStock'])->name('aging-stock');
+        Route::get('/reorder', [App\Http\Controllers\Inventory\InventoryReportController::class, 'reorderReport'])->name('reorder');
+        Route::get('/reorder/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'reorderReportExportExcel'])->name('reorder.export.excel');
+        Route::get('/reorder/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'reorderReportExportPdf'])->name('reorder.export.pdf');
+        Route::get('/over-understock', [App\Http\Controllers\Inventory\InventoryReportController::class, 'overUnderstock'])->name('over-understock');
+        Route::get('/over-understock/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'overUnderstockExportExcel'])->name('over-understock.export.excel');
+        Route::get('/over-understock/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'overUnderstockExportPdf'])->name('over-understock.export.pdf');
+        Route::get('/item-ledger', [App\Http\Controllers\Inventory\InventoryReportController::class, 'itemLedger'])->name('item-ledger');
+        Route::get('/item-ledger/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'itemLedgerExportExcel'])->name('item-ledger.export.excel');
+        Route::get('/item-ledger/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'itemLedgerExportPdf'])->name('item-ledger.export.pdf');
+        Route::get('/cost-changes', [App\Http\Controllers\Inventory\InventoryReportController::class, 'costChanges'])->name('cost-changes');
+        Route::get('/cost-changes/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'costChangesExportExcel'])->name('cost-changes.export.excel');
+        Route::get('/cost-changes/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'costChangesExportPdf'])->name('cost-changes.export.pdf');
+        Route::get('/stock-take-variance', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockTakeVariance'])->name('stock-take-variance');
+        Route::get('/full-inventory-count', [App\Http\Controllers\Inventory\InventoryReportController::class, 'fullInventoryCountReport'])->name('full-inventory-count');
+        Route::get('/variance-summary', [App\Http\Controllers\Inventory\InventoryReportController::class, 'varianceSummaryReport'])->name('variance-summary');
+        Route::get('/variance-value', [App\Http\Controllers\Inventory\InventoryReportController::class, 'varianceValueReport'])->name('variance-value');
+        Route::get('/high-value-scorecard', [App\Http\Controllers\Inventory\InventoryReportController::class, 'highValueItemsScorecard'])->name('high-value-scorecard');
+        Route::get('/expiry-damaged-stock', [App\Http\Controllers\Inventory\InventoryReportController::class, 'expiryDamagedStockReport'])->name('expiry-damaged-stock');
+        Route::get('/cycle-count-performance', [App\Http\Controllers\Inventory\InventoryReportController::class, 'cycleCountPerformanceReport'])->name('cycle-count-performance');
+        Route::get('/year-end-stock-valuation', [App\Http\Controllers\Inventory\InventoryReportController::class, 'yearEndStockValuationReport'])->name('year-end-stock-valuation');
+        Route::get('/location-bin', [App\Http\Controllers\Inventory\InventoryReportController::class, 'locationBin'])->name('location-bin');
+        Route::get('/category-brand-mix', [App\Http\Controllers\Inventory\InventoryReportController::class, 'categoryBrandMix'])->name('category-brand-mix');
+        Route::get('/category-brand-mix/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'categoryBrandMixExportExcel'])->name('category-brand-mix.export.excel');
+        Route::get('/category-brand-mix/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'categoryBrandMixExportPdf'])->name('category-brand-mix.export.pdf');
+        Route::get('/profit-margin', [App\Http\Controllers\Inventory\InventoryReportController::class, 'profitMargin'])->name('profit-margin');
+        Route::get('/profit-margin/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'profitMarginExportExcel'])->name('profit-margin.export.excel');
+        Route::get('/profit-margin/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'profitMarginExportPdf'])->name('profit-margin.export.pdf');
+        Route::get('/inventory-value-summary', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryValueSummary'])->name('inventory-value-summary');
+        Route::get('/inventory-value-summary/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryValueSummaryExportPdf'])->name('inventory-value-summary.export.pdf');
+        Route::get('/inventory-value-summary/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryValueSummaryExportExcel'])->name('inventory-value-summary.export.excel');
+
+        // Inventory Quantity Summary
+        Route::get('/inventory-quantity-summary', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryQuantitySummary'])->name('inventory-quantity-summary');
+        Route::get('/inventory-quantity-summary/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryQuantitySummaryExportPdf'])->name('inventory-quantity-summary.export.pdf');
+        Route::get('/inventory-quantity-summary/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryQuantitySummaryExportExcel'])->name('inventory-quantity-summary.export.excel');
+
+        // Inventory Profit Margin
+        Route::get('/inventory-profit-margin', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryProfitMargin'])->name('inventory-profit-margin');
+        Route::get('/inventory-profit-margin/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryProfitMarginExportPdf'])->name('inventory-profit-margin.export.pdf');
+        Route::get('/inventory-profit-margin/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryProfitMarginExportExcel'])->name('inventory-profit-margin.export.excel');
+
+        // Inventory Price List
+        Route::get('/inventory-price-list', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryPriceList'])->name('inventory-price-list');
+        Route::get('/inventory-price-list/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryPriceListExportPdf'])->name('inventory-price-list.export.pdf');
+        Route::get('/inventory-price-list/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryPriceListExportExcel'])->name('inventory-price-list.export.excel');
+
+        // Inventory Costing Calculation Worksheet
+        Route::get('/inventory-costing-worksheet', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryCostingWorksheet'])->name('inventory-costing-worksheet');
+        Route::get('/inventory-costing-worksheet/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryCostingWorksheetExportPdf'])->name('inventory-costing-worksheet.export.pdf');
+        Route::get('/inventory-costing-worksheet/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryCostingWorksheetExportExcel'])->name('inventory-costing-worksheet.export.excel');
+
+        // Inventory Quantity by Location
+        Route::get('/inventory-quantity-by-location', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryQuantityByLocation'])->name('inventory-quantity-by-location');
+        Route::get('/inventory-quantity-by-location/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryQuantityByLocationExportPdf'])->name('inventory-quantity-by-location.export.pdf');
+        Route::get('/inventory-quantity-by-location/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryQuantityByLocationExportExcel'])->name('inventory-quantity-by-location.export.excel');
+
+        // Inventory Transfer Movement Report
+        Route::get('/inventory-transfer-movement', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryTransferMovement'])->name('inventory-transfer-movement');
+        Route::get('/inventory-transfer-movement/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryTransferMovementExportPdf'])->name('inventory-transfer-movement.export.pdf');
+        Route::get('/inventory-transfer-movement/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryTransferMovementExportExcel'])->name('inventory-transfer-movement.export.excel');
+
+        // Inventory Aging Report
+        Route::get('/inventory-aging', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryAging'])->name('inventory-aging');
+        Route::get('/inventory-aging/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryAgingExportPdf'])->name('inventory-aging.export.pdf');
+        Route::get('/inventory-aging/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'inventoryAgingExportExcel'])->name('inventory-aging.export.excel');
+
+        // Category Performance Report
+        Route::get('/category-performance', [App\Http\Controllers\Inventory\InventoryReportController::class, 'categoryPerformance'])->name('category-performance');
+        Route::get('/category-performance/export/pdf', [App\Http\Controllers\Inventory\InventoryReportController::class, 'categoryPerformanceExportPdf'])->name('category-performance.export.pdf');
+        Route::get('/category-performance/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'categoryPerformanceExportExcel'])->name('category-performance.export.excel');
+
+        // Expiry Reports
+        Route::prefix('expiry')->name('expiry.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Inventory\ExpiryReportController::class, 'index'])->name('index');
+            Route::get('/expiring-soon', [\App\Http\Controllers\Inventory\ExpiryReportController::class, 'expiringSoon'])->name('expiring-soon');
+            Route::get('/expired', [\App\Http\Controllers\Inventory\ExpiryReportController::class, 'expired'])->name('expired');
+            Route::post('/stock-details', [\App\Http\Controllers\Inventory\ExpiryReportController::class, 'stockDetails'])->name('stock-details');
+        });
+    });
+});
 
 ////////////////////////////////////////////// SUBSCRIPTION MANAGEMENT ///////////////////////////////////////////
 
@@ -1056,6 +1331,462 @@ Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(
 });
 
 //////////////////////////////////////////////////// END CONTRIBUTIONS //////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////ASSETS MANAGEMENT //////////////////////////////////////////////////////////////
+// Asset settings
+Route::prefix('asset-management')->name('assets.')->middleware(['auth', 'company.scope'])->group(function () {
+    // Main Assets Dashboard
+    Route::get('/', [App\Http\Controllers\Asset\AssetsController::class, 'index'])->name('index');
+    
+    // Movements / Transfers
+    Route::get('/movements', [App\Http\Controllers\Asset\AssetMovementController::class, 'index'])->name('movements.index');
+    Route::get('/movements/data', [App\Http\Controllers\Asset\AssetMovementController::class, 'data'])->name('movements.data');
+    Route::get('/movements/create', [App\Http\Controllers\Asset\AssetMovementController::class, 'create'])->name('movements.create');
+    Route::post('/movements', [App\Http\Controllers\Asset\AssetMovementController::class, 'store'])->name('movements.store');
+    // Specific routes must come before the generic {id} route
+    Route::post('/movements/{id}/approve', [App\Http\Controllers\Asset\AssetMovementController::class, 'approve'])->name('movements.approve');
+    Route::post('/movements/{id}/complete', [App\Http\Controllers\Asset\AssetMovementController::class, 'complete'])->name('movements.complete');
+    Route::post('/movements/{id}/reject', [App\Http\Controllers\Asset\AssetMovementController::class, 'reject'])->name('movements.reject');
+    Route::get('/movements/{id}', [App\Http\Controllers\Asset\AssetMovementController::class, 'show'])->name('movements.show');
+
+    // Lookups
+    Route::get('/movements/lookup/departments', [App\Http\Controllers\Asset\AssetMovementController::class, 'departmentsByBranch'])->name('movements.lookup.departments');
+    Route::get('/movements/lookup/users', [App\Http\Controllers\Asset\AssetMovementController::class, 'usersByBranch'])->name('movements.lookup.users');
+    Route::get('/movements/lookup/asset-details', [App\Http\Controllers\Asset\AssetMovementController::class, 'assetDetails'])->name('movements.lookup.asset-details');
+    Route::get('/settings', [App\Http\Controllers\AssetsController::class, 'settings'])->name('settings.index');
+    Route::post('/settings', [App\Http\Controllers\AssetsController::class, 'updateSettings'])->name('settings.update');
+    // Categories
+    Route::get('/categories', [App\Http\Controllers\Asset\AssetCategoryController::class, 'index'])->name('categories.index');
+    Route::get('/categories/data', [App\Http\Controllers\Asset\AssetCategoryController::class, 'data'])->name('categories.data');
+    Route::get('/categories/create', [App\Http\Controllers\Asset\AssetCategoryController::class, 'create'])->name('categories.create');
+    Route::post('/categories', [App\Http\Controllers\Asset\AssetCategoryController::class, 'store'])->name('categories.store');
+    Route::get('/categories/{id}/edit', [App\Http\Controllers\Asset\AssetCategoryController::class, 'edit'])->name('categories.edit');
+    Route::get('/categories/{id}', [App\Http\Controllers\Asset\AssetCategoryController::class, 'show'])->name('categories.show');
+    Route::put('/categories/{id}', [App\Http\Controllers\Asset\AssetCategoryController::class, 'update'])->name('categories.update');
+    Route::delete('/categories/{id}', [App\Http\Controllers\Asset\AssetCategoryController::class, 'destroy'])->name('categories.destroy');
+
+    // Registry
+    Route::get('/registry', [App\Http\Controllers\Asset\AssetRegistryController::class, 'index'])->name('registry.index');
+    Route::get('/registry/data', [App\Http\Controllers\Asset\AssetRegistryController::class, 'data'])->name('registry.data');
+    Route::get('/registry/create', [App\Http\Controllers\Asset\AssetRegistryController::class, 'create'])->name('registry.create');
+    Route::post('/registry', [App\Http\Controllers\Asset\AssetRegistryController::class, 'store'])->name('registry.store');
+    Route::post('/registry/import', [App\Http\Controllers\Asset\AssetRegistryController::class, 'import'])->name('registry.import');
+    Route::get('/registry/download-template', [App\Http\Controllers\Asset\AssetRegistryController::class, 'downloadTemplate'])->name('registry.download-template');
+    Route::get('/registry/{id}', [App\Http\Controllers\Asset\AssetRegistryController::class, 'show'])->name('registry.show');
+    Route::get('/registry/{id}/depreciation-history', [App\Http\Controllers\Asset\AssetRegistryController::class, 'depreciationHistory'])->name('registry.depreciation-history');
+    Route::get('/registry/{id}/depreciation-history/data', [App\Http\Controllers\Asset\AssetRegistryController::class, 'depreciationHistoryData'])->name('registry.depreciation-history-data');
+    Route::get('/registry/{id}/edit', [App\Http\Controllers\Asset\AssetRegistryController::class, 'edit'])->name('registry.edit');
+    Route::put('/registry/{id}', [App\Http\Controllers\Asset\AssetRegistryController::class, 'update'])->name('registry.update');
+    Route::delete('/registry/{id}', [App\Http\Controllers\Asset\AssetRegistryController::class, 'destroy'])->name('registry.destroy');
+
+    // Opening Assets
+    Route::get('/openings', [App\Http\Controllers\Asset\OpeningAssetsController::class, 'index'])->name('openings.index');
+    Route::get('/openings/data', [App\Http\Controllers\Asset\OpeningAssetsController::class, 'data'])->name('openings.data');
+    Route::get('/openings/create', [App\Http\Controllers\Asset\OpeningAssetsController::class, 'create'])->name('openings.create');
+    Route::post('/openings', [App\Http\Controllers\Asset\OpeningAssetsController::class, 'store'])->name('openings.store');
+    Route::post('/openings/import', [App\Http\Controllers\Asset\OpeningAssetsController::class, 'import'])->name('openings.import');
+    Route::get('/openings/download-template', [App\Http\Controllers\Asset\OpeningAssetsController::class, 'downloadTemplate'])->name('openings.download-template');
+    Route::get('/openings/{id}', [App\Http\Controllers\Asset\OpeningAssetsController::class, 'show'])->name('openings.show');
+    Route::delete('/openings/{id}', [App\Http\Controllers\Asset\OpeningAssetsController::class, 'destroy'])->name('openings.destroy');
+
+    // Depreciation Management
+    Route::get('/depreciation', [App\Http\Controllers\Asset\DepreciationController::class, 'index'])->name('depreciation.index');
+    Route::post('/depreciation/process', [App\Http\Controllers\Asset\DepreciationController::class, 'process'])->name('depreciation.process');
+    Route::get('/depreciation/history', [App\Http\Controllers\Asset\DepreciationController::class, 'history'])->name('depreciation.history');
+    Route::get('/depreciation/history/data', [App\Http\Controllers\Asset\DepreciationController::class, 'historyData'])->name('depreciation.history.data');
+    Route::get('/depreciation/forecast/{id}', [App\Http\Controllers\Asset\DepreciationController::class, 'forecast'])->name('depreciation.forecast');
+
+    // Tax Depreciation Management
+    Route::get('/tax-depreciation', [App\Http\Controllers\Asset\TaxDepreciationController::class, 'index'])->name('tax-depreciation.index');
+    Route::post('/tax-depreciation/process', [App\Http\Controllers\Asset\TaxDepreciationController::class, 'process'])->name('tax-depreciation.process');
+    Route::get('/tax-depreciation/history', [App\Http\Controllers\Asset\TaxDepreciationController::class, 'history'])->name('tax-depreciation.history');
+    Route::get('/tax-depreciation/history/data', [App\Http\Controllers\Asset\TaxDepreciationController::class, 'historyData'])->name('tax-depreciation.history.data');
+
+    // Tax Depreciation Reports
+    Route::get('/tax-depreciation/reports/tra-schedule', [App\Http\Controllers\Asset\TaxDepreciationReportController::class, 'traSchedule'])->name('tax-depreciation.reports.tra-schedule');
+    Route::get('/tax-depreciation/reports/tra-schedule/data', [App\Http\Controllers\Asset\TaxDepreciationReportController::class, 'traScheduleData'])->name('tax-depreciation.reports.tra-schedule.data');
+    Route::get('/tax-depreciation/reports/book-tax-reconciliation', [App\Http\Controllers\Asset\TaxDepreciationReportController::class, 'bookTaxReconciliation'])->name('tax-depreciation.reports.book-tax-reconciliation');
+    Route::get('/tax-depreciation/reports/book-tax-reconciliation/data', [App\Http\Controllers\Asset\TaxDepreciationReportController::class, 'bookTaxReconciliationData'])->name('tax-depreciation.reports.book-tax-reconciliation.data');
+
+    // Deferred Tax Management
+    Route::get('/deferred-tax', [App\Http\Controllers\Asset\DeferredTaxController::class, 'index'])->name('deferred-tax.index');
+    Route::post('/deferred-tax/process', [App\Http\Controllers\Asset\DeferredTaxController::class, 'process'])->name('deferred-tax.process');
+    Route::get('/deferred-tax/schedule', [App\Http\Controllers\Asset\DeferredTaxController::class, 'schedule'])->name('deferred-tax.schedule');
+    Route::get('/deferred-tax/schedule/data', [App\Http\Controllers\Asset\DeferredTaxController::class, 'scheduleData'])->name('deferred-tax.schedule.data');
+
+    // Revaluation & Impairment Settings
+    Route::get('/revaluations/settings', [App\Http\Controllers\Assets\RevaluationSettingsController::class, 'index'])->name('revaluations.settings');
+    Route::put('/revaluations/settings/category/{id}', [App\Http\Controllers\Assets\RevaluationSettingsController::class, 'updateCategory'])->name('revaluations.settings.update-category');
+    Route::post('/revaluations/settings/bulk-update', [App\Http\Controllers\Assets\RevaluationSettingsController::class, 'updateBulk'])->name('revaluations.settings.bulk-update');
+
+    // Revaluation & Impairment Management
+    Route::prefix('revaluations')->name('revaluations.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'index'])->name('index');
+        Route::get('/data', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'data'])->name('data');
+        Route::get('/create', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'store'])->name('store');
+        Route::get('/{id}', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'update'])->name('update');
+        Route::post('/{id}/submit', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'submitForApproval'])->name('submit');
+        Route::post('/{id}/approve', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'approve'])->name('approve');
+        Route::post('/{id}/reject', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'reject'])->name('reject');
+        Route::post('/{id}/post-gl', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'postToGL'])->name('post-gl');
+        Route::delete('/{id}', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'destroy'])->name('destroy');
+
+        // Batch operations
+        Route::get('/batch/{id}', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'showBatch'])->name('batch.show');
+        Route::post('/batch/{id}/submit', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'submitBatchForApproval'])->name('batch.submit');
+        Route::post('/batch/{id}/approve', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'approveBatch'])->name('batch.approve');
+        Route::post('/batch/{id}/reject', [App\Http\Controllers\Assets\AssetRevaluationController::class, 'rejectBatch'])->name('batch.reject');
+    });
+
+    Route::prefix('impairments')->name('impairments.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'index'])->name('index');
+        Route::get('/create', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'store'])->name('store');
+        Route::get('/{id}', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'show'])->name('show');
+        Route::get('/{id}/create-reversal', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'createReversal'])->name('create-reversal');
+        Route::post('/{id}/reversal', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'storeReversal'])->name('store-reversal');
+        Route::post('/{id}/submit', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'submitForApproval'])->name('submit');
+        Route::post('/{id}/approve', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'approve'])->name('approve');
+        Route::post('/{id}/reject', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'reject'])->name('reject');
+        Route::post('/{id}/post-gl', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'postToGL'])->name('post-gl');
+        Route::delete('/{id}', [App\Http\Controllers\Assets\AssetImpairmentController::class, 'destroy'])->name('destroy');
+    });
+
+    // Asset Disposal Management
+    Route::prefix('disposals')->name('disposals.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Assets\AssetDisposalController::class, 'index'])->name('index');
+        Route::get('/data', [App\Http\Controllers\Assets\AssetDisposalController::class, 'data'])->name('data');
+        Route::get('/create', [App\Http\Controllers\Assets\AssetDisposalController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\Assets\AssetDisposalController::class, 'store'])->name('store');
+
+        // Disposal Reason Codes Management - MUST come before /{id} route
+        Route::prefix('reason-codes')->name('reason-codes.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Assets\DisposalReasonCodeController::class, 'index'])->name('index');
+            Route::get('/data', [App\Http\Controllers\Assets\DisposalReasonCodeController::class, 'data'])->name('data');
+            Route::get('/create', [App\Http\Controllers\Assets\DisposalReasonCodeController::class, 'create'])->name('create');
+            Route::post('/', [App\Http\Controllers\Assets\DisposalReasonCodeController::class, 'store'])->name('store');
+            Route::get('/{id}/edit', [App\Http\Controllers\Assets\DisposalReasonCodeController::class, 'edit'])->name('edit');
+            Route::put('/{id}', [App\Http\Controllers\Assets\DisposalReasonCodeController::class, 'update'])->name('update');
+            Route::delete('/{id}', [App\Http\Controllers\Assets\DisposalReasonCodeController::class, 'destroy'])->name('destroy');
+        });
+
+        // Specific routes must come before the generic {id} route
+        Route::get('/{id}', [App\Http\Controllers\Assets\AssetDisposalController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [App\Http\Controllers\Assets\AssetDisposalController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [App\Http\Controllers\Assets\AssetDisposalController::class, 'update'])->name('update');
+        Route::post('/{id}/submit', [App\Http\Controllers\Assets\AssetDisposalController::class, 'submitForApproval'])->name('submit');
+        Route::post('/{id}/approve', [App\Http\Controllers\Assets\AssetDisposalController::class, 'approve'])->name('approve');
+        Route::post('/{id}/reject', [App\Http\Controllers\Assets\AssetDisposalController::class, 'reject'])->name('reject');
+        Route::post('/{id}/post-gl', [App\Http\Controllers\Assets\AssetDisposalController::class, 'postToGL'])->name('post-gl');
+        Route::post('/{id}/record-receivable', [App\Http\Controllers\Assets\AssetDisposalController::class, 'recordReceivable'])->name('record-receivable');
+        Route::delete('/{id}', [App\Http\Controllers\Assets\AssetDisposalController::class, 'destroy'])->name('destroy');
+    });
+
+    // Held for Sale (HFS) Management
+    Route::prefix('hfs')->name('hfs.')->group(function () {
+        // HFS Requests
+        Route::prefix('requests')->name('requests.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'index'])->name('index');
+            Route::get('/data', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'data'])->name('data');
+            Route::get('/create', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'create'])->name('create');
+            Route::post('/', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'store'])->name('store');
+            Route::get('/{id}', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'show'])->name('show');
+            Route::get('/{id}/edit', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'edit'])->name('edit');
+            Route::put('/{id}', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'update'])->name('update');
+            Route::post('/{id}/submit', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'submitForApproval'])->name('submit');
+            Route::post('/{id}/approve', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'approve'])->name('approve');
+            Route::post('/{id}/reject', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'reject'])->name('reject');
+            Route::post('/{id}/cancel', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'cancel'])->name('cancel');
+            Route::get('/{id}/validate', [App\Http\Controllers\Assets\Hfs\HfsRequestController::class, 'validateHfsRequest'])->name('validate');
+        });
+
+        // HFS Valuations
+        Route::prefix('valuations')->name('valuations.')->group(function () {
+            Route::get('/{hfsId}/create', [App\Http\Controllers\Assets\Hfs\HfsValuationController::class, 'create'])->name('create');
+            Route::post('/{hfsId}', [App\Http\Controllers\Assets\Hfs\HfsValuationController::class, 'store'])->name('store');
+            Route::put('/{hfsId}/{valuationId}', [App\Http\Controllers\Assets\Hfs\HfsValuationController::class, 'update'])->name('update');
+        });
+
+        // HFS Disposals
+        Route::prefix('disposals')->name('disposals.')->group(function () {
+            Route::get('/{hfsId}/create', [App\Http\Controllers\Assets\Hfs\HfsDisposalController::class, 'create'])->name('create');
+            Route::post('/{hfsId}', [App\Http\Controllers\Assets\Hfs\HfsDisposalController::class, 'store'])->name('store');
+        });
+
+        // Discontinued Operations
+        Route::prefix('discontinued')->name('discontinued.')->group(function () {
+            Route::post('/{hfsId}/tag', [App\Http\Controllers\Assets\Hfs\HfsDiscontinuedController::class, 'tagAsDiscontinued'])->name('tag');
+            Route::put('/{hfsId}/criteria', [App\Http\Controllers\Assets\Hfs\HfsDiscontinuedController::class, 'updateCriteria'])->name('update-criteria');
+            Route::get('/{hfsId}/check', [App\Http\Controllers\Assets\Hfs\HfsDiscontinuedController::class, 'checkCriteria'])->name('check');
+        });
+
+        // Reports
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('/movement-schedule', [App\Http\Controllers\Assets\Hfs\HfsReportController::class, 'movementSchedule'])->name('movement-schedule');
+            Route::get('/valuation-details', [App\Http\Controllers\Assets\Hfs\HfsReportController::class, 'valuationDetails'])->name('valuation-details');
+            Route::get('/discontinued-ops', [App\Http\Controllers\Assets\Hfs\HfsReportController::class, 'discontinuedOpsNote'])->name('discontinued-ops');
+            Route::get('/overdue', [App\Http\Controllers\Assets\Hfs\HfsReportController::class, 'overdueReport'])->name('overdue');
+            Route::get('/audit-trail', [App\Http\Controllers\Assets\Hfs\HfsReportController::class, 'auditTrail'])->name('audit-trail');
+            Route::get('/audit-trail/{hfsId}', [App\Http\Controllers\Assets\Hfs\HfsReportController::class, 'auditTrail'])->name('audit-trail.detail');
+        });
+    });
+
+    // Maintenance Management
+    Route::prefix('maintenance')->name('maintenance.')->group(function () {
+        // Dashboard
+        Route::get('/', [App\Http\Controllers\Assets\MaintenanceController::class, 'index'])->name('index');
+        Route::get('/settings', [App\Http\Controllers\Assets\MaintenanceController::class, 'settings'])->name('settings');
+        Route::post('/settings', [App\Http\Controllers\Assets\MaintenanceController::class, 'updateSettings'])->name('settings.update');
+
+        // Maintenance Types
+        Route::get('/types', [App\Http\Controllers\Assets\MaintenanceTypeController::class, 'index'])->name('types.index');
+        Route::get('/types/data', [App\Http\Controllers\Assets\MaintenanceTypeController::class, 'index'])->name('types.data');
+        Route::get('/types/create', [App\Http\Controllers\Assets\MaintenanceTypeController::class, 'create'])->name('types.create');
+        Route::post('/types', [App\Http\Controllers\Assets\MaintenanceTypeController::class, 'store'])->name('types.store');
+        Route::get('/types/{id}/edit', [App\Http\Controllers\Assets\MaintenanceTypeController::class, 'edit'])->name('types.edit');
+        Route::put('/types/{id}', [App\Http\Controllers\Assets\MaintenanceTypeController::class, 'update'])->name('types.update');
+        Route::delete('/types/{id}', [App\Http\Controllers\Assets\MaintenanceTypeController::class, 'destroy'])->name('types.destroy');
+
+        // Maintenance Requests
+        Route::get('/requests', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'index'])->name('requests.index');
+        Route::get('/requests/data', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'index'])->name('requests.data');
+        Route::get('/requests/create', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'create'])->name('requests.create');
+        Route::post('/requests', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'store'])->name('requests.store');
+        Route::get('/requests/{id}', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'show'])->name('requests.show');
+        Route::get('/requests/{id}/edit', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'edit'])->name('requests.edit');
+        Route::put('/requests/{id}', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'update'])->name('requests.update');
+        Route::post('/requests/{id}/approve', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'approve'])->name('requests.approve');
+        Route::post('/requests/{id}/reject', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'reject'])->name('requests.reject');
+        Route::delete('/requests/{id}', [App\Http\Controllers\Assets\MaintenanceRequestController::class, 'destroy'])->name('requests.destroy');
+
+        // Work Orders
+        Route::get('/work-orders', [App\Http\Controllers\Assets\WorkOrderController::class, 'index'])->name('work-orders.index');
+        Route::get('/work-orders/data', [App\Http\Controllers\Assets\WorkOrderController::class, 'index'])->name('work-orders.data');
+        Route::get('/work-orders/create', [App\Http\Controllers\Assets\WorkOrderController::class, 'create'])->name('work-orders.create');
+        Route::post('/work-orders', [App\Http\Controllers\Assets\WorkOrderController::class, 'store'])->name('work-orders.store');
+        Route::get('/work-orders/{id}', [App\Http\Controllers\Assets\WorkOrderController::class, 'show'])->name('work-orders.show');
+        Route::get('/work-orders/{id}/edit', [App\Http\Controllers\Assets\WorkOrderController::class, 'edit'])->name('work-orders.edit');
+        Route::put('/work-orders/{id}', [App\Http\Controllers\Assets\WorkOrderController::class, 'update'])->name('work-orders.update');
+        Route::post('/work-orders/{id}/approve', [App\Http\Controllers\Assets\WorkOrderController::class, 'approve'])->name('work-orders.approve');
+        Route::get('/work-orders/{id}/execute', [App\Http\Controllers\Assets\WorkOrderController::class, 'execute'])->name('work-orders.execute');
+        Route::post('/work-orders/{id}/add-cost', [App\Http\Controllers\Assets\WorkOrderController::class, 'addCost'])->name('work-orders.add-cost');
+        Route::post('/work-orders/{id}/complete', [App\Http\Controllers\Assets\WorkOrderController::class, 'complete'])->name('work-orders.complete');
+        Route::get('/work-orders/{id}/review', [App\Http\Controllers\Assets\WorkOrderController::class, 'review'])->name('work-orders.review');
+        Route::post('/work-orders/{id}/classify', [App\Http\Controllers\Assets\WorkOrderController::class, 'classify'])->name('work-orders.classify');
+        Route::delete('/work-orders/{id}', [App\Http\Controllers\Assets\WorkOrderController::class, 'destroy'])->name('work-orders.destroy');
+    });
+
+    // Intangible Assets
+    Route::prefix('intangible')->name('intangible.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Intangible\IntangibleAssetController::class, 'index'])->name('index');
+        Route::get('/data', [App\Http\Controllers\Intangible\IntangibleAssetController::class, 'data'])->name('data');
+        Route::get('/create', [App\Http\Controllers\Intangible\IntangibleAssetController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\Intangible\IntangibleAssetController::class, 'store'])->name('store');
+
+        // Intangible cost components
+        Route::prefix('assets/{asset}/cost-components')->name('cost-components.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Intangible\IntangibleCostComponentController::class, 'index'])->name('index');
+            Route::get('/data', [App\Http\Controllers\Intangible\IntangibleCostComponentController::class, 'data'])->name('data');
+            Route::get('/create', [App\Http\Controllers\Intangible\IntangibleCostComponentController::class, 'create'])->name('create');
+            Route::post('/', [App\Http\Controllers\Intangible\IntangibleCostComponentController::class, 'store'])->name('store');
+            Route::get('/{component}/edit', [App\Http\Controllers\Intangible\IntangibleCostComponentController::class, 'edit'])->name('edit');
+            Route::put('/{component}', [App\Http\Controllers\Intangible\IntangibleCostComponentController::class, 'update'])->name('update');
+            Route::delete('/{component}', [App\Http\Controllers\Intangible\IntangibleCostComponentController::class, 'destroy'])->name('destroy');
+            Route::get('/export', [App\Http\Controllers\Intangible\IntangibleCostComponentController::class, 'export'])->name('export');
+        });
+
+        // Intangible amortisation
+        Route::get('/amortisation', [App\Http\Controllers\Intangible\IntangibleAmortisationController::class, 'index'])->name('amortisation.index');
+        Route::post('/amortisation/process', [App\Http\Controllers\Intangible\IntangibleAmortisationController::class, 'process'])->name('amortisation.process');
+
+        // Intangible impairment
+        Route::get('/impairments/create', [App\Http\Controllers\Intangible\IntangibleImpairmentController::class, 'create'])->name('impairments.create');
+        Route::post('/impairments', [App\Http\Controllers\Intangible\IntangibleImpairmentController::class, 'store'])->name('impairments.store');
+
+        // Intangible disposal
+        Route::get('/disposals/create', [App\Http\Controllers\Intangible\IntangibleDisposalController::class, 'create'])->name('disposals.create');
+        Route::post('/disposals', [App\Http\Controllers\Intangible\IntangibleDisposalController::class, 'store'])->name('disposals.store');
+
+        // Intangible categories
+        Route::get('/categories', [App\Http\Controllers\Intangible\IntangibleCategoryController::class, 'index'])->name('categories.index');
+        Route::get('/categories/data', [App\Http\Controllers\Intangible\IntangibleCategoryController::class, 'data'])->name('categories.data');
+        Route::get('/categories/create', [App\Http\Controllers\Intangible\IntangibleCategoryController::class, 'create'])->name('categories.create');
+        Route::post('/categories', [App\Http\Controllers\Intangible\IntangibleCategoryController::class, 'store'])->name('categories.store');
+    });
+});
+
+///////////// end // assets routes //////////////////////
+
+////////////////////////////////////////////// PURCHASE MANAGEMENT ///////////////////////////////////////////
+
+Route::prefix('purchases')->name('purchases.')->middleware(['auth', 'company.scope'])->group(function () {
+    Route::get('/', [PurchaseController::class, 'index'])->name('index');
+
+    // Purchase Requisitions
+    Route::prefix('requisitions')->name('requisitions.')->group(function () {
+        Route::get('/', [PurchaseRequisitionController::class, 'index'])->name('index');
+        Route::get('/data', [PurchaseRequisitionController::class, 'data'])->name('data');
+        Route::get('/create', [PurchaseRequisitionController::class, 'create'])->name('create');
+        Route::post('/', [PurchaseRequisitionController::class, 'store'])->name('store');
+        Route::post('/check-budget', [PurchaseRequisitionController::class, 'checkBudget'])->name('check-budget');
+        Route::get('/{requisition}', [PurchaseRequisitionController::class, 'show'])->name('show');
+        Route::post('/{requisition}/submit', [PurchaseRequisitionController::class, 'submit'])->name('submit');
+        Route::post('/{requisition}/choose-supplier-create-po', [PurchaseRequisitionController::class, 'chooseSupplierAndCreatePo'])->name('choose-supplier-create-po');
+        Route::post('/{requisition}/approve', [PurchaseRequisitionController::class, 'approve'])->name('approve');
+        Route::post('/{requisition}/reject', [PurchaseRequisitionController::class, 'reject'])->name('reject');
+        Route::post('/{requisition}/set-preferred-supplier', [PurchaseRequisitionController::class, 'setPreferredSupplierFromQuotation'])->name('set-preferred-supplier');
+        Route::delete('/{requisition}', [PurchaseRequisitionController::class, 'destroy'])->name('destroy');
+    });
+
+    // Purchase Quotations
+    Route::get('quotations', [QuotationController::class, 'index'])->name('quotations.index');
+    Route::get('quotations/data', [QuotationController::class, 'data'])->name('quotations.data');
+    Route::get('quotations/create', [QuotationController::class, 'create'])->name('quotations.create');
+    Route::post('quotations', [QuotationController::class, 'store'])->name('quotations.store');
+    Route::get('quotations/{quotation}', [QuotationController::class, 'show'])->name('quotations.show');
+    Route::get('quotations/{quotation}/edit', [QuotationController::class, 'edit'])->name('quotations.edit');
+    Route::put('quotations/{quotation}', [QuotationController::class, 'update'])->name('quotations.update');
+    Route::delete('quotations/{quotation}', [QuotationController::class, 'destroy'])->name('quotations.destroy');
+    Route::put('quotations/{quotation}/status', [QuotationController::class, 'updateStatus'])->name('quotations.updateStatus');
+    Route::post('quotations/{quotation}/send-email', [QuotationController::class, 'sendEmail'])->name('quotations.send-email');
+    Route::get('quotations/{quotation}/print', [QuotationController::class, 'print'])->name('quotations.print');
+
+    // Purchase Orders
+    Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
+    Route::get('orders/create', [OrderController::class, 'create'])->name('orders.create');
+    Route::get('orders/create-from-stock', [OrderController::class, 'createFromStock'])->name('orders.create-from-stock');
+    Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
+    // GRN from Order
+    Route::get('orders/{encodedId}/grn/create', [OrderController::class, 'createGrnForm'])->name('orders.grn.create');
+    Route::post('orders/{encodedId}/grn', [OrderController::class, 'storeGrn'])->name('orders.grn.store');
+
+    // Standalone GRN
+    Route::get('grn/create', [OrderController::class, 'createGrnForm'])->name('grn.create');
+    Route::post('grn/standalone', [OrderController::class, 'storeStandaloneGrn'])->name('grn.store-standalone');
+
+    // GRN CRUD
+    Route::get('grn/{grn}', [OrderController::class, 'grnShow'])->name('grn.show');
+    Route::get('grn/{grn}/print', [OrderController::class, 'grnPrint'])->name('grn.print');
+    Route::get('grn/{grn}/edit', [OrderController::class, 'grnEdit'])->name('grn.edit');
+    Route::put('grn/{grn}', [OrderController::class, 'grnUpdate'])->name('grn.update');
+    Route::put('grn/{grn}/qc-items', [OrderController::class, 'grnUpdateLineQc'])->name('grn.qc-items.update');
+    Route::put('grn/{grn}/qc', [OrderController::class, 'grnUpdateQc'])->name('grn.qc.update');
+    Route::delete('grn/{grn}', [OrderController::class, 'grnDestroy'])->name('grn.destroy');
+    Route::get('orders/{encodedId}', [OrderController::class, 'show'])->name('orders.show');
+    Route::get('orders/{encodedId}/edit', [OrderController::class, 'edit'])->name('orders.edit');
+    Route::put('orders/{encodedId}', [OrderController::class, 'update'])->name('orders.update');
+    Route::delete('orders/{encodedId}', [OrderController::class, 'destroy'])->name('orders.destroy');
+    Route::put('orders/{encodedId}/status', [OrderController::class, 'updateStatus'])->name('orders.updateStatus');
+    Route::get('orders/{encodedId}/print', [OrderController::class, 'print'])->name('orders.print');
+    Route::get('orders/convert-from-quotation/{quotation}', [OrderController::class, 'convertFromQuotation'])->name('orders.convert-from-quotation');
+
+    // GRN Management
+    Route::get('grn', [OrderController::class, 'grnIndex'])->name('grn.index');
+
+    // Cash Purchases
+    Route::prefix('cash-purchases')->name('cash-purchases.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Purchase\CashPurchaseController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\Purchase\CashPurchaseController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Purchase\CashPurchaseController::class, 'store'])->name('store');
+        Route::get('/{encodedId}', [\App\Http\Controllers\Purchase\CashPurchaseController::class, 'show'])->name('show');
+        Route::get('/{encodedId}/edit', [\App\Http\Controllers\Purchase\CashPurchaseController::class, 'edit'])->name('edit');
+        Route::get('/{encodedId}/export-pdf', [\App\Http\Controllers\Purchase\CashPurchaseController::class, 'exportPdf'])->name('export-pdf');
+        Route::put('/{encodedId}', [\App\Http\Controllers\Purchase\CashPurchaseController::class, 'update'])->name('update');
+        Route::delete('/{encodedId}', [\App\Http\Controllers\Purchase\CashPurchaseController::class, 'destroy'])->name('destroy');
+    });
+
+    // Opening Balances (Purchases)
+    Route::get('opening-balances', [\App\Http\Controllers\Purchase\OpeningBalanceController::class, 'index'])->name('opening-balances.index');
+    Route::get('opening-balances/create', [\App\Http\Controllers\Purchase\OpeningBalanceController::class, 'create'])->name('opening-balances.create');
+    Route::post('opening-balances', [\App\Http\Controllers\Purchase\OpeningBalanceController::class, 'store'])->name('opening-balances.store');
+    Route::get('opening-balances/{encodedId}', [\App\Http\Controllers\Purchase\OpeningBalanceController::class, 'show'])->name('opening-balances.show');
+
+    // Debit Notes
+    Route::prefix('debit-notes')->name('debit-notes.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'store'])->name('store');
+        Route::get('/invoice-items/{invoice}', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'invoiceItemsJson'])->name('invoice-items');
+        Route::get('/{debitNote}', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'show'])->name('show');
+        Route::get('/{debitNote}/edit', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'edit'])->name('edit');
+        Route::put('/{debitNote}', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'update'])->name('update');
+        Route::delete('/{debitNote}', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'destroy'])->name('destroy');
+        Route::post('/{debitNote}/approve', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'approve'])->name('approve');
+        Route::post('/{debitNote}/apply', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'apply'])->name('apply');
+        Route::post('/{debitNote}/cancel', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'cancel'])->name('cancel');
+        Route::get('/api/inventory-item', [\App\Http\Controllers\Purchase\DebitNoteController::class, 'getInventoryItem'])->name('api.inventory-item');
+    });
+});
+
+// Purchases Reports
+Route::prefix('purchases/reports')->name('purchases.reports.')->middleware(['auth', 'company.scope'])->group(function () {
+    Route::get('/', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'index'])->name('index');
+    Route::get('/purchase-requisition', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'purchaseRequisitionReport'])->name('purchase-requisition');
+    Route::get('/po-register', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'purchaseOrderRegister'])->name('purchase-order-register');
+    Route::get('/po-register/export/pdf', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportPurchaseOrderRegisterPdf'])->name('purchase-order-register.export.pdf');
+    Route::get('/po-register/export/excel', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportPurchaseOrderRegisterExcel'])->name('purchase-order-register.export.excel');
+    Route::get('/po-vs-grn', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'poVsGrn'])->name('po-vs-grn');
+    Route::get('/po-vs-grn/export/pdf', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportPoVsGrnPdf'])->name('po-vs-grn.export.pdf');
+    Route::get('/po-vs-grn/export/excel', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportPoVsGrnExcel'])->name('po-vs-grn.export.excel');
+    Route::get('/grn-variance', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'grnVariance'])->name('grn-variance');
+    Route::get('/grn-variance/export/pdf', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportGrnVariancePdf'])->name('grn-variance.export.pdf');
+    Route::get('/grn-variance/export/excel', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportGrnVarianceExcel'])->name('grn-variance.export.excel');
+    Route::get('/invoice-register', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'invoiceRegister'])->name('invoice-register');
+    Route::get('/invoice-register/export/pdf', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportInvoiceRegisterPdf'])->name('invoice-register.export.pdf');
+    Route::get('/invoice-register/export/excel', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportInvoiceRegisterExcel'])->name('invoice-register.export.excel');
+    Route::get('/supplier-statement', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'supplierStatement'])->name('supplier-statement');
+    Route::get('/supplier-statement/export/pdf', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportSupplierStatementPdf'])->name('supplier-statement.export.pdf');
+    Route::get('/supplier-statement/export/excel', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportSupplierStatementExcel'])->name('supplier-statement.export.excel');
+    Route::get('/supplier-statement-old', [\App\Http\Controllers\Purchase\SupplierStatementController::class, 'index'])->name('supplier-statement.index');
+    Route::post('/supplier-statement', [\App\Http\Controllers\Purchase\SupplierStatementController::class, 'generate'])->name('supplier-statement.generate');
+    Route::post('/supplier-statement/export-pdf', [\App\Http\Controllers\Purchase\SupplierStatementController::class, 'exportPdf'])->name('supplier-statement.export-pdf');
+    Route::post('/supplier-statement/export-excel', [\App\Http\Controllers\Purchase\SupplierStatementController::class, 'exportExcel'])->name('supplier-statement.export-excel');
+    Route::get('/payables-aging', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'payablesAging'])->name('payables-aging');
+    Route::get('/payables-aging/export/pdf', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportPayablesAgingPdf'])->name('payables-aging.export.pdf');
+    Route::get('/payables-aging/export/excel', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'exportPayablesAgingExcel'])->name('payables-aging.export.excel');
+    Route::get('/outstanding-invoices', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'outstandingInvoices'])->name('outstanding-invoices');
+    Route::get('/paid-invoices', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'paidInvoices'])->name('paid-invoices');
+    Route::get('/supplier-credit-note', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'supplierCreditNoteReport'])->name('supplier-credit-note');
+    Route::get('/po-invoice-variance', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'poInvoiceVariance'])->name('po-invoice-variance');
+    Route::get('/purchase-returns', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'purchaseReturnsReport'])->name('purchase-returns');
+    Route::get('/purchase-by-supplier', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'purchaseBySupplier'])->name('purchase-by-supplier');
+    Route::get('/purchase-by-item', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'purchaseByItem'])->name('purchase-by-item');
+    Route::get('/purchase-forecast', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'purchaseForecast'])->name('purchase-forecast');
+    Route::get('/supplier-tax', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'supplierTax'])->name('supplier-tax');
+    Route::get('/payment-schedule', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'paymentSchedule'])->name('payment-schedule');
+    Route::get('/three-way-matching-exception', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'threeWayMatchingException'])->name('three-way-matching-exception');
+    Route::get('/supplier-performance', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'supplierPerformance'])->name('supplier-performance');
+    Route::get('/purchase-price-variance', [\App\Http\Controllers\Purchase\PurchasesReportController::class, 'purchasePriceVariance'])->name('purchase-price-variance');
+});
+
+// Purchase Invoices
+Route::middleware(['auth', 'company.scope'])->group(function () {
+    Route::get('/purchases/purchase-invoices', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'index'])->name('purchases.purchase-invoices.index');
+    Route::get('/purchases/purchase-invoices/create', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'create'])->name('purchases.purchase-invoices.create');
+    Route::post('/purchases/purchase-invoices', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'store'])->name('purchases.purchase-invoices.store');
+    // Import routes must come BEFORE parameterized routes to avoid route conflicts
+    Route::get('/purchases/purchase-invoices/import', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'showImportForm'])->name('purchases.purchase-invoices.import');
+    Route::post('/purchases/purchase-invoices/import-from-csv', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'importFromCsv'])->name('purchases.purchase-invoices.import-from-csv');
+    // Parameterized routes come after specific routes
+    Route::get('/purchases/purchase-invoices/{encodedId}', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'show'])->name('purchases.purchase-invoices.show');
+    Route::get('/purchases/purchase-invoices/{encodedId}/edit', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'edit'])->name('purchases.purchase-invoices.edit');
+    Route::put('/purchases/purchase-invoices/{encodedId}', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'update'])->name('purchases.purchase-invoices.update');
+    Route::delete('/purchases/purchase-invoices/{encodedId}', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'destroy'])->name('purchases.purchase-invoices.destroy');
+    Route::get('/purchases/purchase-invoices/{encodedId}/payment', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'paymentForm'])->name('purchases.purchase-invoices.payment-form');
+    Route::post('/purchases/purchase-invoices/{encodedId}/payment', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'recordPayment'])->name('purchases.purchase-invoices.record-payment');
+    Route::get('/purchases/purchase-invoices/{encodedId}/export-pdf', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'exportPdf'])->name('purchases.purchase-invoices.export-pdf');
+    Route::post('/purchases/purchase-invoices/{encodedId}/send-email', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'sendEmail'])->name('purchases.purchase-invoices.send-email');
+    Route::delete('/purchases/purchase-invoices/{encodedId}/payment/{paymentEncodedId}', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'destroyPayment'])->name('purchases.purchase-invoices.payment.destroy');
+    Route::get('/purchases/purchase-invoices/{encodedId}/payment/{paymentEncodedId}/edit', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'editPayment'])->name('purchases.purchase-invoices.payment.edit');
+    Route::put('/purchases/purchase-invoices/{encodedId}/payment/{paymentEncodedId}', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'updatePayment'])->name('purchases.purchase-invoices.payment.update');
+    Route::get('/purchases/purchase-invoices/{encodedId}/payment/{paymentEncodedId}/print', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'printPaymentReceipt'])->name('purchases.purchase-invoices.payment.print');
+    Route::post('/purchases/purchase-invoices/{encodedId}/reprocess-items', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'reprocessItems'])->name('purchases.purchase-invoices.reprocess-items');
+});
+
+////////////////////////////////////////////// END PURCHASE MANAGEMENT ///////////////////////////////////////////
 
 ////////////////////////////////////////////// LOAN PRODUCT MANAGEMENT ///////////////////////////////////////////
 
