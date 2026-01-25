@@ -3,11 +3,11 @@
 namespace App\Models;
 
 use App\Traits\LogsActivity;
-use App\Helpers\HashIdHelper;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Payment;
 
 class Bill extends Model
 {
@@ -25,6 +25,8 @@ class Bill extends Model
         'company_id',
         'reference',
         'total_amount',
+        'vat_mode',
+        'vat_rate',
     ];
 
     protected $casts = [
@@ -69,8 +71,13 @@ class Bill extends Model
 
     public function payments(): HasMany
     {
-        return $this->hasMany(Payment::class, 'reference')
-            ->where('reference_type', 'Bill');
+        // Link by supplier and reference_number = bill reference, reference_type = 'Bill'
+        // Note: We need to use a closure to access $this->reference for eager loading compatibility
+        return $this->hasMany(Payment::class, 'supplier_id', 'supplier_id')
+            ->where('reference_type', 'Bill')
+            ->where(function($query) {
+                $query->where('reference_number', $this->reference);
+            });
     }
 
     public function glTransactions(): HasMany
@@ -177,39 +184,22 @@ class Bill extends Model
 
     public function updatePaidAmount()
     {
-        $totalPaid = $this->payments()->sum('amount');
-        $this->update(['paid' => $totalPaid]);
-    }
-
-    /**
-     * Resolve model binding using hash ID.
-     */
-    public function resolveRouteBinding($value, $field = null)
-    {
-        if ($field === 'hash_id' || $field === null) {
-            $id = HashIdHelper::decode($value);
-            if ($id !== null) {
-                return $this->findOrFail($id);
-            }
-        }
+        // Query payments directly to ensure fresh data (after deletion, this will be 0 or sum of remaining payments)
+        $totalPaid = Payment::where('supplier_id', $this->supplier_id)
+            ->where('reference_type', 'Bill')
+            ->where('reference_number', $this->reference)
+            ->sum('amount');
         
-        // If not a hash ID, try as regular ID
-        return $this->findOrFail($value);
-    }
-
-    /**
-     * Get the hash ID for this model.
-     */
-    public function getHashIdAttribute()
-    {
-        return HashIdHelper::encode($this->id);
-    }
-
-    /**
-     * Get the hash ID for routing.
-     */
-    public function getRouteKey()
-    {
-        return HashIdHelper::encode($this->id);
+        // Ensure we have a numeric value (null becomes 0)
+        $totalPaid = $totalPaid ? (float) $totalPaid : 0;
+        
+        // Update the paid field directly
+        $this->paid = $totalPaid;
+        $this->save();
+        
+        // Refresh the model to ensure relationships are updated
+        $this->refresh();
+        
+        return $this->paid;
     }
 }

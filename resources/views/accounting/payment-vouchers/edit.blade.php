@@ -308,7 +308,7 @@
                                                                 id="payment_method" name="payment_method" required>
                                                                 <option value="">-- Select Payment Method --</option>
                                                                 <option value="bank_transfer" {{ old('payment_method', $paymentVoucher->payment_method ?? 'bank_transfer') == 'bank_transfer' ? 'selected' : '' }}>Bank Transfer</option>
-                                                                <option value="cash_deposit" id="cash_deposit_option" {{ old('payment_method', $paymentVoucher->payment_method) == 'cash_deposit' ? 'selected' : '' }} style="display: none;">Cash Deposit</option>
+                                                                <option value="cash_collateral" id="cash_collateral_option" {{ old('payment_method', $paymentVoucher->payment_method) == 'cash_collateral' ? 'selected' : '' }} style="display: none;">Cash Deposit</option>
                                                                 <option value="cheque" {{ old('payment_method', $paymentVoucher->payment_method) == 'cheque' ? 'selected' : '' }}>Cheque</option>
                                                             </select>
                                                             @error('payment_method')
@@ -340,20 +340,20 @@
                                                     </div>
 
                                                     <!-- Cash Deposit Section (for Cash Deposit) -->
-                                                    <div class="col-lg-6" id="cash_deposit_section" style="display: none;">
+                                                    <div class="col-lg-6" id="cash_collateral_section" style="display: none;">
                                                         <div class="mb-3">
                                                             <label class="form-label fw-bold">
                                                                 <i class="bx bx-wallet me-1"></i>Customer Account <span class="text-danger">*</span>
                                                             </label>
                                                             <select
-                                                                class="form-select form-select-lg select2-single @error('cash_deposit_id') is-invalid @enderror"
-                                                                id="cash_deposit_id" name="cash_deposit_id">
+                                                                class="form-select form-select-lg select2-single @error('cash_collateral_id') is-invalid @enderror"
+                                                                id="cash_collateral_id" name="cash_collateral_id">
                                                                 <option value="">-- Select Customer Account --</option>
-                                                                @if($paymentVoucher->payment_method === 'cash_deposit' && $paymentVoucher->cash_deposit_id === 'customer_balance')
+                                                                @if($paymentVoucher->payment_method === 'cash_collateral' && $paymentVoucher->cash_collateral_id === 'customer_balance')
                                                                     <option value="customer_balance" selected>Customer Balance</option>
                                                                 @endif
                                                             </select>
-                                                            @error('cash_deposit_id')
+                                                            @error('cash_collateral_id')
                                                                 <div class="invalid-feedback">{{ $message }}</div>
                                                             @enderror
                                                             <small class="text-muted">Only available when payee type is Customer</small>
@@ -959,18 +959,18 @@
                 
                 // Hide all sections first
                 $('#bank_account_section').hide();
-                $('#cash_deposit_section').hide();
+                $('#cash_collateral_section').hide();
                 $('#cheque_section').hide();
                 
                 // Remove required attributes and clear values for hidden fields
                 $('#bank_account_id').removeAttr('required').removeClass('is-invalid');
-                $('#cash_deposit_id').removeAttr('required').removeClass('is-invalid');
+                $('#cash_collateral_id').removeAttr('required').removeClass('is-invalid');
                 $('#cheque_number').removeAttr('required').removeClass('is-invalid');
                 $('#cheque_date').removeAttr('required').removeClass('is-invalid');
                 
                 // Clear validation error messages
                 $('#bank_account_id').next('.invalid-feedback').remove();
-                $('#cash_deposit_id').next('.invalid-feedback').remove();
+                $('#cash_collateral_id').next('.invalid-feedback').remove();
                 $('#cheque_number').next('.invalid-feedback').remove();
                 $('#cheque_date').next('.invalid-feedback').remove();
                 
@@ -989,11 +989,11 @@
                         }
                         updateChequePayeeName();
                     }
-                } else if (paymentMethod === 'cash_deposit') {
-                    $('#cash_deposit_section').show();
+                } else if (paymentMethod === 'cash_collateral') {
+                    $('#cash_collateral_section').show();
                     // Only require if payee type is customer
                     if ($('#payee_type').val() === 'customer') {
-                        $('#cash_deposit_id').attr('required', 'required');
+                        $('#cash_collateral_id').attr('required', 'required');
                         loadCashDeposits();
                     }
                 }
@@ -1022,7 +1022,7 @@
                 const customerSelect = $('#customer_id');
                 const selectedOption = customerSelect.find('option:selected');
                 const encodedCustomerId = selectedOption.data('encoded-id');
-                const cashDepositSelect = $('#cash_deposit_id');
+                const cashDepositSelect = $('#cash_collateral_id');
                 
                 cashDepositSelect.empty().append('<option value="">-- Select Customer Account --</option>');
                 
@@ -1054,7 +1054,7 @@
                             console.error('API returned error:', response.error);
                         } else if (response.data && Array.isArray(response.data) && response.data.length > 0) {
                             cashDepositSelect.append('<option value="">Select Customer Account</option>');
-                            const savedCashDepositId = '{{ $paymentVoucher->cash_deposit_id ?? 'customer_balance' }}';
+                            const savedCashDepositId = '{{ $paymentVoucher->cash_collateral_id ?? 'customer_balance' }}';
                             response.data.forEach(function(deposit) {
                                 // For customer balance, use 'customer_balance' as value
                                 const value = deposit.id === 'customer_balance' ? 'customer_balance' : deposit.id;
@@ -1089,7 +1089,7 @@
             // Handle payee type change - show/hide cash deposit option
             function toggleCashDepositOption() {
                 const payeeType = $('#payee_type').val();
-                const cashDepositOption = $('#cash_deposit_option');
+                const cashDepositOption = $('#cash_collateral_option');
                 const paymentMethod = $('#payment_method').val();
                 
                 if (payeeType === 'customer') {
@@ -1100,11 +1100,11 @@
                     cashDepositOption.hide();
                     
                     // If cash deposit was selected, clear it and reset to default
-                    if (paymentMethod === 'cash_deposit') {
+                    if (paymentMethod === 'cash_collateral') {
                         $('#payment_method').val('bank_transfer').trigger('change');
                         // Hide cash deposit section
-                        $('#cash_deposit_section').hide();
-                        $('#cash_deposit_id').removeAttr('required').val('').removeClass('is-invalid');
+                        $('#cash_collateral_section').hide();
+                        $('#cash_collateral_id').removeAttr('required').val('').removeClass('is-invalid');
                     }
                 }
             }
@@ -1116,7 +1116,7 @@
                 if ($('#payment_method').val() === 'cheque') {
                     updateChequePayeeName();
                 }
-                if ($('#payment_method').val() === 'cash_deposit' && $('#payee_type').val() === 'customer') {
+                if ($('#payment_method').val() === 'cash_collateral' && $('#payee_type').val() === 'customer') {
                     loadCashDeposits();
                 }
             });
@@ -1124,7 +1124,7 @@
                 if ($('#payment_method').val() === 'cheque') {
                     updateChequePayeeName();
                 }
-                if ($('#payment_method').val() === 'cash_deposit' && $('#payee_type').val() === 'customer') {
+                if ($('#payment_method').val() === 'cash_collateral' && $('#payee_type').val() === 'customer') {
                     loadCashDeposits();
                 }
             });
@@ -1133,7 +1133,7 @@
             // Check if payee type is already set (from old values)
             const initialPayeeType = $('#payee_type').val();
             if (initialPayeeType !== 'customer') {
-                $('#cash_deposit_option').hide();
+                $('#cash_collateral_option').hide();
             }
             toggleCashDepositOption();
             togglePaymentMethodSections();
@@ -1402,18 +1402,18 @@
                 }
             });
 
-            // If payment method is cash_deposit and customer is selected, load and select cash deposit
+            // If payment method is cash_collateral and customer is selected, load and select cash deposit
             const initialPaymentMethod = $('#payment_method').val();
             const initialCustomerId = $('#customer_id').val();
             const initialPayeeTypeForCashDeposit = $('#payee_type').val();
-            if (initialPaymentMethod === 'cash_deposit' && initialPayeeTypeForCashDeposit === 'customer' && initialCustomerId) {
+            if (initialPaymentMethod === 'cash_collateral' && initialPayeeTypeForCashDeposit === 'customer' && initialCustomerId) {
                 // Wait a bit for the section to be shown, then load deposits
                 setTimeout(function() {
                     loadCashDeposits();
                     // Initialize Select2 for cash deposit select after loading
                     setTimeout(function() {
-                        if (!$('#cash_deposit_id').hasClass('select2-hidden-accessible')) {
-                            $('#cash_deposit_id').select2({
+                        if (!$('#cash_collateral_id').hasClass('select2-hidden-accessible')) {
+                            $('#cash_collateral_id').select2({
                                 placeholder: 'Select Customer Account',
                                 allowClear: true,
                                 width: '100%',

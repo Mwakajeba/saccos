@@ -17,6 +17,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'apply.settings' => \App\Http\Middleware\ApplySystemSettings::class,
             'set.locale' => \App\Http\Middleware\SetLocale::class,
             'subscription.check' => \App\Http\Middleware\CheckSubscriptionStatus::class,
+            'require.branch' => \App\Http\Middleware\EnsureBranchSelected::class,
+            'throttle.login' => \App\Http\Middleware\ThrottleLoginAttempts::class,
+            'throttle.api' => \App\Http\Middleware\ThrottleApiRequests::class,
+            'throttle.global' => \App\Http\Middleware\ThrottleGlobalRequests::class,
+            'throttle.config' => \App\Http\Middleware\ThrottleByConfig::class,
+            'permission' => \App\Http\Middleware\CheckPermission::class,
+            'menu.access' => \App\Http\Middleware\CheckMenuAccess::class,
         ]);
 
         // Exclude API routes from CSRF verification

@@ -103,7 +103,7 @@
                                 <p class="form-control-plaintext">
                                     @if($paymentVoucher->payment_method === 'cheque')
                                         <span class="badge bg-info">Cheque</span>
-                                    @elseif($paymentVoucher->payment_method === 'cash_deposit')
+                                    @elseif($paymentVoucher->payment_method === 'cash_collateral')
                                         <span class="badge bg-success">Cash Deposit</span>
                                     @else
                                         <span class="badge bg-primary">Bank Transfer</span>
@@ -118,7 +118,7 @@
                                 </p>
                             </div>
                             @endif
-                            @if($paymentVoucher->payment_method === 'cash_deposit' && $paymentVoucher->cashDeposit)
+                            @if($paymentVoucher->payment_method === 'cash_collateral' && $paymentVoucher->cashDeposit)
                             <div class="col-md-6 mb-3">
                                 <label class="form-label fw-bold">Cash Deposit</label>
                                 <p class="form-control-plaintext">

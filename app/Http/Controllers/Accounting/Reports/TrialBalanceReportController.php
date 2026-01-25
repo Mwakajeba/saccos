@@ -442,7 +442,7 @@ class TrialBalanceReportController extends Controller
             'levelOfDetail'
         ))->render();
         $dompdf->loadHtml($html);
-        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->setPaper('A4', 'landscape');
         $dompdf->render();
 
         $filename = 'trial_balance_' . $startDate . '_to_' . $endDate . '_' . $reportingType . '.pdf';
@@ -493,13 +493,10 @@ class TrialBalanceReportController extends Controller
         if ($layout === 'multi_column') {
             $worksheet->setCellValue('A' . $row, 'Account Name');
             $worksheet->setCellValue('B' . $row, 'Account Code');
-            $worksheet->setCellValue('C' . $row, 'Opening DR');
-            $worksheet->setCellValue('D' . $row, 'Opening CR');
-            $worksheet->setCellValue('E' . $row, 'Current DR');
-            $worksheet->setCellValue('F' . $row, 'Current CR');
-            $worksheet->setCellValue('G' . $row, 'Closing DR');
-            $worksheet->setCellValue('H' . $row, 'Closing CR');
-            $worksheet->setCellValue('I' . $row, 'Difference');
+            $worksheet->setCellValue('C' . $row, 'Opening Balance');
+            $worksheet->setCellValue('D' . $row, 'Current Year Change');
+            $worksheet->setCellValue('E' . $row, 'Closing Balance');
+            $worksheet->setCellValue('F' . $row, 'Difference');
         } elseif ($levelOfDetail === 'detailed') {
             $worksheet->setCellValue('A' . $row, 'Account Code');
             $worksheet->setCellValue('B' . $row, 'Account Name');
@@ -539,7 +536,7 @@ class TrialBalanceReportController extends Controller
 
         // Add data
         if ($layout === 'multi_column') {
-            $totOpenDr = 0; $totOpenCr = 0; $totChgDr = 0; $totChgCr = 0; $totCloseDr = 0; $totCloseCr = 0; $totDiff = 0;
+            $totOpening = 0; $totChange = 0; $totClosing = 0; $totDiff = 0;
             foreach ($trialBalanceData['data'] as $class => $accounts) {
                 foreach ($accounts as $account) {
                     $a = is_array($account) ? (object)$account : $account;
@@ -557,44 +554,36 @@ class TrialBalanceReportController extends Controller
                             $closingDr = $changeDr; $closingCr = $changeCr;
                         }
                     }
-                    $openingDiff = $openingDr - $openingCr;
-                    $changeDiff  = $changeDr  - $changeCr;
-                    $closingDiff = $closingDr - $closingCr;
-                    $difference  = $closingDiff;
-                    if (!($openingDiff==0 && $changeDiff==0 && $closingDiff==0)) {
+                    // Calculate net balances (Debit - Credit), credits will be negative
+                    $openingBalance = $openingDr - $openingCr;
+                    $changeBalance  = $changeDr  - $changeCr;
+                    $closingBalance = $closingDr - $closingCr;
+                    $difference  = $closingBalance;
+                    if (!($openingBalance==0 && $changeBalance==0 && $closingBalance==0)) {
                         $worksheet->setCellValue('A' . $row, ($a->account ?? $a->account_name ?? ''));
                         $worksheet->setCellValue('B' . $row, $a->account_code ?? '');
-                        $worksheet->setCellValue('C' . $row, $openingDiff > 0 ? $openingDiff : 0);
-                        $worksheet->setCellValue('D' . $row, $openingDiff < 0 ? abs($openingDiff) : 0);
-                        $worksheet->setCellValue('E' . $row, $changeDiff  > 0 ? $changeDiff  : 0);
-                        $worksheet->setCellValue('F' . $row, $changeDiff  < 0 ? abs($changeDiff)  : 0);
-                        $worksheet->setCellValue('G' . $row, $closingDiff > 0 ? $closingDiff : 0);
-                        $worksheet->setCellValue('H' . $row, $closingDiff < 0 ? abs($closingDiff) : 0);
-                        $worksheet->setCellValue('I' . $row, abs($difference));
+                        $worksheet->setCellValue('C' . $row, $openingBalance);
+                        $worksheet->setCellValue('D' . $row, $changeBalance);
+                        $worksheet->setCellValue('E' . $row, $closingBalance);
+                        $worksheet->setCellValue('F' . $row, $difference);
                         // number formats
-                        foreach (['C','D','E','F','G','H','I'] as $c) { $worksheet->getStyle($c.$row)->getNumberFormat()->setFormatCode('#,##0.00'); }
+                        foreach (['C','D','E','F'] as $c) { $worksheet->getStyle($c.$row)->getNumberFormat()->setFormatCode('#,##0.00'); }
                         $row++;
                     }
-                    $totOpenDr += $openingDiff > 0 ? $openingDiff : 0;
-                    $totOpenCr += $openingDiff < 0 ? abs($openingDiff) : 0;
-                    $totChgDr  += $changeDiff  > 0 ? $changeDiff  : 0;
-                    $totChgCr  += $changeDiff  < 0 ? abs($changeDiff)  : 0;
-                    $totCloseDr+= $closingDiff > 0 ? $closingDiff : 0;
-                    $totCloseCr+= $closingDiff < 0 ? abs($closingDiff) : 0;
+                    $totOpening += $openingBalance;
+                    $totChange  += $changeBalance;
+                    $totClosing += $closingBalance;
                     $totDiff   += $difference;
                 }
             }
             // Totals row
             $worksheet->setCellValue('A' . $row, 'TOTAL');
             $worksheet->getStyle('A' . $row)->getFont()->setBold(true);
-            $worksheet->setCellValue('C' . $row, $totOpenDr);
-            $worksheet->setCellValue('D' . $row, $totOpenCr);
-            $worksheet->setCellValue('E' . $row, $totChgDr);
-            $worksheet->setCellValue('F' . $row, $totChgCr);
-            $worksheet->setCellValue('G' . $row, $totCloseDr);
-            $worksheet->setCellValue('H' . $row, $totCloseCr);
-            $worksheet->setCellValue('I' . $row, abs($totDiff));
-            foreach (['C','D','E','F','G','H','I'] as $c) { $worksheet->getStyle($c.$row)->getNumberFormat()->setFormatCode('#,##0.00'); }
+            $worksheet->setCellValue('C' . $row, $totOpening);
+            $worksheet->setCellValue('D' . $row, $totChange);
+            $worksheet->setCellValue('E' . $row, $totClosing);
+            $worksheet->setCellValue('F' . $row, $totDiff);
+            foreach (['C','D','E','F'] as $c) { $worksheet->getStyle($c.$row)->getNumberFormat()->setFormatCode('#,##0.00'); }
         } else {
             foreach ($trialBalanceData['data'] as $class => $accounts) {
                 foreach ($accounts as $account) {

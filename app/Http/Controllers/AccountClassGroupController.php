@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AccountClass;
+use App\Models\MainGroup;
 use App\Models\AccountClassGroup;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -17,7 +18,8 @@ class AccountClassGroupController extends Controller
     public function index(): View
     {
         $user = auth()->user();
-        $accountClassGroups = AccountClassGroup::with('accountClass')
+        $accountClassGroups = AccountClassGroup::with(['accountClass', 'mainGroup'])
+            ->withCount('chartAccounts')
             ->where('company_id', $user->company_id)
             ->get();
         return view('account-class-groups.index', compact('accountClassGroups'));
@@ -28,8 +30,12 @@ class AccountClassGroupController extends Controller
      */
     public function create(): View
     {
-        $accountClasses = AccountClass::all(); // Account classes are global
-        return view('account-class-groups.create', compact('accountClasses'));
+        $user = auth()->user();
+        $mainGroups = MainGroup::where('company_id', $user->company_id)
+            ->where('status', true)
+            ->with('accountClass')
+            ->get();
+        return view('account-class-groups.create', compact('mainGroups'));
         
     }
 
@@ -39,15 +45,19 @@ class AccountClassGroupController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'class_id' => 'required|exists:account_class,id',
+            'main_group_id' => 'required|exists:main_groups,id',
             'group_code' => 'nullable|string|max:255|unique:account_class_groups,group_code',
             'name' => 'required|string|max:255|unique:account_class_groups,name',
         ]);
 
         $user = auth()->user();
+        
+        // Get the class_id from the selected main group
+        $mainGroup = MainGroup::findOrFail($request->main_group_id);
 
         AccountClassGroup::create([
-            'class_id' => $request->class_id,
+            'class_id' => $mainGroup->class_id,
+            'main_group_id' => $request->main_group_id,
             'group_code' => $request->group_code,
             'name' => $request->name,
             'company_id' => $user->company_id,
@@ -76,7 +86,7 @@ class AccountClassGroupController extends Controller
             abort(403, 'Unauthorized access to this account class group.');
         }
 
-        $accountClassGroup->load('accountClass');
+        $accountClassGroup->load(['accountClass', 'mainGroup']);
         return view('account-class-groups.show', compact('accountClassGroup'));
     }
 
@@ -99,8 +109,11 @@ class AccountClassGroupController extends Controller
             abort(403, 'Unauthorized access to this account class group.');
         }
 
-        $accountClasses = AccountClass::all(); // Account classes are global
-        return view('account-class-groups.edit', compact('accountClassGroup', 'accountClasses'));
+        $mainGroups = MainGroup::where('company_id', $user->company_id)
+            ->where('status', true)
+            ->with('accountClass')
+            ->get();
+        return view('account-class-groups.edit', compact('accountClassGroup', 'mainGroups'));
     }
 
     /**
@@ -117,13 +130,17 @@ class AccountClassGroupController extends Controller
         $accountClassGroup = AccountClassGroup::findOrFail($decoded[0]);
 
         $request->validate([
-            'class_id' => 'required|exists:account_class,id',
+            'main_group_id' => 'required|exists:main_groups,id',
             'group_code' => 'nullable|string|max:255|unique:account_class_groups,group_code,' . $accountClassGroup->id,
             'name' => 'required|string|max:255|unique:account_class_groups,name,' . $accountClassGroup->id,
         ]);
 
+        // Get the class_id from the selected main group
+        $mainGroup = MainGroup::findOrFail($request->main_group_id);
+
         $accountClassGroup->update([
-            'class_id' => $request->class_id,
+            'class_id' => $mainGroup->class_id,
+            'main_group_id' => $request->main_group_id,
             'group_code' => $request->group_code,
             'name' => $request->name,
         ]);
@@ -143,12 +160,18 @@ class AccountClassGroupController extends Controller
             return redirect()->route('accounting.account-class-groups.index')->withErrors(['Account Class Group not found.']);
         }
 
-        $accountClassGroup = AccountClassGroup::findOrFail($decoded[0]);
+        $accountClassGroup = AccountClassGroup::withCount('chartAccounts')->findOrFail($decoded[0]);
         $user = auth()->user();
 
         // Ensure the account class group belongs to the current user's company
         if ($accountClassGroup->company_id !== $user->company_id) {
             abort(403, 'Unauthorized access to this account class group.');
+        }
+
+        // Check if account class group is being used
+        if ($accountClassGroup->isInUse()) {
+            return redirect()->route('accounting.account-class-groups.index')
+                ->withErrors(['error' => 'Cannot delete Account Class Group "' . $accountClassGroup->name . '" because it is being used by ' . $accountClassGroup->chart_accounts_count . ' Chart Account(s).']);
         }
 
         $accountClassGroup->delete();

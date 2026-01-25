@@ -13,10 +13,21 @@ class BankAccount extends Model
     use HasFactory,LogsActivity;
 
     protected $table = 'bank_accounts';
-    protected $fillable = ['chart_account_id', 'name', 'account_number'];
+    protected $fillable = [
+        'chart_account_id',
+        'name',
+        'account_number',
+        'company_id',
+        'branch_id',
+        'is_all_branches',
+        'currency',
+        'revaluation_required',
+    ];
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'is_all_branches' => 'boolean',
+        'revaluation_required' => 'boolean',
     ];
 
     /**
@@ -25,6 +36,22 @@ class BankAccount extends Model
     public function chartAccount(): BelongsTo
     {
         return $this->belongsTo(ChartAccount::class, 'chart_account_id');
+    }
+
+    /**
+     * Get the company that owns the bank account.
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * Get the branch this bank account is scoped to (if any).
+     */
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     /**
@@ -37,6 +64,16 @@ class BankAccount extends Model
 
     public function repaymente(){
         return $this->hasMany(Repayment::class,'bank_account_id');
+    }
+
+    public function bankReconciliations()
+    {
+        return $this->hasMany(BankReconciliation::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
     }
 
     /**
@@ -67,10 +104,5 @@ class BankAccount extends Model
     public function getFormattedBalanceAttribute()
     {
         return number_format($this->balance, 2);
-    }
-
-    public function loans()
-    {
-        return $this->hasMany(Loan::class);
     }
 }
