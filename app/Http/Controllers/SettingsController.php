@@ -1093,4 +1093,166 @@ class SettingsController extends Controller
 
         return response()->json(['error' => 'Invalid request'], 400);
     }
+
+    // Inventory Settings
+    public function inventorySettings()
+    {
+        $settings = SystemSetting::first();
+        
+        return view('settings.inventory', compact('settings'));
+    }
+
+    public function updateInventorySettings(Request $request)
+    {
+        $request->validate([
+            'inventory_cost_method' => 'required|in:FIFO,LIFO,AVCO,Specific Identification',
+            'enable_negative_stock' => 'boolean',
+            'auto_generate_item_codes' => 'boolean',
+        ]);
+
+        $settings = SystemSetting::first();
+        
+        if (!$settings) {
+            $settings = new SystemSetting();
+        }
+
+        $settings->inventory_cost_method = $request->inventory_cost_method;
+        $settings->enable_negative_stock = $request->has('enable_negative_stock');
+        $settings->auto_generate_item_codes = $request->has('auto_generate_item_codes');
+        $settings->save();
+
+        return redirect()->back()->with('success', 'Inventory settings updated successfully.');
+    }
+
+    // Inventory Locations
+    public function inventoryLocations()
+    {
+        $locations = \App\Models\InventoryLocation::where('company_id', current_company_id())
+            ->with(['branch', 'manager'])
+            ->get();
+        
+        return view('settings.inventory-locations.index', compact('locations'));
+    }
+
+    public function createInventoryLocation()
+    {
+        $branches = Branch::forCompany()->active()->get();
+        $users = \App\Models\User::where('company_id', current_company_id())->get();
+        
+        return view('settings.inventory-locations.create', compact('branches', 'users'));
+    }
+
+    public function storeInventoryLocation(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'branch_id' => 'required|exists:branches,id',
+            'manager_id' => 'nullable|exists:users,id',
+            'is_active' => 'boolean',
+        ]);
+
+        $location = new \App\Models\InventoryLocation();
+        $location->name = $request->name;
+        $location->description = $request->description;
+        $location->branch_id = $request->branch_id;
+        $location->manager_id = $request->manager_id;
+        $location->is_active = $request->has('is_active');
+        $location->company_id = current_company_id();
+        $location->created_by = Auth::id();
+        $location->save();
+
+        return redirect()->route('settings.inventory.locations.index')
+            ->with('success', 'Inventory location created successfully.');
+    }
+
+    public function showInventoryLocation($id)
+    {
+        $decoded = Hashids::decode($id);
+        $locationId = !empty($decoded) ? $decoded[0] : null;
+
+        if (!$locationId) {
+            return redirect()->route('settings.inventory.locations.index')
+                ->with('error', 'Invalid location ID');
+        }
+
+        $location = \App\Models\InventoryLocation::with(['branch', 'manager'])
+            ->findOrFail($locationId);
+        
+        return view('settings.inventory-locations.show', compact('location'));
+    }
+
+    public function editInventoryLocation($id)
+    {
+        $decoded = Hashids::decode($id);
+        $locationId = !empty($decoded) ? $decoded[0] : null;
+
+        if (!$locationId) {
+            return redirect()->route('settings.inventory.locations.index')
+                ->with('error', 'Invalid location ID');
+        }
+
+        $location = \App\Models\InventoryLocation::findOrFail($locationId);
+        $branches = Branch::forCompany()->active()->get();
+        $users = \App\Models\User::where('company_id', current_company_id())->get();
+        
+        return view('settings.inventory-locations.edit', compact('location', 'branches', 'users'));
+    }
+
+    public function updateInventoryLocation(Request $request, $id)
+    {
+        $decoded = Hashids::decode($id);
+        $locationId = !empty($decoded) ? $decoded[0] : null;
+
+        if (!$locationId) {
+            return redirect()->route('settings.inventory.locations.index')
+                ->with('error', 'Invalid location ID');
+        }
+
+        $location = \App\Models\InventoryLocation::findOrFail($locationId);
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'branch_id' => 'required|exists:branches,id',
+            'manager_id' => 'nullable|exists:users,id',
+            'is_active' => 'boolean',
+        ]);
+
+        $location->name = $request->name;
+        $location->description = $request->description;
+        $location->branch_id = $request->branch_id;
+        $location->manager_id = $request->manager_id;
+        $location->is_active = $request->has('is_active');
+        $location->save();
+
+        return redirect()->route('settings.inventory.locations.index')
+            ->with('success', 'Inventory location updated successfully.');
+    }
+
+    public function destroyInventoryLocation($id)
+    {
+        $decoded = Hashids::decode($id);
+        $locationId = !empty($decoded) ? $decoded[0] : null;
+
+        if (!$locationId) {
+            return redirect()->route('settings.inventory.locations.index')
+                ->with('error', 'Invalid location ID');
+        }
+
+        $location = \App\Models\InventoryLocation::findOrFail($locationId);
+        
+        // Check if location has any stock items
+        $hasStock = \App\Models\InventoryStockLevel::where('location_id', $location->id)->exists();
+        
+        if ($hasStock) {
+            return redirect()->route('settings.inventory.locations.index')
+                ->with('error', 'Cannot delete location with existing stock.');
+        }
+
+        $location->delete();
+
+        return redirect()->route('settings.inventory.locations.index')
+            ->with('success', 'Inventory location deleted successfully.');
+    }
 }

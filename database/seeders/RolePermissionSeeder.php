@@ -472,6 +472,29 @@ class RolePermissionSeeder extends Seeder
             'assign approvers',
             'view approval history',
             'manage approval levels',
+
+            // Inventory Management
+            'view inventory categories',
+            'manage inventory categories',
+            'view inventory items',
+            'manage inventory items',
+            'view inventory movements',
+            'manage inventory movements',
+            'view inventory adjustments',
+            'create inventory adjustments',
+            'edit inventory adjustments',
+            'delete inventory adjustments',
+            'view inventory transfer',
+            'create inventory transfer',
+            'edit inventory transfer',
+            'delete inventory transfer',
+            'view inventory write-offs',
+            'create inventory write-offs',
+            'edit inventory write-offs',
+            'delete inventory write-offs',
+            'manage inventory locations',
+            'manage inventory opening balances',
+            'manage inventory settings',
         ];
 
         // Create or update permissions

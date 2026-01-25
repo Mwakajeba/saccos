@@ -153,4 +153,14 @@ if (!function_exists('update_env_file')) {
         // Write back to file
         return file_put_contents($envFile, $envContent) !== false;
     }
-} 
+}
+
+if (!function_exists('get_default_vat_rate')) {
+    /**
+     * Get the default VAT rate from system settings
+     */
+    function get_default_vat_rate()
+    {
+        return (float) setting('default_vat_rate', 18);
+    }
+}
