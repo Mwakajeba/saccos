@@ -47,6 +47,12 @@ class DatabaseSeeder extends Seeder
       SalaryComponentSeeder::class,
       //payroll seeder
       StatutoryRuleSeeder::class,
+      AssetSettingsSeeder::class,
+      AssetCategorySeeder::class,
+      InventoryLocationSeeder::class,
+      InventoryCategorySeeder::class,
+      // LocationUserSeeder::class, // Commented out - file doesn't exist
+      InventorySettingsSeeder::class,
       // Create default one-year subscriptions for all companies
       DefaultSubscriptionSeeder::class,
     ]);

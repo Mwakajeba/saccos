@@ -119,6 +119,54 @@ class MenuSeeder extends Seeder
                 'hiddenRoutes' => ['shares.products.index', 'shares.accounts.index', 'shares.deposits.index', 'shares.withdrawals.index', 'shares.transfers.index'],
             ],
 
+            'Inventory' => [
+                'icon' => 'bx bx-package',
+                'visibleRoutes' => [
+                    ['name' => 'Inventory Management', 'route' => 'inventory.index'],
+                ],
+                'hiddenRoutes' => ['inventory.items.index', 'inventory.items.create', 'inventory.items.edit', 'inventory.items.destroy', 'inventory.items.show', 'inventory.categories.index', 'inventory.categories.create', 'inventory.categories.edit', 'inventory.categories.destroy', 'inventory.movements.index', 'inventory.movements.create', 'inventory.movements.edit', 'inventory.movements.destroy'],
+            ],
+
+            'Assets Management' => [
+                'icon' => 'bx bx-building',
+                'visibleRoutes' => [
+                    ['name' => 'Assets Management', 'route' => 'assets.index'],
+                ],
+                'hiddenRoutes' => [
+                    'assets.depreciation.index',
+                    'assets.depreciation.process',
+                    'assets.depreciation.history',
+                    'assets.depreciation.history.data',
+                    'assets.depreciation.forecast',
+                    'assets.tax-depreciation.index',
+                    'assets.tax-depreciation.process',
+                    'assets.tax-depreciation.history',
+                    'assets.tax-depreciation.history.data',
+                    'assets.tax-depreciation.reports.tra-schedule',
+                    'assets.tax-depreciation.reports.tra-schedule.data',
+                    'assets.tax-depreciation.reports.book-tax-reconciliation',
+                    'assets.tax-depreciation.reports.book-tax-reconciliation.data',
+                    'assets.deferred-tax.index',
+                    'assets.deferred-tax.process',
+                    'assets.deferred-tax.schedule',
+                    'assets.deferred-tax.schedule.data',
+                ],
+            ],
+
+             'Purchases' => [
+                'icon' => 'bx bx-shopping-bag',
+                'visibleRoutes' => [
+                    ['name' => 'Purchases Management', 'route' => 'purchases.index'],
+                ],
+                'hiddenRoutes' => [
+                    'purchases.quotations.index',
+                    'purchases.quotations.create',
+                    'purchases.quotations.edit',
+                    'purchases.quotations.destroy',
+                    'purchases.quotations.show'
+                ],
+            ],
+
             'HR & Payroll' => [
                 'icon' => 'bx bx-user',
                 'visibleRoutes' => [
@@ -159,6 +207,7 @@ class MenuSeeder extends Seeder
                     ['name' => 'Loans Reports', 'route' => 'reports.loans'],
                     ['name' => 'Customer Reports', 'route' => 'reports.customers'],
                     ['name' => 'Share Reports', 'route' => 'reports.shares'],
+                    ['name' => 'Contribution Reports', 'route' => 'reports.contributions'],
                     ['name' => 'Bot Reports', 'route' => 'reports.bot'],
                     ['name' => 'Payroll Reports', 'route' => 'hr.payroll-reports.index'],
                 ],
