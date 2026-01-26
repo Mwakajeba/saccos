@@ -25,6 +25,7 @@ class AccountClassGroup extends Model
      */
     protected $fillable = [
         'class_id',
+        'main_group_id',
         'group_code',
         'name',
         'company_id',
@@ -53,6 +54,14 @@ class AccountClassGroup extends Model
     }
 
     /**
+     * Get the main group that owns the account class group.
+     */
+    public function mainGroup(): BelongsTo
+    {
+        return $this->belongsTo(MainGroup::class, 'main_group_id');
+    }
+
+    /**
      * Get the chart accounts for this group.
      */
     public function chartAccounts(): HasMany
@@ -66,5 +75,13 @@ class AccountClassGroup extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * Check if this account class group is being used by any chart accounts
+     */
+    public function isInUse(): bool
+    {
+        return $this->chartAccounts()->exists();
     }
 }

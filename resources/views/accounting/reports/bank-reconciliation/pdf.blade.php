@@ -6,229 +6,340 @@
     <title>Bank Reconciliation Report</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            line-height: 1.4;
-            color: #333;
+            font-family: 'Arial', sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
+            color: #333;
+            background: #fff;
         }
+        
         .header {
-            text-align: center;
-            border-bottom: 2px solid #333;
-            padding-bottom: 10px;
             margin-bottom: 20px;
+            border-bottom: 3px solid #17a2b8;
+            padding-bottom: 15px;
         }
-        .company-name {
+        
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+        
+        .logo-section {
+            flex-shrink: 0;
+        }
+        
+        .company-logo {
+            max-height: 80px;
+            max-width: 120px;
+            object-fit: contain;
+        }
+        
+        .title-section {
+            text-align: center;
+            flex-grow: 1;
+        }
+        
+        .header h1 {
+            color: #17a2b8;
+            margin: 0;
             font-size: 24px;
             font-weight: bold;
-            margin-bottom: 5px;
         }
-        .report-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 5px;
+        
+        .company-name {
+            color: #333;
+            margin: 5px 0;
+            font-size: 16px;
+            font-weight: 600;
         }
-        .report-subtitle {
+        
+        .header .subtitle {
+            color: #666;
+            margin: 5px 0 0 0;
             font-size: 14px;
-            color: #666;
-            margin-bottom: 10px;
         }
-        .info-section {
-            margin-bottom: 20px;
+        
+        .report-info {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #17a2b8;
         }
+        
+        .report-info h3 {
+            margin: 0 0 10px 0;
+            color: #17a2b8;
+            font-size: 16px;
+        }
+        
+        .info-grid {
+            display: table;
+            width: 100%;
+        }
+        
         .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
+            display: table-row;
         }
+        
         .info-label {
+            display: table-cell;
             font-weight: bold;
+            padding: 5px 15px 5px 0;
             width: 150px;
+            color: #555;
         }
+        
         .info-value {
-            flex: 1;
-        }
-        .filters-section {
-            background-color: #f8f9fa;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .filters-title {
-            font-weight: bold;
-            margin-bottom: 10px;
+            display: table-cell;
+            padding: 5px 0;
             color: #333;
         }
-        .filter-item {
-            margin-bottom: 5px;
+        
+        .summary-stats {
+            display: table;
+            width: 100%;
+            margin-bottom: 15px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
         }
-        .stats-section {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-        .stat-box {
-            border: 1px solid #ddd;
-            padding: 10px;
+        
+        .stat-item {
+            display: table-cell;
             text-align: center;
-            flex: 1;
-            margin: 0 5px;
+            padding: 12px 8px;
+            border-right: 1px solid #dee2e6;
+            background: #f8f9fa;
         }
+        
+        .stat-item:last-child {
+            border-right: none;
+        }
+        
         .stat-value {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
-            color: #333;
+            color: #17a2b8;
+            margin: 0;
         }
+        
         .stat-label {
-            font-size: 12px;
+            font-size: 9px;
             color: #666;
-            margin-top: 5px;
+            margin: 3px 0 0 0;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
-        table {
+        
+        .stat-value.balanced {
+            color: #28a745;
+        }
+        
+        .stat-value.unbalanced {
+            color: #dc3545;
+        }
+        
+        .data-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-top: 20px;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            table-layout: fixed;
         }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
+        
+        .data-table thead {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .data-table th {
+            padding: 8px 6px;
             text-align: left;
-        }
-        th {
-            background-color: #f8f9fa;
             font-weight: bold;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            word-wrap: break-word;
         }
-        .text-right {
+        
+        .data-table td {
+            padding: 8px 6px;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 10px;
+            word-wrap: break-word;
+        }
+        
+        .data-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .number {
             text-align: right;
+            font-family: 'Courier New', monospace;
         }
+        
         .text-center {
             text-align: center;
         }
-        .status-badge {
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 10px;
+        
+        .section-title {
+            font-size: 16px;
             font-weight: bold;
+            margin: 20px 0 10px 0;
+            color: #17a2b8;
+            border-bottom: 2px solid #17a2b8;
+            padding-bottom: 5px;
         }
+        
+        .status-badge {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: bold;
+            display: inline-block;
+        }
+        
         .status-draft { background-color: #6c757d; color: white; }
         .status-in_progress { background-color: #ffc107; color: black; }
         .status-completed { background-color: #28a745; color: white; }
         .status-cancelled { background-color: #dc3545; color: white; }
-        .balanced { color: #28a745; font-weight: bold; }
-        .unbalanced { color: #dc3545; font-weight: bold; }
+        
         .footer {
-            margin-top: 30px;
+            margin-top: 40px;
             text-align: center;
-            font-size: 10px;
             color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 10px;
+            font-size: 12px;
+            border-top: 1px solid #dee2e6;
+            padding-top: 20px;
         }
+        
         .page-break {
             page-break-before: always;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
     <div class="header">
-        <div class="company-name">{{ $company->name ?? 'SmartFinance' }}</div>
-        <div class="report-title">Bank Reconciliation Report</div>
-        <div class="report-subtitle">Generated on {{ $generated_at->format('M d, Y \a\t H:i') }}</div>
-    </div>
-
-    <!-- Report Information -->
-    <div class="info-section">
-        <div class="info-row">
-            <span class="info-label">Branch:</span>
-            <span class="info-value">{{ $branch->name ?? 'N/A' }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Generated By:</span>
-            <span class="info-value">{{ $user->name }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Report Period:</span>
-            <span class="info-value">
-                @if($filters['start_date'] && $filters['end_date'])
-                    {{ \Carbon\Carbon::parse($filters['start_date'])->format('M d, Y') }} - {{ \Carbon\Carbon::parse($filters['end_date'])->format('M d, Y') }}
-                @else
-                    All Time
+        <div class="header-content">
+            @if($company && $company->logo)
+                <div class="logo-section">
+                    <img src="{{ public_path('storage/' . $company->logo) }}" alt="{{ $company->name }}" class="company-logo">
+                </div>
+            @endif
+            <div class="title-section">
+                <h1>Bank Reconciliation Report</h1>
+                @if($company)
+                    <div class="company-name">{{ $company->name }}</div>
                 @endif
-            </span>
+                <div class="subtitle">Generated on {{ $generated_at->format('F d, Y \a\t g:i A') }}</div>
+            </div>
         </div>
     </div>
 
-    <!-- Filters Applied -->
-    @if(!empty(array_filter($filters)))
-    <div class="filters-section">
-        <div class="filters-title">Filters Applied:</div>
-        @if($filters['bank_account_id'])
-            <div class="filter-item">
-                <strong>Bank Account:</strong> 
-                @php
-                    $bankAccount = $reconciliations->first()->bankAccount ?? null;
-                @endphp
-                {{ $bankAccount ? $bankAccount->name : 'Specific Account' }}
+    <div class="report-info">
+        <h3>Report Parameters</h3>
+        <div class="info-grid">
+            <div class="info-row">
+                <div class="info-label">Branch:</div>
+                <div class="info-value">{{ $branch->name ?? 'All Branches' }}</div>
             </div>
-        @endif
-        @if($filters['start_date'])
-            <div class="filter-item">
-                <strong>Start Date:</strong> {{ \Carbon\Carbon::parse($filters['start_date'])->format('M d, Y') }}
+            <div class="info-row">
+                <div class="info-label">Generated By:</div>
+                <div class="info-value">{{ $user->name }}</div>
             </div>
-        @endif
-        @if($filters['end_date'])
-            <div class="filter-item">
-                <strong>End Date:</strong> {{ \Carbon\Carbon::parse($filters['end_date'])->format('M d, Y') }}
+            <div class="info-row">
+                <div class="info-label">Report Period:</div>
+                <div class="info-value">
+                    @if(isset($filters['start_date']) && $filters['start_date'] && isset($filters['end_date']) && $filters['end_date'])
+                        {{ \Carbon\Carbon::parse($filters['start_date'])->format('M d, Y') }} - {{ \Carbon\Carbon::parse($filters['end_date'])->format('M d, Y') }}
+                    @else
+                        All Time
+                    @endif
+                </div>
             </div>
-        @endif
-        @if($filters['status'])
-            <div class="filter-item">
-                <strong>Status:</strong> {{ ucfirst(str_replace('_', ' ', $filters['status'])) }}
+            @if(isset($filters['bank_account_id']) && $filters['bank_account_id'])
+            <div class="info-row">
+                <div class="info-label">Bank Account:</div>
+                <div class="info-value">
+                    @php
+                        $bankAccount = $reconciliations->first()->bankAccount ?? null;
+                    @endphp
+                    {{ $bankAccount ? $bankAccount->name : 'Specific Account' }}
+                </div>
             </div>
-        @endif
+            @endif
+            @if(isset($filters['status']) && $filters['status'])
+            <div class="info-row">
+                <div class="info-label">Status:</div>
+                <div class="info-value">{{ ucfirst(str_replace('_', ' ', $filters['status'])) }}</div>
+            </div>
+            @endif
+        </div>
     </div>
-    @endif
 
-    <!-- Statistics -->
-    <div class="stats-section">
-        <div class="stat-box">
+    <div class="summary-stats">
+        <div class="stat-item">
             <div class="stat-value">{{ $reportStats['total_reconciliations'] }}</div>
             <div class="stat-label">Total Reconciliations</div>
         </div>
-        <div class="stat-box">
+        <div class="stat-item">
             <div class="stat-value">{{ number_format($reportStats['total_bank_balance'], 2) }}</div>
             <div class="stat-label">Total Bank Balance</div>
         </div>
-        <div class="stat-box">
+        <div class="stat-item">
             <div class="stat-value">{{ number_format($reportStats['total_book_balance'], 2) }}</div>
             <div class="stat-label">Total Book Balance</div>
         </div>
-        <div class="stat-box">
+        <div class="stat-item">
             <div class="stat-value {{ $reportStats['total_difference'] == 0 ? 'balanced' : 'unbalanced' }}">
                 {{ number_format($reportStats['total_difference'], 2) }}
             </div>
             <div class="stat-label">Total Difference</div>
         </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ $reportStats['completed_count'] }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ $reportStats['pending_count'] }}</div>
+            <div class="stat-label">Pending</div>
+        </div>
     </div>
 
-    <!-- Reconciliation Details -->
-    <table>
+    @if($reconciliations->count() > 0)
+    <table class="data-table">
         <thead>
             <tr>
-                <th>Bank Account</th>
-                <th>Reconciliation Date</th>
-                <th>Period</th>
-                <th class="text-right">Bank Statement Balance</th>
-                <th class="text-right">Book Balance</th>
-                <th class="text-right">Difference</th>
-                <th class="text-center">Status</th>
-                <th>Created By</th>
+                <th style="width: 18%;">Bank Account</th>
+                <th style="width: 12%;">Reconciliation Date</th>
+                <th style="width: 18%;">Period</th>
+                <th style="width: 13%;" class="number">Bank Statement Balance</th>
+                <th style="width: 13%;" class="number">Book Balance</th>
+                <th style="width: 10%;" class="number">Difference</th>
+                <th style="width: 8%;" class="text-center">Status</th>
+                <th style="width: 8%;">Created By</th>
             </tr>
         </thead>
         <tbody>
-            @forelse($reconciliations as $reconciliation)
+            @foreach($reconciliations as $reconciliation)
             <tr>
                 <td>
                     <strong>{{ $reconciliation->bankAccount->name }}</strong><br>
@@ -236,11 +347,12 @@
                 </td>
                 <td>{{ $reconciliation->reconciliation_date->format('M d, Y') }}</td>
                 <td>
-                    {{ $reconciliation->start_date->format('M d, Y') }} - {{ $reconciliation->end_date->format('M d, Y') }}
+                    {{ $reconciliation->start_date->format('M d, Y') }}<br>
+                    <small>{{ $reconciliation->end_date->format('M d, Y') }}</small>
                 </td>
-                <td class="text-right">{{ number_format($reconciliation->bank_statement_balance, 2) }}</td>
-                <td class="text-right">{{ number_format($reconciliation->book_balance, 2) }}</td>
-                <td class="text-right {{ $reconciliation->difference == 0 ? 'balanced' : 'unbalanced' }}">
+                <td class="number">{{ number_format($reconciliation->bank_statement_balance, 2) }}</td>
+                <td class="number">{{ number_format($reconciliation->book_balance, 2) }}</td>
+                <td class="number {{ $reconciliation->difference == 0 ? 'balanced' : 'unbalanced' }}">
                     @if($reconciliation->difference == 0)
                         Balanced
                     @else
@@ -257,26 +369,27 @@
                     <small>{{ $reconciliation->created_at->format('M d, Y') }}</small>
                 </td>
             </tr>
-            @empty
-            <tr>
-                <td colspan="8" class="text-center">No reconciliations found for the selected criteria.</td>
-            </tr>
-            @endforelse
+            @endforeach
         </tbody>
     </table>
+    @else
+    <div class="no-data">
+        <h3>No Data Available</h3>
+        <p>No reconciliations found for the selected criteria.</p>
+    </div>
+    @endif
 
-    <!-- Summary by Status -->
     @if($reconciliations->count() > 0)
     <div class="page-break"></div>
-    <h3>Summary by Status</h3>
-    <table>
+    <div class="section-title">Summary by Status</div>
+    <table class="data-table">
         <thead>
             <tr>
-                <th>Status</th>
-                <th class="text-center">Count</th>
-                <th class="text-right">Total Bank Balance</th>
-                <th class="text-right">Total Book Balance</th>
-                <th class="text-right">Total Difference</th>
+                <th style="width: 25%;">Status</th>
+                <th style="width: 15%;" class="text-center">Count</th>
+                <th style="width: 20%;" class="number">Total Bank Balance</th>
+                <th style="width: 20%;" class="number">Total Book Balance</th>
+                <th style="width: 20%;" class="number">Total Difference</th>
             </tr>
         </thead>
         <tbody>
@@ -291,9 +404,9 @@
                     </span>
                 </td>
                 <td class="text-center">{{ $group->count() }}</td>
-                <td class="text-right">{{ number_format($group->sum('bank_statement_balance'), 2) }}</td>
-                <td class="text-right">{{ number_format($group->sum('book_balance'), 2) }}</td>
-                <td class="text-right {{ $group->sum('difference') == 0 ? 'balanced' : 'unbalanced' }}">
+                <td class="number">{{ number_format($group->sum('bank_statement_balance'), 2) }}</td>
+                <td class="number">{{ number_format($group->sum('book_balance'), 2) }}</td>
+                <td class="number {{ $group->sum('difference') == 0 ? 'balanced' : 'unbalanced' }}">
                     {{ number_format($group->sum('difference'), 2) }}
                 </td>
             </tr>
@@ -302,10 +415,9 @@
     </table>
     @endif
 
-    <!-- Footer -->
     <div class="footer">
-        <p>This report was generated by {{ $user->name }} on {{ $generated_at->format('M d, Y \a\t H:i:s') }}</p>
-        <p>SmartFinance - Bank Reconciliation Report</p>
+        <p>This report was generated by Smart Accounting System</p>
+        <p>Report ID: {{ strtoupper(uniqid()) }}</p>
     </div>
 </body>
-</html> 
+</html>

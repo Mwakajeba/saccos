@@ -40,7 +40,7 @@
 
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Status <span class="text-danger">*</span></label>
-                            <select name="status" class="form-select select2-single @error('status') is-invalid @enderror" required>
+                            <select name="status" class="form-select @error('status') is-invalid @enderror" required>
                                 <option value="">-- Select Status --</option>
                                 @foreach($statusOptions as $value => $label)
                                     <option value="{{ $value }}" {{ old('status', $supplier->status ?? '') == $value ? 'selected' : '' }}>
@@ -64,33 +64,7 @@
                                 value="{{ old('phone', $supplier->phone ?? '') }}" placeholder="Enter phone number">
                             @error('phone') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
-
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Region</label>
-                            <select name="region" class="form-select select2-single @error('region') is-invalid @enderror">
-                                <option value="">-- Select Region --</option>
-                                @foreach($regions as $region)
-                                    <option value="{{ $region->name }}" {{ old('region', $supplier->region ?? '') == $region->name ? 'selected' : '' }}>
-                                        {{ $region->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('region') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Branch</label>
-                            <select name="branch_id" class="form-select select2-single @error('branch_id') is-invalid @enderror">
-                                <option value="">-- Select Branch --</option>
-                                @foreach($branches as $branch)
-                                    <option value="{{ $branch->id }}" {{ old('branch_id', $supplier->branch_id ?? '') == $branch->id ? 'selected' : '' }}>
-                                        {{ $branch->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('branch_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
+                        
                         <div class="col-12 mb-3">
                             <label class="form-label">Address</label>
                             <textarea name="address" class="form-control @error('address') is-invalid @enderror"
@@ -126,8 +100,7 @@
                             <input type="text" name="tin_number"
                                 class="form-control @error('tin_number') is-invalid @enderror"
                                 value="{{ old('tin_number', $supplier->tin_number ?? '') }}"
-                                placeholder="Enter TIN number" pattern="[0-9]+">
-                            <div class="form-text">Enter numbers only (no dashes or special characters)</div>
+                                placeholder="Enter TIN number">
                             @error('tin_number') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
 
@@ -136,8 +109,7 @@
                             <input type="text" name="vat_number"
                                 class="form-control @error('vat_number') is-invalid @enderror"
                                 value="{{ old('vat_number', $supplier->vat_number ?? '') }}"
-                                placeholder="Enter VAT number" pattern="[0-9]+">
-                            <div class="form-text">Enter numbers only (no dashes or special characters)</div>
+                                placeholder="Enter VAT number">
                             @error('vat_number') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
 
@@ -196,49 +168,17 @@
     <hr class="my-4">
 
     <div class="d-flex justify-content-between">
-        @can('view suppliers')
         <a href="{{ route('accounting.suppliers.index') }}" class="btn btn-secondary">
             Back to Suppliers
         </a>
-        @endcan
-        @if($isEdit)
-            @can('edit supplier')
-            <button type="submit" class="btn btn-primary">
-                Update Supplier
-            </button>
-            @endcan
-        @else
-            @can('create supplier')
-            <button type="submit" class="btn btn-primary">
-                Create Supplier
-            </button>
-            @endcan
-        @endif
+        <button type="submit" class="btn btn-primary">
+            {{ $isEdit ? 'Update Supplier' : 'Create Supplier' }}
+        </button>
     </div>
 </form>
 
 @push('scripts')
     <script>
-        $(document).ready(function() {
-            // Initialize Select2 for all select fields
-            $('select.select2-single').select2({ width: '100%' });
-        });
 
-        // Phone number validation - only allow numbers and limit to 12 digits
-        document.querySelector('input[name="phone"]').addEventListener('input', function (e) {
-            let value = e.target.value.replace(/\D/g, '');
-            if (value.length > 12) {
-                value = value.slice(0, 12);
-            }
-            e.target.value = value;
-        });
-
-        // TIN and VAT number validation - only allow numbers
-        document.querySelectorAll('input[name="tin_number"], input[name="vat_number"]').forEach(function (input) {
-            input.addEventListener('input', function (e) {
-                let value = e.target.value.replace(/\D/g, '');
-                e.target.value = value;
-            });
-        });
     </script>
 @endpush

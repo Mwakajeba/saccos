@@ -15,7 +15,6 @@
         <h6 class="mb-0 text-uppercase">{{ __('app.edit_budget') }}</h6>
         <hr />
 
-        @can('edit budget')
         <!-- Edit Budget Form -->
         <div class="row">
             <div class="col-12">
@@ -58,8 +57,8 @@
                                             <i class="bx bx-calendar me-1"></i>
                                                                                          {{ __('app.budget_year') }} <span class="text-danger">*</span>
                                         </label>
-                                        <select class="form-select select2-single @error('year') is-invalid @enderror" name="year" required>
-                                            <option value="">Select Year</option>
+                                        <select class="form-select @error('year') is-invalid @enderror" name="year" required>
+                                            <option value="">{{ __('app.select') }} {{ __('app.budget_year') }}</option>
                                             @for($year = date('Y') - 2; $year <= date('Y') + 3; $year++)
                                                 <option value="{{ $year }}" {{ old('year', $budget->year) == $year ? 'selected' : '' }}>
                                                     {{ $year }}
@@ -75,10 +74,22 @@
                                     <div class="form-group">
                                         <label class="form-label fw-bold">
                                             <i class="bx bx-building me-1"></i>
-                                                                                         {{ __('app.budget_branch') }}
+                                            {{ __('app.budget_branch') }}
                                         </label>
-                                        <input type="text" class="form-control" value="{{ $budget->branch->name ?? 'N/A' }}" readonly>
-                                                                                 <small class="text-muted">{{ __('app.budget_branch_automatically_set') }}</small>
+                                        <select class="form-select @error('branch_id') is-invalid @enderror" name="branch_id">
+                                            <option value="all" {{ old('branch_id', $budget->branch_id === null ? 'all' : $budget->branch_id) == 'all' ? 'selected' : '' }}>
+                                                {{ __('app.all_branches') }}
+                                            </option>
+                                            @foreach($branches as $branch)
+                                                <option value="{{ $branch->id }}" {{ old('branch_id', $budget->branch_id) == $branch->id ? 'selected' : '' }}>
+                                                    {{ $branch->name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <small class="text-muted">{{ __('app.budget_branch_help') }}</small>
+                                        @error('branch_id')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
                                     </div>
                                 </div>
                                 <div class="col-12 mt-3">
@@ -119,7 +130,7 @@
                                                     <div class="d-flex justify-content-between align-items-center">
                                                         <h6 class="mb-0 text-primary">
                                                             <i class="bx bx-list-ul me-2"></i>
-                                                            Budget Line {{ $index + 1 }}
+                                                            {{ __('app.budget_line') }} {{ $index + 1 }}
                                                         </h6>
                                                     </div>
                                                 </div>
@@ -129,10 +140,10 @@
                                                             <div class="form-group">
                                                                 <label class="form-label fw-bold">
                                                                     <i class="bx bx-account me-1"></i>
-                                                                    Account <span class="text-danger">*</span>
+                                                                    {{ __('app.account') }} <span class="text-danger">*</span>
                                                                 </label>
                                                                 <select class="form-select select2-single account-select" name="budget_lines[{{ $index }}][account_id]" required>
-                                                                    <option value="">Select Account</option>
+                                                                    <option value="">{{ __('app.select_account') }}</option>
                                                                     @foreach($accounts as $account)
                                                                         <option value="{{ $account->id }}" {{ $line->account_id == $account->id ? 'selected' : '' }}>
                                                                             {{ $account->account_code }} - {{ $account->account_name }}
@@ -148,13 +159,13 @@
                                                             <div class="form-group">
                                                                 <label class="form-label fw-bold">
                                                                     <i class="bx bx-money me-1"></i>
-                                                                    Amount <span class="text-danger">*</span>
+                                                                    {{ __('app.amount') }} <span class="text-danger">*</span>
                                                                 </label>
                                                                 <div class="input-group">
                                                                     <span class="input-group-text">TZS</span>
                                                                     <input type="number" class="form-control amount-input" 
-                                                                           name="budget_lines[{{ $index }}][amount]" step="0.01" min="0" 
-                                                                           value="{{ $line->amount }}" placeholder="0.00" required>
+                                                                           name="budget_lines[{{ $index }}][amount]" step="any" min="0" 
+                                                                           value="{{ $line->amount }}" placeholder="0" required>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -162,13 +173,13 @@
                                                             <div class="form-group">
                                                                 <label class="form-label fw-bold">
                                                                     <i class="bx bx-category me-1"></i>
-                                                                    Category <span class="text-danger">*</span>
+                                                                    {{ __('app.category') }} <span class="text-danger">*</span>
                                                                 </label>
-                                                                <select class="form-select select2-single category-select" name="budget_lines[{{ $index }}][category]" required>
-                                                                    <option value="">Select Category</option>
-                                                                    <option value="Revenue" {{ $line->category == 'Revenue' ? 'selected' : '' }}>Revenue</option>
-                                                                    <option value="Expense" {{ $line->category == 'Expense' ? 'selected' : '' }}>Expense</option>
-                                                                    <option value="Capital Expenditure" {{ $line->category == 'Capital Expenditure' ? 'selected' : '' }}>Capital Expenditure</option>
+                                                                <select class="form-select category-select" name="budget_lines[{{ $index }}][category]" required>
+                                                                    <option value="">{{ __('app.select_category') }}</option>
+                                                                    <option value="Revenue" {{ $line->category == 'Revenue' ? 'selected' : '' }}>{{ __('app.revenue') }}</option>
+                                                                    <option value="Expense" {{ $line->category == 'Expense' ? 'selected' : '' }}>{{ __('app.expense') }}</option>
+                                                                    <option value="Capital Expenditure" {{ $line->category == 'Capital Expenditure' ? 'selected' : '' }}>{{ __('app.capital_expenditure') }}</option>
                                                                 </select>
                                                             </div>
                                                         </div>
@@ -176,12 +187,12 @@
                                                             <div class="form-group">
                                                                 <label class="form-label fw-bold">
                                                                     <i class="bx bx-trash me-1"></i>
-                                                                    Actions
+                                                                    {{ __('app.actions') }}
                                                                 </label>
                                                                 <div class="d-flex justify-content-center">
-                                                                    <button type="button" class="btn btn-outline-danger btn-sm remove-line" title="Remove this line">
+                                                                    <button type="button" class="btn btn-outline-danger btn-sm remove-line" title="{{ __('app.budget_remove_line') }}">
                                                                         <i class="bx bx-trash me-1"></i>
-                                                                        Remove
+                                                                        {{ __('app.budget_remove_line') }}
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -198,7 +209,7 @@
 
                                     <div class="d-flex justify-content-start mb-3">
                                         <button type="button" class="btn btn-primary" id="addBudgetLine">
-                                            <i class="bx bx-plus"></i> Add Line
+                                            <i class="bx bx-plus"></i> {{ __('app.budget_add_line') }}
                                         </button>
                                     </div>
                             <div class="row">
@@ -207,7 +218,7 @@
                                                                         <a href="{{ route('accounting.budgets.show', $budget) }}" class="btn btn-secondary">
                                     <i class="bx bx-x"></i> {{ __('app.cancel') }}
                                         </a>
-                                        <button type="submit" id="submitBtn" class="btn btn-primary">
+                                        <button type="submit" class="btn btn-primary">
                                             <i class="bx bx-save"></i> {{ __('app.update') }} {{ __('app.budget') }}
                                         </button>
                                     </div>
@@ -218,9 +229,8 @@
                 </div>
             </div>
         </div>
+    </div>
 </div>
-</div>
-@endcan
 @endsection
 
 <!-- Budget Line Template -->
@@ -230,8 +240,12 @@
             <div class="d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 text-primary">
                     <i class="bx bx-list-ul me-2"></i>
-                    Budget Line <span class="line-number"></span>
+                    {{ __('app.budget_line') }} <span class="line-number"></span>
                 </h6>
+                <button type="button" class="btn btn-outline-danger btn-sm remove-line" title="{{ __('app.budget_remove_line') }}">
+                    <i class="bx bx-trash me-1"></i>
+                    {{ __('app.budget_remove_line') }}
+                </button>
             </div>
         </div>
         <div class="card-body">
@@ -240,10 +254,10 @@
                     <div class="form-group">
                         <label class="form-label fw-bold">
                             <i class="bx bx-account me-1"></i>
-                            Account <span class="text-danger">*</span>
+                            {{ __('app.account') }} <span class="text-danger">*</span>
                         </label>
                         <select class="form-select select2-single account-select" name="budget_lines[{index}][account_id]" required>
-                            <option value="">Select Account</option>
+                            <option value="">{{ __('app.select_account') }}</option>
                             @foreach($accounts as $account)
                                 <option value="{{ $account->id }}">
                                     {{ $account->account_code }} - {{ $account->account_name }}
@@ -259,13 +273,13 @@
                     <div class="form-group">
                         <label class="form-label fw-bold">
                             <i class="bx bx-money me-1"></i>
-                            Amount <span class="text-danger">*</span>
+                            {{ __('app.amount') }} <span class="text-danger">*</span>
                         </label>
                         <div class="input-group">
                             <span class="input-group-text">TZS</span>
                             <input type="number" class="form-control amount-input" 
-                                   name="budget_lines[{index}][amount]" step="0.01" min="0" 
-                                   placeholder="0.00" required>
+                                   name="budget_lines[{index}][amount]" step="any" min="0" 
+                                   placeholder="0" required>
                         </div>
                     </div>
                 </div>
@@ -273,13 +287,13 @@
                     <div class="form-group">
                         <label class="form-label fw-bold">
                             <i class="bx bx-category me-1"></i>
-                            Category <span class="text-danger">*</span>
+                            {{ __('app.category') }} <span class="text-danger">*</span>
                         </label>
-                        <select class="form-select select2-single category-select" name="budget_lines[{index}][category]" required>
-                            <option value="">Select Category</option>
-                            <option value="Revenue">Revenue</option>
-                            <option value="Expense">Expense</option>
-                            <option value="Capital Expenditure">Capital Expenditure</option>
+                        <select class="form-select category-select" name="budget_lines[{index}][category]" required>
+                            <option value="">{{ __('app.select_category') }}</option>
+                            <option value="Revenue">{{ __('app.revenue') }}</option>
+                            <option value="Expense">{{ __('app.expense') }}</option>
+                            <option value="Capital Expenditure">{{ __('app.capital_expenditure') }}</option>
                         </select>
                     </div>
                 </div>
@@ -287,12 +301,12 @@
                     <div class="form-group">
                         <label class="form-label fw-bold">
                             <i class="bx bx-trash me-1"></i>
-                            Actions
+                            {{ __('app.actions') }}
                         </label>
                         <div class="d-flex justify-content-center">
-                            <button type="button" class="btn btn-outline-danger btn-sm remove-line" title="Remove this line">
+                            <button type="button" class="btn btn-outline-danger btn-sm remove-line" title="{{ __('app.budget_remove_line') }}">
                                 <i class="bx bx-trash me-1"></i>
-                                Remove
+                                {{ __('app.budget_remove_line') }}
                             </button>
                         </div>
                     </div>
@@ -308,31 +322,37 @@ $(document).ready(function() {
     let lineIndex = {{ count($budget->budgetLines) }};
     const accounts = @json($accounts);
     
-    // Initialize Select2 for existing selects
-    function initSelect2(context) {
-        const scope = context ? $(context) : $(document);
-        scope.find('select.select2-single').select2({ width: '100%' });
+    // Initialize Select2 for account selects
+    function initializeSelect2() {
+        $('.select2-single.account-select').each(function() {
+            if (!$(this).hasClass('select2-hidden-accessible')) {
+                $(this).select2({
+                    theme: 'bootstrap-5',
+                    width: '100%'
+                });
+            }
+        });
     }
-    initSelect2();
-
+    
+    // Initialize Select2 on page load
+    initializeSelect2();
+    
     // Add budget line
     $('#addBudgetLine').click(function() {
         const template = document.getElementById('budgetLineTemplate').innerHTML;
         const newLine = template.replace(/{index}/g, lineIndex);
         
-        const $node = $(newLine);
-        $('#budgetLinesContainer').append($node);
+        $('#budgetLinesContainer').append(newLine);
         lineIndex++;
         
         // Update line numbers
         updateLineNumbers();
         
+        // Initialize Select2 for the new line
+        initializeSelect2();
+        
         // Add animation
-        const $last = $('.budget-line-item').last();
-        $last.hide().fadeIn(300);
-
-        // Initialize select2 on newly added selects
-        initSelect2($last);
+        $('.budget-line-item').last().hide().fadeIn(300);
     });
     
     // Remove budget line
@@ -359,18 +379,9 @@ $(document).ready(function() {
     
     // Form validation
     $('#budgetForm').submit(function(e) {
-        // Disable submit button to prevent double submission
-        const submitBtn = $('#submitBtn');
-        submitBtn.prop('disabled', true);
-        submitBtn.addClass('opacity-50');
-        submitBtn.html('<i class="bx bx-loader-alt bx-spin me-1"></i> {{ __('app.processing') ?? 'Processing...' }}');
         const lines = $('.budget-line-item');
         if (lines.length === 0) {
             e.preventDefault();
-            // Re-enable on validation error
-            submitBtn.prop('disabled', false);
-            submitBtn.removeClass('opacity-50');
-            submitBtn.html('<i class=\"bx bx-save\"></i> {{ __('app.update') }} {{ __('app.budget') }}');
             Swal.fire({
                 icon: 'warning',
                 title: '{{ __('app.no_budget_lines') }}',
@@ -397,10 +408,6 @@ $(document).ready(function() {
         
         if (hasDuplicates) {
             e.preventDefault();
-            // Re-enable on validation error
-            submitBtn.prop('disabled', false);
-            submitBtn.removeClass('opacity-50');
-            submitBtn.html('<i class="bx bx-save"></i> {{ __('app.update') }} {{ __('app.budget') }}');
             Swal.fire({
                 icon: 'error',
                 title: '{{ __('app.duplicate_accounts') }}',
@@ -411,11 +418,17 @@ $(document).ready(function() {
         }
     });
     
-    // Format amount inputs on blur to avoid moving cursor while typing
-    $(document).on('blur', '.amount-input', function() {
-        const value = parseFloat($(this).val());
-        if (!isNaN(value)) {
-            $(this).val(value.toFixed(2));
+    // Format amount inputs - allow whole numbers and decimals
+    $(document).on('input', '.amount-input', function() {
+        const value = $(this).val();
+        // Allow whole numbers and decimals, but don't force 2 decimal places
+        if (value && !isNaN(value)) {
+            // Just validate it's a number, don't force formatting
+            const numValue = parseFloat(value);
+            if (!isNaN(numValue) && numValue >= 0) {
+                // Keep the value as entered (whole number or decimal)
+                $(this).val(value);
+            }
         }
     });
     

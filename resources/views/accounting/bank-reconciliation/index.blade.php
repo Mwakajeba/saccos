@@ -12,6 +12,7 @@
                     <div class="me-auto">
                         <x-breadcrumbs-with-icons :links="[
                             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+                            ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
                             ['label' => 'Bank Reconciliation', 'url' => '#', 'icon' => 'bx bx-credit-card']
                         ]" />
                     </div>
@@ -19,9 +20,9 @@
                         <button type="button" class="btn btn-info me-2" onclick="refreshAllReconciliations()" id="refreshAllBtn">
                             <i class="bx bx-refresh me-2"></i>Refresh All
                         </button>
-                        <a href="{{ route('accounting.reports.bank-reconciliation-report') }}" class="btn btn-danger me-2">
+                        {{-- <a href="{{ route('accounting.reports.bank-reconciliation-report') }}" class="btn btn-danger me-2">
                             <i class="bx bx-file-pdf me-2"></i>Reports
-                        </a>
+                        </a> --}}
                         <a href="{{ route('accounting.bank-reconciliation.create') }}" class="btn btn-primary">
                             <i class="bx bx-plus me-2"></i>New Reconciliation
                         </a>
@@ -175,92 +176,10 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse($reconciliations as $reconciliation)
-                            <tr>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="ms-2">
-                                            <h6 class="mb-0">{{ $reconciliation->bankAccount->name }}</h6>
-                                            <small class="text-muted">{{ $reconciliation->bankAccount->account_number }}</small>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>{{ $reconciliation->formatted_reconciliation_date }}</td>
-                                <td>
-                                    <small class="text-muted">
-                                        {{ $reconciliation->formatted_start_date }} - {{ $reconciliation->formatted_end_date }}
-                                    </small>
-                                </td>
-                                <td class="text-end">
-                                    <span class="fw-bold">{{ $reconciliation->formatted_bank_statement_balance }}</span>
-                                </td>
-                                <td class="text-end">
-                                    <span class="fw-bold">{{ $reconciliation->formatted_book_balance }}</span>
-                                </td>
-                                <td class="text-end">
-                                    @if($reconciliation->difference == 0)
-                                        <span class="badge bg-success">Balanced</span>
-                                    @else
-                                        <span class="text-danger fw-bold">{{ $reconciliation->formatted_difference }}</span>
-                                    @endif
-                                </td>
-                                <td>{!! $reconciliation->status_badge !!}</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="ms-2">
-                                            <h6 class="mb-0">{{ $reconciliation->user->name }}</h6>
-                                            <small class="text-muted">{{ $reconciliation->created_at->format('M d, Y') }}</small>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="d-flex gap-2">
-                                        <a href="{{ route('accounting.bank-reconciliation.show', $reconciliation) }}" 
-                                           class="btn btn-sm btn-outline-primary" title="View Details">
-                                            <i class="bx bx-show"></i>
-                                        </a>
-                                        <a href="{{ route('accounting.reports.bank-reconciliation-report.export', $reconciliation) }}" 
-                                           class="btn btn-sm btn-outline-danger" title="Export PDF">
-                                            <i class="bx bx-download"></i>
-                                        </a>
-                                        @if($reconciliation->status === 'draft')
-                                        <a href="{{ route('accounting.bank-reconciliation.edit', $reconciliation) }}" 
-                                           class="btn btn-sm btn-outline-warning" title="Edit">
-                                            <i class="bx bx-edit"></i>
-                                        </a>
-                                        <button type="button" class="btn btn-sm btn-outline-danger" 
-                                                onclick="deleteReconciliation({{ $reconciliation->id }}, '{{ $reconciliation->bankAccount->name }}')"
-                                                title="Delete">
-                                            <i class="bx bx-trash"></i>
-                                        </button>
-                                        @endif
-                                    </div>
-                                </td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="9" class="text-center py-4">
-                                    <div class="d-flex flex-column align-items-center">
-                                        <i class="bx bx-bank font-size-48 text-muted mb-3"></i>
-                                        <h6 class="text-muted">No bank reconciliations found</h6>
-                                        <p class="text-muted mb-0">Create your first bank reconciliation to get started.</p>
-                                        <a href="{{ route('accounting.bank-reconciliation.create') }}" class="btn btn-primary mt-3">
-                                            <i class="bx bx-plus me-2"></i>Create Reconciliation
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                            @endforelse
+                            <!-- DataTables will populate this via AJAX -->
                         </tbody>
                     </table>
                 </div>
-
-                <!-- Pagination -->
-                @if($reconciliations->hasPages())
-                <div class="d-flex justify-content-center mt-4">
-                    {{ $reconciliations->links() }}
-                </div>
-                @endif
             </div>
         </div>
     </div>
@@ -282,20 +201,126 @@ $(document).ready(function() {
         };
     }
     
-    // Initialize DataTable with error handling
+    // Initialize DataTable with AJAX
     if ($('#reconciliationsTable').length) {
         try {
             var table = $('#reconciliationsTable').DataTable({
-        "pageLength": 25,
-        "order": [[1, "desc"]], // Sort by reconciliation date descending
-        "columnDefs": [
-                    { "orderable": false, "targets": -1 } // Last column (Actions) not sortable
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: '{{ route("accounting.bank-reconciliation.data") }}',
+                    type: 'GET',
+                    error: function(xhr, error, thrown) {
+                        console.error('Bank Reconciliations DataTable AJAX error:', error);
+                        console.error('Response:', xhr.responseText);
+                    }
+                },
+                columns: [
+                    {
+                        data: 'bank_account',
+                        name: 'bank_account',
+                        render: function(data) {
+                            return '<div class="d-flex align-items-center">' +
+                                '<div class="ms-2">' +
+                                '<h6 class="mb-0">' + (data.name || 'N/A') + '</h6>' +
+                                '<small class="text-muted">' + (data.account_number || 'N/A') + '</small>' +
+                                '</div></div>';
+                        }
+                    },
+                    {
+                        data: 'reconciliation_date',
+                        name: 'reconciliation_date'
+                    },
+                    {
+                        data: 'period',
+                        name: 'period',
+                        render: function(data) {
+                            return '<small class="text-muted">' + (data.start || 'N/A') + ' - ' + (data.end || 'N/A') + '</small>';
+                        }
+                    },
+                    {
+                        data: 'bank_statement_balance',
+                        name: 'bank_statement_balance',
+                        className: 'text-end',
+                        render: function(data) {
+                            return '<span class="fw-bold">' + (data || '0.00') + '</span>';
+                        }
+                    },
+                    {
+                        data: 'book_balance',
+                        name: 'book_balance',
+                        className: 'text-end',
+                        render: function(data) {
+                            return '<span class="fw-bold">' + (data || '0.00') + '</span>';
+                        }
+                    },
+                    {
+                        data: 'difference',
+                        name: 'difference',
+                        className: 'text-end',
+                        render: function(data) {
+                            if (data.is_balanced) {
+                                return '<span class="badge bg-success">Balanced</span>';
+                            }
+                            return '<span class="text-danger fw-bold">' + (data.formatted || '0.00') + '</span>';
+                        }
+                    },
+                    {
+                        data: 'status_badge',
+                        name: 'status',
+                        render: function(data) {
+                            return data || '';
+                        }
+                    },
+                    {
+                        data: 'created_by',
+                        name: 'created_by',
+                        render: function(data) {
+                            return '<div class="d-flex align-items-center">' +
+                                '<div class="ms-2">' +
+                                '<h6 class="mb-0">' + (data.name || 'N/A') + '</h6>' +
+                                '<small class="text-muted">' + (data.date || 'N/A') + '</small>' +
+                                '</div></div>';
+                        }
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        searchable: false,
+                        className: 'text-center',
+                        render: function(data, type, row) {
+                            let actions = '<div class="d-flex gap-2 justify-content-center">';
+                            actions += '<a href="' + row.show_url + '" class="btn btn-sm btn-outline-primary" title="View Details">' +
+                                '<i class="bx bx-show"></i></a>';
+                            actions += '<a href="' + row.export_url + '" class="btn btn-sm btn-outline-danger" title="Export PDF">' +
+                                '<i class="bx bx-download"></i></a>';
+                            if (row.status === 'draft') {
+                                actions += '<a href="' + row.edit_url + '" class="btn btn-sm btn-outline-warning" title="Edit">' +
+                                    '<i class="bx bx-edit"></i></a>';
+                                actions += '<button type="button" class="btn btn-sm btn-outline-danger" ' +
+                                    'onclick="deleteReconciliation(\'' + row.hash_id + '\', \'' + row.bank_account.name.replace(/'/g, "\\'") + '\')" ' +
+                                    'title="Delete"><i class="bx bx-trash"></i></button>';
+                            }
+                            actions += '</div>';
+                            return actions;
+                        }
+                    }
                 ],
-                "responsive": true,
-                "autoWidth": false,
-                "deferRender": true,
-                "processing": true,
-                "serverSide": false
+                order: [[1, 'desc']], // Sort by reconciliation date descending
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                responsive: true,
+                language: {
+                    processing: '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>',
+                    emptyTable: '<div class="text-center p-4"><i class="bx bx-bank font-size-48 text-muted mb-3"></i><h6 class="text-muted">No bank reconciliations found</h6><p class="text-muted mb-0">Create your first bank reconciliation to get started.</p><a href="{{ route("accounting.bank-reconciliation.create") }}" class="btn btn-primary mt-3"><i class="bx bx-plus me-2"></i>Create Reconciliation</a></div>',
+                    search: "",
+                    searchPlaceholder: "Search reconciliations...",
+                    lengthMenu: "Show _MENU_ entries per page",
+                    info: "Showing _START_ to _END_ of _TOTAL_ reconciliations",
+                    infoEmpty: "Showing 0 to 0 of 0 reconciliations",
+                    infoFiltered: "(filtered from _MAX_ total reconciliations)",
+                    zeroRecords: "No matching reconciliations found"
+                }
             });
         } catch (error) {
             console.warn('DataTable initialization error:', error);
@@ -361,7 +386,7 @@ function refreshAllReconciliations() {
     });
 }
 
-function deleteReconciliation(id, bankName) {
+function deleteReconciliation(hashId, bankName) {
     Swal.fire({
         title: 'Delete Reconciliation?',
         text: `Are you sure you want to delete the reconciliation for ${bankName}? This action cannot be undone.`,
@@ -375,7 +400,7 @@ function deleteReconciliation(id, bankName) {
             // Create form and submit
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = `/accounting/bank-reconciliation/${id}`;
+            form.action = `{{ url('accounting/bank-reconciliation') }}/${hashId}`;
             
             const methodInput = document.createElement('input');
             methodInput.type = 'hidden';

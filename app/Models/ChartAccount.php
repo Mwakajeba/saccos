@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Vinkla\Hashids\Facades\Hashids;
 
 class ChartAccount extends Model
 {
@@ -27,6 +28,8 @@ class ChartAccount extends Model
         'account_class_group_id',
         'account_code',
         'account_name',
+        'account_type',
+        'parent_id',
         'has_cash_flow',
         'has_equity',
         'cash_flow_category_id',
@@ -46,11 +49,35 @@ class ChartAccount extends Model
     ];
 
     /**
+     * Get the encoded ID attribute.
+     */
+    public function getEncodedIdAttribute(): string
+    {
+        return Hashids::encode($this->id);
+    }
+
+    /**
      * Get the account class group that owns the chart account.
      */
     public function accountClassGroup(): BelongsTo
     {
         return $this->belongsTo(AccountClassGroup::class, 'account_class_group_id');
+    }
+
+    /**
+     * Get the parent chart account (for child accounts).
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(ChartAccount::class, 'parent_id');
+    }
+
+    /**
+     * Get the child chart accounts (for parent accounts).
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany(ChartAccount::class, 'parent_id');
     }
 
     /**

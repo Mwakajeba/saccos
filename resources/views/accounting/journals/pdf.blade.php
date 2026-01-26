@@ -1,341 +1,446 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Journal Entry #{{ $journal->reference }}</title>
+    <meta charset="utf-8">
+    <title>Journal Entry - {{ $journal->reference }}</title>
     <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 10px;
-            color: #333;
+            font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
+            color: #000;
         }
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
+
+        .container {
+            width: 100%;
         }
-        .header-left {
-            display: flex;
-            align-items: center;
+
+        .text-center {
+            text-align: center;
         }
-        .logo {
-            width: 50px;
-            height: 50px;
+
+        .text-right {
+            text-align: right;
+        }
+
+        hr {
+            border: none;
+            border-top: 2px solid #3b82f6;
+            margin: 8px 0;
+        }
+
+        /* Header */
+        .logo-section {
+            margin-bottom: 10px;
+        }
+
+        .company-logo {
+            max-height: 80px;
+            max-width: 120px;
             object-fit: contain;
-            margin-right: 12px;
         }
-        .company-info {
-            flex: 1;
-        }
+
         .company-name {
             font-size: 18px;
             font-weight: bold;
-            color: #007bff;
-            margin-bottom: 2px;
+            color: #1e40af;
         }
-        .document-title {
-            font-size: 14px;
+
+        .company-details {
+            font-size: 10px;
+        }
+
+        /* Journal title */
+        .journal-title {
             font-weight: bold;
-            margin-bottom: 2px;
+            text-align: center;
+            font-size: 18px;
+            margin: 10px 0;
+            color: #1e40af;
         }
-        .header-right {
-            text-align: right;
-            font-size: 10px;
-            color: #666;
-        }
-        .journal-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 15px;
-            font-size: 10px;
-        }
+
+        /* Info section */
         .info-section {
-            background-color: #ffffff;
-            border: 1px solid #e9ecef;
-            border-radius: 4px;
-            padding: 8px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-        .info-label {
-            font-weight: bold;
-            color: #666;
-            font-size: 10px;
-            text-transform: uppercase;
-            margin-bottom: 2px;
-        }
-        .section-title {
-            font-size: 11px;
-            font-weight: bold;
-            color: #007bff;
-            margin-bottom: 6px;
-            padding-bottom: 3px;
-            border-bottom: 1px solid #007bff;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .info-value {
-            font-size: 11px;
-            margin-bottom: 8px;
-        }
-        .info-row {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 6px;
-            padding: 4px 8px;
-            background-color: #f8f9fa;
-            border-radius: 3px;
-            border-left: 3px solid #007bff;
+            margin-bottom: 10px;
         }
-        .info-row:last-child {
-            margin-bottom: 0;
+
+        .journal-info-left {
+            width: 48%;
+            font-size: 10px;
         }
-        .info-row .info-label {
-            margin-bottom: 0;
-            color: #333;
+
+        .journal-info-left strong {
+            color: #1e40af;
         }
-        .info-row .info-value {
-            margin-bottom: 0;
-            font-weight: bold;
+
+        .journal-box {
+            width: 48%;
+            text-align: right;
         }
-        .journal-items {
-            margin-bottom: 15px;
+
+        .journal-box table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-left: auto;
         }
+
+        .journal-box td {
+            border: 1px solid #cbd5e1;
+            padding: 4px;
+        }
+
+        .journal-box td:nth-child(even) {
+            text-align: right;
+        }
+
+        .journal-box strong {
+            color: #1e40af;
+        }
+
+        /* Items table */
         .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 10px;
             font-size: 10px;
+            margin-top: 10px;
         }
-        .items-table th {
-            background-color: #007bff;
-            color: white;
-            padding: 8px;
-            text-align: left;
-            font-weight: bold;
-            font-size: 10px;
-        }
+
+        .items-table th,
         .items-table td {
-            padding: 8px;
-            border-bottom: 1px solid #e9ecef;
-            vertical-align: top;
+            border: 1px solid #cbd5e1;
+            padding: 5px;
         }
-        .items-table tr:nth-child(even) {
-            background-color: #f8f9fa;
+
+        .items-table th {
+            text-align: center;
+            font-weight: bold;
+            background-color: #1e3a8a;
+            color: #fff;
         }
+
+        .items-table tbody tr:nth-child(even) {
+            background-color: #dbeafe;
+        }
+
+        .items-table tbody tr:nth-child(odd) {
+            background-color: #fff;
+        }
+
         .debit-amount {
-            color: #28a745;
+            color: #059669;
             font-weight: bold;
         }
+
         .credit-amount {
-            color: #dc3545;
+            color: #dc2626;
             font-weight: bold;
         }
-        .totals-section {
-            margin-top: 15px;
-            padding: 10px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
-            border: 1px solid #e9ecef;
+
+        /* Totals */
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-top: 10px;
         }
-        .totals-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-            font-size: 11px;
+
+        .totals-table td {
+            padding: 4px 5px;
+            border: none;
         }
-        .totals-row:last-child {
-            margin-bottom: 0;
-            border-top: 1px solid #dee2e6;
-            padding-top: 5px;
+
+        .totals-table td:last-child {
+            text-align: right;
+            padding-right: 5px;
+        }
+
+        .totals-table tr:last-child td {
+            background-color: #1e3a8a;
+            color: #fff;
             font-weight: bold;
+            padding: 8px 5px;
         }
+
+        .totals-table tr:last-child td:last-child {
+            background-color: #dbeafe;
+            color: #1e40af;
+            padding: 8px;
+            border-radius: 3px;
+        }
+
+        /* Footer */
         .footer {
             margin-top: 20px;
-            padding-top: 10px;
-            border-top: 1px solid #e9ecef;
-            font-size: 9px;
-            color: #666;
-            text-align: center;
+            font-size: 10px;
         }
-        .signature-section {
+
+        .footer strong {
+            color: #1e40af;
+        }
+
+        .signature {
             margin-top: 20px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
         }
+
+        .footer hr {
+            border-top: 1px solid #dbeafe;
+            margin: 15px 0;
+        }
+
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
         .signature-box {
             text-align: center;
-            padding: 10px;
-            border-top: 1px solid #dee2e6;
+            width: 30%;
         }
+
         .signature-line {
-            width: 150px;
-            height: 1px;
-            background-color: #333;
-            margin: 20px auto 5px;
+            border-top: 1px solid #333;
+            margin-top: 40px;
+            padding-top: 2px;
         }
-        .signature-label {
-            font-size: 10px;
-            color: #666;
+
+        .nature-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: bold;
             text-transform: uppercase;
         }
-        .disclaimer {
-            margin-top: 15px;
-            padding: 10px;
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 4px;
-            font-size: 9px;
-            color: #856404;
-            text-align: center;
+
+        .nature-debit {
+            background-color: #d1fae5;
+            color: #059669;
         }
+
+        .nature-credit {
+            background-color: #fee2e2;
+            color: #dc2626;
+        }
+
     </style>
+
 </head>
 <body>
-    <!-- Header -->
-    <div class="header">
-        <div class="header-left">
-            @if(isset($journal->user->company) && $journal->user->company->logo)
-                <img src="{{ asset('storage/' . $journal->user->company->logo) }}" alt="Company Logo" class="logo">
+    <div class="container">
+
+        {{-- Header --}}
+        <div class="text-left">
+            @php
+            $company = $journal->user->company ?? null;
+            @endphp
+            @if($company && $company->logo)
+            @php
+            // Logo is stored in storage/app/public (via "public" disk)
+            $logo = $company->logo; // e.g. "uploads/companies/company_1_1768466462.png"
+            $logoPath = public_path('storage/' . ltrim($logo, '/'));
+
+            // Convert image to base64 for DomPDF compatibility
+            $logoBase64 = null;
+            if (file_exists($logoPath)) {
+            $imageData = file_get_contents($logoPath);
+            $imageInfo = getimagesize($logoPath);
+            if ($imageInfo !== false) {
+            $mimeType = $imageInfo['mime'];
+            $logoBase64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+            }
+            }
+            @endphp
+            @if($logoBase64)
+            <div class="logo-section" style="float: left; width: 45%;">
+                <img src="{{ $logoBase64 }}" alt="{{ $company->name . ' logo' }}" class="company-logo">
+            </div>
             @endif
-            <div class="company-info">
-                <div class="company-name">{{ $journal->user->company->name ?? 'Company Name' }}</div>
-                <div class="document-title">JOURNAL ENTRY</div>
+            @endif
+            <div style="float: right; width: 50%; text-align: left; margin-left: 15%;">
+                <div class="company-name">{{ $company->name ?? 'SmartFinance' }}</div>
+                <div class="company-details">
+                    @if($company && $company->address)
+                    P.O Box: {{ $company->address }} <br>
+                    @endif
+                    @if($company && $company->phone)
+                    Phone: {{ $company->phone }} <br>
+                    @endif
+                    @if($company && $company->email)
+                    Email: {{ $company->email }}
+                    @endif
+                </div>
             </div>
         </div>
-        <div class="header-right">
-            <div>Reference: {{ $journal->reference }}</div>
-            <div>Date: {{ $journal->date ? $journal->date->format('M d, Y') : 'N/A' }}</div>
-            <div>Generated: {{ now()->format('M d, Y H:i') }}</div>
-        </div>
-    </div>
+        <div style="clear: both;"></div>
 
-    <!-- Journal Information -->
-    <div class="journal-info">
+        <div class="journal-title">JOURNAL ENTRY</div>
+        <hr>
+        {{-- Journal Info --}}
         <div class="info-section">
-            <div class="section-title">Journal Details</div>
-            <div class="info-row">
-                <span class="info-label">Reference</span>
-                <span class="info-value">{{ $journal->reference }}</span>
+            <div class="journal-info-left" style="float: left; width: 48%;">
+                <strong>Created By:</strong><br>
+                @php
+                $creator = $journal->user ?? null;
+                $creatorRole = $creator && method_exists($creator, 'roles') ? $creator->roles->first() : null;
+                @endphp
+                @if($creator)
+                {{ $creator->name }}
+                @if($creatorRole)
+                ({{ $creatorRole->name }})
+                @endif
+                @else
+                System
+                @endif
+                <br><br>
+                @if($journal->branch)
+                <strong>Branch:</strong><br>
+                {{ $journal->branch->name }}<br>
+                @endif
             </div>
-            <div class="info-row">
-                <span class="info-label">Date</span>
-                <span class="info-value">{{ $journal->date ? $journal->date->format('M d, Y') : 'N/A' }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Branch</span>
-                <span class="info-value">{{ $journal->branch->name ?? 'N/A' }}</span>
+
+            <div class="journal-box" style="text-align: right; float: left; width: 48%;">
+                <table style="margin-top: 8px;">
+                    <tr>
+                        <td><strong>Journal no:</strong></td>
+                        <td>{{ $journal->reference }}</td>
+                        <td><strong>Date :</strong></td>
+                        <td>{{ $journal->date ? $journal->date->format('d F Y') : 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Currency:</strong></td>
+                        <td>TZS</td>
+                        <td><strong>Time:</strong></td>
+                        <td>{{ $journal->created_at->format('H:i:s') }}</td>
+                    </tr>
+                </table>
             </div>
         </div>
 
-        <div class="info-section">
-            <div class="section-title">Created By</div>
-            <div class="info-row">
-                <span class="info-label">User</span>
-                <span class="info-value">{{ $journal->user->name ?? 'N/A' }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Created</span>
-                <span class="info-value">{{ $journal->created_at ? $journal->created_at->format('M d, Y \a\t g:i A') : 'N/A' }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Updated</span>
-                <span class="info-value">{{ $journal->updated_at ? $journal->updated_at->format('M d, Y \a\t g:i A') : 'N/A' }}</span>
-            </div>
+        @if($journal->description)
+        <div class="notes" style="clear: both;">
+            <strong>Description:</strong><br>
+            {{ $journal->description }}
         </div>
+        @endif
 
-        <div class="info-section">
-            <div class="section-title">Summary</div>
-            <div class="info-row">
-                <span class="info-label">Total Debit</span>
-                <span class="info-value debit-amount">TZS {{ number_format($journal->debit_total, 2) }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Total Credit</span>
-                <span class="info-value credit-amount">TZS {{ number_format($journal->credit_total, 2) }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Balance</span>
-                <span class="info-value {{ $journal->balance == 0 ? 'debit-amount' : 'credit-amount' }}">
-                    TZS {{ number_format($journal->balance, 2) }}
-                </span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Description -->
-    @if($journal->description)
-    <div class="info-section" style="margin-bottom: 15px;">
-        <div class="section-title">Description</div>
-        <div class="info-value">{{ $journal->description }}</div>
-    </div>
-    @endif
-
-    <!-- Journal Items -->
-    <div class="journal-items">
-        <div class="section-title">Journal Entries</div>
+        {{-- Items --}}
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 5%;">#</th>
-                    <th style="width: 40%;">Account</th>
-                    <th style="width: 15%;">Nature</th>
-                    <th style="width: 20%;">Amount</th>
-                    <th style="width: 20%;">Description</th>
+                    <th>#</th>
+                    <th>Account</th>
+                    <th>Account Code</th>
+                    <th>Nature</th>
+                    <th>Description</th>
+                    <th>Amount</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($journal->items as $index => $item)
                 <tr>
-                    <td>{{ $index + 1 }}</td>
-                    <td>
-                        <strong>{{ $item->chartAccount->account_code ?? 'N/A' }}</strong><br>
-                        <small>{{ $item->chartAccount->account_name ?? 'N/A' }}</small>
-                    </td>
-                    <td>
-                        <span class="badge {{ $item->nature == 'debit' ? 'bg-success' : 'bg-danger' }}" 
-                              style="background-color: {{ $item->nature == 'debit' ? '#28a745' : '#dc3545' }}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9px;">
+                    <td class="text-center">{{ $index + 1 }}</td>
+                    <td>{{ $item->chartAccount->account_name ?? 'N/A' }}</td>
+                    <td class="text-center">{{ $item->chartAccount->account_code ?? 'N/A' }}</td>
+                    <td class="text-center">
+                        <span class="nature-badge nature-{{ $item->nature }}">
                             {{ ucfirst($item->nature) }}
                         </span>
                     </td>
-                    <td class="{{ $item->nature == 'debit' ? 'debit-amount' : 'credit-amount' }}">
-                        TZS {{ number_format($item->amount, 2) }}
-                    </td>
                     <td>{{ $item->description ?: '-' }}</td>
+                    <td class="text-right {{ $item->nature == 'debit' ? 'debit-amount' : 'credit-amount' }}">
+                        {{ number_format($item->amount, 2) }}
+                    </td>
                 </tr>
                 @endforeach
             </tbody>
         </table>
-    </div>
 
-    <!-- Signature Section -->
-    <div class="signature-section">
-        <div class="signature-box">
-            <div class="signature-line"></div>
-            <div class="signature-label">Prepared By</div>
+        {{-- Totals --}}
+        @php
+        $colspan = 5;
+        $debitTotal = $journal->items->where('nature', 'debit')->sum('amount');
+        $creditTotal = $journal->items->where('nature', 'credit')->sum('amount');
+        $balance = abs($debitTotal - $creditTotal);
+        @endphp
+        <table class="totals-table">
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align: right;">Total Debit: </td>
+                <td class="debit-amount">{{ number_format($debitTotal, 2) }}</td>
+            </tr>
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align: right;">Total Credit: </td>
+                <td class="credit-amount">{{ number_format($creditTotal, 2) }}</td>
+            </tr>
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align: right;"><strong>Balance: </strong></td>
+                <td><strong>{{ number_format($balance, 2) }}</strong></td>
+            </tr>
+        </table>
+
+        @if(method_exists($journal, 'getAmountInWords'))
+        <div style="margin-top:5px;font-style:italic;">
+            <strong>Total Debit Amount: {{ ucwords($journal->getAmountInWords()) }}</strong>
         </div>
-        <div class="signature-box">
-            <div class="signature-line"></div>
-            <div class="signature-label">Approved By</div>
+        @endif
+
+        @if($balance != 0)
+        <div style="margin-top:5px;font-style:italic;color:#dc2626;">
+            <strong>Warning: Journal is not balanced! Debit and Credit totals do not match.</strong>
         </div>
+        @endif
+
+        {{-- Footer --}}
+        <hr>
+        <div class="footer">
+            <div class="signature-section">
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Prepared By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
+                        {{ $journal->user->name ?? 'N/A' }}
+                    </div>
+                </div>
+                
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Approved By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
+                        @if($journal->approved && $journal->approvedBy)
+                        {{ $journal->approvedBy->name }}
+                        @else
+                        <span style="color: #999;">Pending Approval</span>
+                        @endif
+                    </div>
+                </div>
+                
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Posted By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
+                        @if($journal->glPosted)
+                        Posted to GL
+                        @else
+                        <span style="color: #999;">Not Posted</span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center" style="font-size:9px; margin-top: 20px;">
+                Journal Entry No: {{ $journal->reference }} <br>
+                Page 1 of 1
+            </div>
+        </div>
+
     </div>
 
-    <!-- Disclaimer -->
-    <div class="disclaimer">
-        This is a computer generated document. No signature is required.
-    </div>
-
-    <!-- Footer -->
-    <div class="footer">
-        <p>Generated on {{ now()->format('F d, Y \a\t g:i A') }} by {{ $journal->user->name ?? 'System' }}</p>
-    </div>
 </body>
-</html> 
+</html>

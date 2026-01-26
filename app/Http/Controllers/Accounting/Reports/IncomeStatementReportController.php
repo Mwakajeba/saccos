@@ -99,19 +99,39 @@ class IncomeStatementReportController extends Controller
         $incomeQuery = DB::table('gl_transactions')
             ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
             ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->leftJoin('main_groups', 'account_class_groups.main_group_id', '=', 'main_groups.id')
             ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
+            ->leftJoin('journals', function($join) {
+                $join->on('gl_transactions.transaction_id', '=', 'journals.id')
+                     ->where('gl_transactions.transaction_type', '=', 'journal');
+            })
             ->where('account_class_groups.company_id', $company->id)
             ->whereBetween('gl_transactions.date', [$startDate, $endDate])
-            ->whereIn('account_class.name', ['income', 'revenue']);
+            ->whereIn('account_class.name', ['income', 'revenue'])
+            // Exclude year-end closing entries from income statement calculations
+            ->where(function($query) {
+                $query->whereNull('journals.reference_type')
+                      ->orWhere('journals.reference_type', '!=', 'Year-End Close');
+            });
 
         // Build the base query for expense accounts
         $expenseQuery = DB::table('gl_transactions')
             ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
             ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->leftJoin('main_groups', 'account_class_groups.main_group_id', '=', 'main_groups.id')
             ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
+            ->leftJoin('journals', function($join) {
+                $join->on('gl_transactions.transaction_id', '=', 'journals.id')
+                     ->where('gl_transactions.transaction_type', '=', 'journal');
+            })
             ->where('account_class_groups.company_id', $company->id)
             ->whereBetween('gl_transactions.date', [$startDate, $endDate])
-            ->whereIn('account_class.name', ['expenses', 'expense']);
+            ->whereIn('account_class.name', ['expenses', 'expense'])
+            // Exclude year-end closing entries from income statement calculations
+            ->where(function($query) {
+                $query->whereNull('journals.reference_type')
+                      ->orWhere('journals.reference_type', '!=', 'Year-End Close');
+            });
 
         // Add branch filter: 'all' means all assigned branches
         $assignedBranchIds = Auth::user()->branches()->pluck('branches.id')->toArray();
@@ -162,9 +182,15 @@ class IncomeStatementReportController extends Controller
             'chart_accounts.account_name',
             'chart_accounts.account_code',
             'account_class.name as class_name',
+            'account_class_groups.id as fsli_id',
+            'account_class_groups.name as fsli_name',
+            'main_groups.id as main_group_id',
+            'main_groups.name as main_group_name',
             DB::raw("SUM(CASE WHEN gl_transactions.nature = 'credit' THEN gl_transactions.amount ELSE -gl_transactions.amount END) as sum")
         )
-        ->groupBy('chart_accounts.id', 'chart_accounts.account_name', 'chart_accounts.account_code', 'account_class.name');
+        ->groupBy('chart_accounts.id', 'chart_accounts.account_name', 'chart_accounts.account_code', 
+                 'account_class.name', 'account_class_groups.id', 'account_class_groups.name',
+                 'main_groups.id', 'main_groups.name');
 
         // Select fields for expenses
         $expenseQuery->select(
@@ -172,43 +198,91 @@ class IncomeStatementReportController extends Controller
             'chart_accounts.account_name',
             'chart_accounts.account_code',
             'account_class.name as class_name',
+            'account_class_groups.id as fsli_id',
+            'account_class_groups.name as fsli_name',
+            'main_groups.id as main_group_id',
+            'main_groups.name as main_group_name',
             DB::raw("SUM(CASE WHEN gl_transactions.nature = 'debit' THEN gl_transactions.amount ELSE -gl_transactions.amount END) as sum")
         )
-        ->groupBy('chart_accounts.id', 'chart_accounts.account_name', 'chart_accounts.account_code', 'account_class.name');
+        ->groupBy('chart_accounts.id', 'chart_accounts.account_name', 'chart_accounts.account_code', 
+                 'account_class.name', 'account_class_groups.id', 'account_class_groups.name',
+                 'main_groups.id', 'main_groups.name');
 
         $incomeAccounts = $incomeQuery->get();
         $expenseAccounts = $expenseQuery->get();
 
-        // Group by account class groups
-        $chartAccountsRevenues = $incomeAccounts->groupBy(function ($item) {
-            return $item->class_name;
-        })->map(function ($group) {
-            return $group->map(function ($item) {
-                return [
-                    'account_id' => $item->account_id,
-                    'account' => $item->account_name,
-                    'account_code' => $item->account_code,
-                    'sum' => (float) $item->sum
+        // Group hierarchically: main_group -> fsli -> accounts
+        $chartAccountsRevenues = [];
+        foreach ($incomeAccounts as $item) {
+            $mainGroupName = $item->main_group_name ?? 'Uncategorized';
+            $fsliName = $item->fsli_name ?? 'Uncategorized';
+            
+            if (!isset($chartAccountsRevenues[$mainGroupName])) {
+                $chartAccountsRevenues[$mainGroupName] = [
+                    'fslis' => [],
+                    'total' => 0
                 ];
-            })->values()->toArray();
-        })->toArray();
+            }
+            
+            if (!isset($chartAccountsRevenues[$mainGroupName]['fslis'][$fsliName])) {
+                $chartAccountsRevenues[$mainGroupName]['fslis'][$fsliName] = [
+                    'accounts' => [],
+                    'total' => 0
+                ];
+            }
+            
+            $sum = (float) $item->sum;
+            $chartAccountsRevenues[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
+                'account_id' => $item->account_id,
+                'account' => $item->account_name,
+                'account_code' => $item->account_code,
+                'sum' => $sum
+            ];
+            
+            // Calculate totals
+            $chartAccountsRevenues[$mainGroupName]['fslis'][$fsliName]['total'] += $sum;
+            $chartAccountsRevenues[$mainGroupName]['total'] += $sum;
+        }
 
-        $chartAccountsExpenses = $expenseAccounts->groupBy(function ($item) {
-            return $item->class_name;
-        })->map(function ($group) {
-            return $group->map(function ($item) {
-                return [
-                    'account_id' => $item->account_id,
-                    'account' => $item->account_name,
-                    'account_code' => $item->account_code,
-                    'sum' => (float) $item->sum
+        $chartAccountsExpenses = [];
+        foreach ($expenseAccounts as $item) {
+            $mainGroupName = $item->main_group_name ?? 'Uncategorized';
+            $fsliName = $item->fsli_name ?? 'Uncategorized';
+            
+            if (!isset($chartAccountsExpenses[$mainGroupName])) {
+                $chartAccountsExpenses[$mainGroupName] = [
+                    'fslis' => [],
+                    'total' => 0
                 ];
-            })->values()->toArray();
-        })->toArray();
+            }
+            
+            if (!isset($chartAccountsExpenses[$mainGroupName]['fslis'][$fsliName])) {
+                $chartAccountsExpenses[$mainGroupName]['fslis'][$fsliName] = [
+                    'accounts' => [],
+                    'total' => 0
+                ];
+            }
+            
+            $sum = (float) $item->sum;
+            $chartAccountsExpenses[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
+                'account_id' => $item->account_id,
+                'account' => $item->account_name,
+                'account_code' => $item->account_code,
+                'sum' => $sum
+            ];
+            
+            // Calculate totals
+            $chartAccountsExpenses[$mainGroupName]['fslis'][$fsliName]['total'] += $sum;
+            $chartAccountsExpenses[$mainGroupName]['total'] += $sum;
+        }
 
         // Calculate totals
-        $totalRevenue = collect($chartAccountsRevenues)->flatten(1)->sum('sum');
-        $totalExpenses = collect($chartAccountsExpenses)->flatten(1)->sum('sum');
+        $totalRevenue = collect($chartAccountsRevenues)->sum(function($mainGroup) {
+            return $mainGroup['total'] ?? 0;
+        });
+        $totalExpenses = collect($chartAccountsExpenses)->sum(function($mainGroup) {
+            return $mainGroup['total'] ?? 0;
+        });
 
         return [
             'revenues' => $chartAccountsRevenues,
@@ -252,7 +326,7 @@ class IncomeStatementReportController extends Controller
             'startDate' => $startDate,
             'endDate' => $endDate,
             'reportingType' => $reportingType
-        ]);
+        ])->setPaper('a4', 'landscape');
 
         $filename = 'income_statement_' . $startDate . '_to_' . $endDate . '_' . $reportingType . '.pdf';
         return $pdf->download($filename);

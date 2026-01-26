@@ -21,7 +21,7 @@ foreach ($accountClasses as $class) {
     <div class="row mb-3">
         <div class="col-md-6">
             <label class="form-label">Select Account Class Group</label>
-            <select class="form-select" name="account_class_group_id" required>
+            <select class="form-select select2" name="account_class_group_id" required>
                 <option value="">-- Choose Account Class Group --</option>
                 @foreach($accountClassGroups as $group)
                     <option value="{{ $group->id }}" {{ (old('account_class_group_id') == $group->id || (isset($chartAccount) && $chartAccount->account_class_group_id == $group->id)) ? 'selected' : '' }}>
@@ -35,13 +35,13 @@ foreach ($accountClasses as $class) {
         </div>
 
         <div class="col-md-6">
-            <label class="form-label">Account Code (<span style ="color:red" id="range_hint"></span>)</label>
+            <label class="form-label">Account Code (<span style="color:red" id="range_hint"></span>)</label>
             <div class="input-group">
                 <input type="text" class="form-control" name="account_code"
                     id="account_code_input"
                     value="{{ $chartAccount->account_code ?? old('account_code') }}" required
                     placeholder="Choose from above range ...">
-                <!-- <span class="input-group-text" id="range_hint"></span> -->
+                <span class="input-group-text" id="range_hint_display"></span>
             </div>
             @error('account_code')
                 <div class="text-danger">{{ $message }}</div>
@@ -57,6 +57,43 @@ foreach ($accountClasses as $class) {
         @error('account_name')
             <div class="text-danger">{{ $message }}</div>
         @enderror
+    </div>
+
+    <!-- Account Type Selection -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label">Account Type <span class="text-danger">*</span></label>
+            <select class="form-select" name="account_type" id="account_type" required>
+                <option value="">-- Choose Account Type --</option>
+                <option value="parent" {{ (old('account_type') == 'parent' || (isset($chartAccount) && $chartAccount->account_type == 'parent')) ? 'selected' : '' }}>
+                    Parent Account
+                </option>
+                <option value="child" {{ (old('account_type') == 'child' || (isset($chartAccount) && $chartAccount->account_type == 'child')) ? 'selected' : '' }}>
+                    Child Account
+                </option>
+            </select>
+            @error('account_type')
+                <div class="text-danger">{{ $message }}</div>
+            @enderror
+            <small class="text-muted">Parent accounts can have child accounts under them</small>
+        </div>
+
+        <!-- Parent Account Selection (shown only when account_type is 'child') -->
+        <div class="col-md-6" id="parent_account_div" style="display: {{ (old('account_type') == 'child' || (isset($chartAccount) && $chartAccount->account_type == 'child')) ? 'block' : 'none' }};">
+            <label class="form-label">Parent Account <span class="text-danger">*</span></label>
+            <select class="form-select select2" name="parent_id" id="parent_id">
+                <option value="">-- Choose Parent Account --</option>
+                @foreach($parentAccounts as $parent)
+                    <option value="{{ $parent->id }}" {{ (old('parent_id') == $parent->id || (isset($chartAccount) && $chartAccount->parent_id == $parent->id)) ? 'selected' : '' }}>
+                        [{{ $parent->account_code }}] {{ $parent->account_name }} ({{ $parent->accountClassGroup->name ?? 'N/A' }})
+                    </option>
+                @endforeach
+            </select>
+            @error('parent_id')
+                <div class="text-danger">{{ $message }}</div>
+            @enderror
+            <small class="text-muted">Select the parent account for this child account</small>
+        </div>
     </div>
 
     <div class="row mb-3">
@@ -90,7 +127,7 @@ foreach ($accountClasses as $class) {
     <!-- Cash Flow Category Dropdown (shown when has_cash_flow is checked) -->
     <div class="mb-3" id="cash_flow_category_div" style="display: {{ (old('has_cash_flow') || (isset($chartAccount) && $chartAccount->has_cash_flow)) ? 'block' : 'none' }};">
         <label class="form-label">Cash Flow Category</label>
-        <select class="form-select" name="cash_flow_category_id">
+        <select class="form-select select2" name="cash_flow_category_id">
             <option value="">-- Choose Cash Flow Category --</option>
             @foreach($cashFlowCategories as $category)
                 <option value="{{ $category->id }}" {{ (old('cash_flow_category_id') == $category->id || (isset($chartAccount) && $chartAccount->cash_flow_category_id == $category->id)) ? 'selected' : '' }}>
@@ -106,7 +143,7 @@ foreach ($accountClasses as $class) {
     <!-- Equity Category Dropdown (shown when has_equity is checked) -->
     <div class="mb-3" id="equity_category_div" style="display: {{ (old('has_equity') || (isset($chartAccount) && $chartAccount->has_equity)) ? 'block' : 'none' }};">
         <label class="form-label">Equity Category</label>
-        <select class="form-select" name="equity_category_id">
+        <select class="form-select select2" name="equity_category_id">
             <option value="">-- Choose Equity Category --</option>
             @foreach($equityCategories as $category)
                 <option value="{{ $category->id }}" {{ (old('equity_category_id') == $category->id || (isset($chartAccount) && $chartAccount->equity_category_id == $category->id)) ? 'selected' : '' }}>
@@ -127,103 +164,3 @@ foreach ($accountClasses as $class) {
     </div>
 </form>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, initializing form...');
-    
-    // Get elements
-    const cashFlowCheckbox = document.getElementById('has_cash_flow');
-    const equityCheckbox = document.getElementById('has_equity');
-    const cashFlowDiv = document.getElementById('cash_flow_category_div');
-    const equityDiv = document.getElementById('equity_category_div');
-    const groupSelect = document.querySelector('select[name="account_class_group_id"]');
-    const rangeHint = document.getElementById('range_hint');
-    const accountCodeInput = document.getElementById('account_code_input');
-    
-    // Build mapping of group_id => class_id
-    const groupToClass = {};
-    @foreach($accountClassGroups as $group)
-        groupToClass[{{ $group->id }}] = {{ $group->class_id }};
-    @endforeach
-    // Build mapping of class_id => {from, to}
-    const classRanges = @json($classRanges);
-
-    console.log('Elements found:', {
-        cashFlowCheckbox: cashFlowCheckbox,
-        equityCheckbox: equityCheckbox,
-        cashFlowDiv: cashFlowDiv,
-        equityDiv: equityDiv,
-        groupSelect: groupSelect,
-        rangeHint: rangeHint,
-        accountCodeInput: accountCodeInput
-    });
-
-    // Function to toggle cash flow category dropdown
-    function toggleCashFlowCategory() {
-        console.log('Cash flow checkbox changed:', cashFlowCheckbox.checked);
-        if (cashFlowCheckbox.checked) {
-            cashFlowDiv.style.display = 'block';
-            console.log('Cash flow dropdown shown');
-        } else {
-            cashFlowDiv.style.display = 'none';
-            // Clear the selection when hiding
-            const select = cashFlowDiv.querySelector('select');
-            if (select) {
-                select.value = '';
-            }
-            console.log('Cash flow dropdown hidden and cleared');
-        }
-    }
-
-    // Function to toggle equity category dropdown
-    function toggleEquityCategory() {
-        console.log('Equity checkbox changed:', equityCheckbox.checked);
-        if (equityCheckbox.checked) {
-            equityDiv.style.display = 'block';
-            console.log('Equity dropdown shown');
-        } else {
-            equityDiv.style.display = 'none';
-            // Clear the selection when hiding
-            const select = equityDiv.querySelector('select');
-            if (select) {
-                select.value = '';
-            }
-            console.log('Equity dropdown hidden and cleared');
-        }
-    }
-
-    // Function to update account code range hint
-    function updateRangeHint() {
-        const selectedGroupId = groupSelect.value;
-        const classId = groupToClass[selectedGroupId];
-        if (classRanges[classId] && classRanges[classId].from !== null && classRanges[classId].from !== undefined &&
-            classRanges[classId].to !== null && classRanges[classId].to !== undefined) {
-            rangeHint.textContent = `Range: ${classRanges[classId].from} - ${classRanges[classId].to}`;
-        } else {
-            rangeHint.textContent = '';
-        }
-    }
-
-    // Add event listeners
-    if (cashFlowCheckbox) {
-        cashFlowCheckbox.addEventListener('change', toggleCashFlowCategory);
-        console.log('Cash flow event listener added');
-    }
-    
-    if (equityCheckbox) {
-        equityCheckbox.addEventListener('change', toggleEquityCategory);
-        console.log('Equity event listener added');
-    }
-
-    if (groupSelect) {
-        groupSelect.addEventListener('change', updateRangeHint);
-        console.log('Group select event listener added');
-    }
-
-    // Initialize on page load
-    toggleCashFlowCategory();
-    toggleEquityCategory();
-    updateRangeHint();
-    console.log('Initial toggle functions called');
-});
-</script>

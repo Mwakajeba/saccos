@@ -8,6 +8,7 @@
         <!-- Breadcrumb -->
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
             ['label' => 'Journal Entries', 'url' => route('accounting.journals.index'), 'icon' => 'bx bx-book-open'],
             ['label' => 'Journal Entry #' . $journal->reference, 'url' => route('accounting.journals.show', $journal), 'icon' => 'bx bx-show'],
             ['label' => 'Edit Entry', 'url' => '#', 'icon' => 'bx bx-edit']
