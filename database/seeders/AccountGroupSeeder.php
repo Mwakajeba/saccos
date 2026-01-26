@@ -49,6 +49,22 @@ class AccountGroupSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
+                'class_id' => 1,
+                'company_id' => 1,
+                'group_code' => '1500',
+                'name' => 'Loan Receivables',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'class_id' => 1,
+                'company_id' => 1,
+                'group_code' => '1600',
+                'name' => 'Loan Interest',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
                 'class_id' => 2,
                 'company_id' => 1,
                 'group_code' => '2000',

@@ -17,21 +17,23 @@
                     <h4 class="fw-bold text-dark mb-0">Loan Details for {{ $loan->customer->name }}</h4>
                     <div class="d-flex gap-2" style="margin-left: 16px;">
                         @if($loan->status !== 'restructured' && $loan->status !== 'completed')
-                            <a href="{{ route('loans.writeoff', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
-                                class="btn btn-danger">Write Off Loans</a>
+                            @if($loan->days_in_arrears > 90)
+                                <a href="{{ route('loans.writeoff', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
+                                    class="btn btn-danger">Write Off Loans</a>
+                            @endif
 
                             @if($loan->isEligibleForTopUp())
                                 <button type="button" class="btn btn-success" onclick="showTopUpModal()">
                                     <i class="bx bx-plus-circle me-2"></i>Apply for Top-Up
                                 </button>
                             @else
-                                <!-- <button type="button" class="btn btn-secondary" disabled title="Loan not eligible for top-up">
+                                <button type="button" class="btn btn-secondary" disabled title="Loan not eligible for top-up">
                                                                                     <i class="bx bx-plus-circle me-2"></i>Top-Up Not Available
-                                                                                </button> -->
+                                                                                </button> 
 
-                                <button type="button" class="btn btn-success" onclick="showTopUpModal()">
+                                <!-- <button type="button" class="btn btn-success" onclick="showTopUpModal()">
                                     <i class="bx bx-plus-circle me-2"></i>Apply for Top-Up
-                                </button>
+                                </button> -->
                             @endif
                             <a href="{{ route('loans.fees_receipt', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
                                 class="btn btn-success"><i class="bx bx-plus-circle me-2"></i> Loan Fees Receipt</a>
@@ -292,6 +294,11 @@
                         <i class="bx bx-history me-2 font-18"></i>Approval History
                     </a>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="tab" href="#double_entry" role="tab">
+                        <i class="bx bx-book-open me-2 font-18"></i>Double Entry
+                    </a>
+                </li>
             </ul>
 
             <div class="tab-content py-3">
@@ -379,7 +386,7 @@
                                         </tr>
                                         <tr>
                                             <td class="fw-bold text-muted ps-4">Interest Rate</td>
-                                            <td class="text-dark">{{ ($loan->interest ?? 'N/A') }}%</td>
+                                            <td class="text-dark">{{ $loan->interest ? number_format($loan->interest, 2) : 'N/A' }}%</td>
                                         </tr>
                                         <tr>
                                             <td class="fw-bold text-muted ps-4">Interest Method</td>
@@ -1290,6 +1297,138 @@
                                     <h6 class="text-muted">No approval history available</h6>
                                     <p class="text-muted">Approval history will be recorded as the loan progresses through the
                                         approval process.</p>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="double_entry" role="tabpanel">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0"><i class="bx bx-book-open me-2"></i>DOUBLE ENTRY TRANSACTIONS</h6>
+                        </div>
+                        <div class="card-body">
+                            @php
+                                // Get all GL transactions related to this loan
+                                $glTransactions = \App\Models\GlTransaction::where(function($query) use ($loan) {
+                                    $query->where('transaction_id', $loan->id)
+                                          ->whereIn('transaction_type', ['Loan Disbursement', 'Loan Penalty', 'Loan Writeoff']);
+                                })
+                                ->orWhere(function($query) use ($loan) {
+                                    // Get repayment transactions
+                                    $repaymentIds = $loan->repayments->pluck('id')->toArray();
+                                    if (!empty($repaymentIds)) {
+                                        $query->whereIn('transaction_id', $repaymentIds)
+                                              ->where('transaction_type', 'journal repayment');
+                                    }
+                                })
+                                ->orWhere(function($query) use ($loan) {
+                                    // Get receipt transactions (loan fees)
+                                    $query->where('customer_id', $loan->customer_id)
+                                          ->where('transaction_type', 'receipt')
+                                          ->where('description', 'like', '%Loan #' . $loan->id . '%');
+                                })
+                                ->with(['chartAccount', 'user'])
+                                ->orderBy('date', 'asc')
+                                ->orderBy('created_at', 'asc')
+                                ->get();
+
+                                $totalDebit = $glTransactions->where('nature', 'debit')->sum('amount');
+                                $totalCredit = $glTransactions->where('nature', 'credit')->sum('amount');
+                                $balance = $totalDebit - $totalCredit;
+                            @endphp
+
+                            @if($glTransactions->count())
+                                <!-- Summary Cards -->
+                                <div class="row mb-4">
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light-success">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Total Debit</h6>
+                                                <h4 class="mb-0 text-success">TZS {{ number_format($totalDebit, 2) }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light-danger">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Total Credit</h6>
+                                                <h4 class="mb-0 text-danger">TZS {{ number_format($totalCredit, 2) }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card border-0 {{ $balance == 0 ? 'bg-light-info' : 'bg-light-warning' }}">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Balance</h6>
+                                                <h4 class="mb-0 {{ $balance == 0 ? 'text-info' : 'text-warning' }}">TZS {{ number_format($balance, 2) }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Transactions Table -->
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-striped mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Account</th>
+                                                <th>Description</th>
+                                                <th>Type</th>
+                                                <th class="text-end">Debit</th>
+                                                <th class="text-end">Credit</th>
+                                                <th>Created By</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($glTransactions as $transaction)
+                                                <tr>
+                                                    <td>{{ $transaction->date ? $transaction->date->format('d-m-Y') : 'N/A' }}</td>
+                                                    <td>
+                                                        <strong>{{ $transaction->chartAccount->account_code ?? 'N/A' }}</strong><br>
+                                                        <small class="text-muted">{{ $transaction->chartAccount->account_name ?? 'N/A' }}</small>
+                                                    </td>
+                                                    <td>{{ Str::limit($transaction->description, 50) }}</td>
+                                                    <td>
+                                                        <span class="badge bg-{{ $transaction->transaction_type == 'Loan Disbursement' ? 'primary' : ($transaction->transaction_type == 'journal repayment' ? 'success' : ($transaction->transaction_type == 'receipt' ? 'info' : 'warning')) }}">
+                                                            {{ $transaction->transaction_type }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        @if($transaction->nature == 'debit')
+                                                            <strong class="text-success">{{ number_format($transaction->amount, 2) }}</strong>
+                                                        @else
+                                                            <span class="text-muted">-</span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-end">
+                                                        @if($transaction->nature == 'credit')
+                                                            <strong class="text-danger">{{ number_format($transaction->amount, 2) }}</strong>
+                                                        @else
+                                                            <span class="text-muted">-</span>
+                                                        @endif
+                                                    </td>
+                                                    <td>{{ $transaction->user->name ?? 'System' }}</td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                        <tfoot class="table-secondary">
+                                            <tr>
+                                                <th colspan="4" class="text-end">TOTALS:</th>
+                                                <th class="text-end text-success">{{ number_format($totalDebit, 2) }}</th>
+                                                <th class="text-end text-danger">{{ number_format($totalCredit, 2) }}</th>
+                                                <th></th>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            @else
+                                <div class="text-center py-4">
+                                    <i class="bx bx-book-open fs-1 text-muted mb-3"></i>
+                                    <h6 class="text-muted">No double entry transactions found</h6>
+                                    <p class="text-muted">Double entry accounting transactions will appear here once the loan is disbursed or has repayments.</p>
                                 </div>
                             @endif
                         </div>

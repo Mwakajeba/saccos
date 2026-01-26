@@ -22,29 +22,33 @@ class AssetCategoryController extends Controller
 
     public function data(Request $request)
     {
-        $user = Auth::user();
-        $hasAssetsTable = Schema::hasTable('assets');
-        if ($hasAssetsTable) {
-            $assetsCountSub = DB::table('assets')
-                ->whereColumn('assets.asset_category_id', 'asset_categories.id')
-                ->where('company_id', $user->company_id)
-                ->when($user->branch_id, fn($q) => $q->where('branch_id', $user->branch_id))
-                ->selectRaw('COUNT(*)');
-        }
+        try {
+            $user = Auth::user();
+            $hasAssetsTable = Schema::hasTable('assets');
+            if ($hasAssetsTable) {
+                $assetsCountSub = DB::table('assets')
+                    ->whereColumn('assets.asset_category_id', 'asset_categories.id')
+                    ->where('company_id', $user->company_id)
+                    ->when($user->branch_id, fn($q) => $q->where('branch_id', $user->branch_id))
+                    ->selectRaw('COUNT(*)');
+            }
 
-        $query = AssetCategory::forCompany($user->company_id)
-            ->when($user->branch_id, fn($q) => $q->where('branch_id', $user->branch_id))
-            ->select([
-                'id','code','name','default_depreciation_method','default_useful_life_months','default_depreciation_rate','depreciation_convention','created_at'
-            ]);
+            $query = AssetCategory::forCompany($user->company_id)
+                ->where(function($q) use ($user) {
+                    $q->whereNull('branch_id')
+                      ->orWhere('branch_id', $user->branch_id);
+                })
+                ->select([
+                    'id','code','name','default_depreciation_method','default_useful_life_months','default_depreciation_rate','depreciation_convention','created_at'
+                ]);
 
-        if ($hasAssetsTable) {
-            $query->selectSub($assetsCountSub, 'assets_count');
-        } else {
-            $query->selectRaw('0 as assets_count');
-        }
+            if ($hasAssetsTable) {
+                $query->selectSub($assetsCountSub, 'assets_count');
+            } else {
+                $query->selectRaw('0 as assets_count');
+            }
 
-        return DataTables::of($query->orderBy('created_at','desc'))
+            return DataTables::of($query->orderBy('created_at','desc'))
             ->addColumn('actions', function($row) {
                 $encoded = Hashids::encode($row->id);
                 $edit = route('assets.categories.edit', $encoded);
@@ -59,6 +63,10 @@ class AssetCategoryController extends Controller
             })
             ->rawColumns(['actions'])
             ->make(true);
+        } catch (\Exception $e) {
+            \Log::error('Asset Category DataTable Error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     public function create()

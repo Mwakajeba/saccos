@@ -1307,7 +1307,7 @@ class LoanController extends Controller
             'annually' => 'Annually'
         ];
         $bankAccounts = BankAccount::all();
-        $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other']; // Example sectors
+        $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
         return view('loans.create', compact('customers', 'products', 'sectors', 'bankAccounts', 'loanOfficers', 'interestCycles'));
     }
 
@@ -1628,7 +1628,7 @@ class LoanController extends Controller
             ->get();
         $products = LoanProduct::where('is_active', true)->get();
         $bankAccounts = BankAccount::all();
-        $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other']; // You can move this to config if reusable
+        $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
 
         return view('loans.edit', [
             'loan' => $loan,
@@ -2491,7 +2491,7 @@ class LoanController extends Controller
         $groups = Group::where('branch_id', $branchId)->get();
         $products = LoanProduct::where('is_active', true)->get();
         $bankAccounts = BankAccount::all();
-        $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other'];
+        $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
 
         return view('loans.application.create', compact('customers', 'groups', 'products', 'sectors', 'bankAccounts'));
     }
@@ -2723,7 +2723,7 @@ class LoanController extends Controller
         $groups = Group::where('branch_id', $branchId)->get();
         $products = LoanProduct::all();
         $bankAccounts = BankAccount::all();
-        $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other'];
+        $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
 
         return view('loans.application.edit', compact('loanApplication', 'customers', 'groups', 'products', 'sectors', 'bankAccounts'));
     }

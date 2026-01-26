@@ -48,6 +48,12 @@ class RolePermissionSeeder extends Seeder
             'manage branch setting',
             'manage company setting',
             'delete role',
+            
+            // Sectors
+            'view sectors',
+            'create sector',
+            'edit sector',
+            'delete sector',
             'edit role',
             'view role',
             'create role',
@@ -238,6 +244,7 @@ class RolePermissionSeeder extends Seeder
             'view loan portfolio at risk report',
             'view loan internal portfolio analysis report',
             'view loan non performing loan report',
+            'view loan crb report',
         // Accounting report item-level permissions
         'view balance sheet report',
         'view trial balance report',

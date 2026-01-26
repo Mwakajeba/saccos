@@ -136,6 +136,10 @@ class PermissionGroupsSeeder extends Seeder
                 'view role',
                 'create role',
                 'create permission',
+                'view sectors',
+                'create sector',
+                'edit sector',
+                'delete sector',
                 'view permission groups',
                 'create permission group',
                 'edit permission group',
@@ -389,7 +393,8 @@ class PermissionGroupsSeeder extends Seeder
                 'view arrears',
                 'view expected vs collected',
                 'view portfolio at risk',
-                'view non perfoming loans',        // Accounting report item-level permissions
+                'view non perfoming loans',
+                'view loan crb report',        // Accounting report item-level permissions
                 'view balance sheet report',
                 'view trial balance report',
                 'view income statement report',

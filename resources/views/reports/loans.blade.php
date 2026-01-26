@@ -295,6 +295,24 @@
                                 </div>
                             </div>
                             @endcan
+
+                            <!-- CRB Report -->
+                            @can('view loan crb report')
+                            <div class="col-lg-4 col-md-6 mb-4">
+                                <div class="card h-100 border-primary">
+                                    <div class="card-body text-center">
+                                        <div class="icon-box mb-3">
+                                            <i class="bx bx-file-find fs-1 text-primary"></i>
+                                        </div>
+                                        <h5 class="card-title">CRB Report</h5>
+                                        <p class="card-text text-muted">Credit Reference Bureau report with loan details, installments, and past due information.</p>
+                                        <a href="{{ route('accounting.loans.reports.crb') }}" class="btn btn-primary">
+                                            <i class="bx bx-file me-1"></i> Generate Report
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
                         </div>
                     </div>
                 </div>

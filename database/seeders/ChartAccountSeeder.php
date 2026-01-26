@@ -64,6 +64,16 @@ class ChartAccountSeeder extends Seeder
             ->where('company_id', 1)
             ->value('id');
         
+        $loanReceivablesGroupId = DB::table('account_class_groups')
+            ->where('group_code', '1500')
+            ->where('company_id', 1)
+            ->value('id');
+        
+        $loanInterestGroupId = DB::table('account_class_groups')
+            ->where('group_code', '1600')
+            ->where('company_id', 1)
+            ->value('id');
+        
         $ppeGroupId = DB::table('account_class_groups')
             ->where('group_code', '1200')
             ->where('company_id', 1)
@@ -209,6 +219,28 @@ class ChartAccountSeeder extends Seeder
                 'account_code' => '1003',
                 'account_name' => 'Penalty Receivable',
                 'account_class_group_id' => 4,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+
+            // Loan Receivables (Group: 1500) - Principal Receivable
+            [
+                'account_code' => '1500',
+                'account_name' => 'Principal Receivable',
+                'account_class_group_id' => $loanReceivablesGroupId,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+
+            // Loan Interest (Group: 1600) - Interest Receivables
+            [
+                'account_code' => '1600',
+                'account_name' => 'Interest Receivables',
+                'account_class_group_id' => $loanInterestGroupId,
                 'has_cash_flow' => 1,
                 'has_equity' => 0,
                 'cash_flow_category_id' => 1,

@@ -210,7 +210,7 @@ class MenuSeeder extends Seeder
                 'visibleRoutes' => [
                     ['name' => 'General Settings', 'route' => 'settings.index'],
                 ],
-                'hiddenRoutes' => ['settings.company', 'settings.branches', 'settings.user', 'settings.system', 'settings.backup', 'settings.branches.create', 'settings.branches.edit', 'settings.branches.destroy', 'settings.filetypes.index', 'settings.filetypes.create', 'settings.filetypes.edit', 'settings.filetypes.destroy'],
+                'hiddenRoutes' => ['settings.company', 'settings.branches', 'settings.user', 'settings.system', 'settings.backup', 'settings.branches.create', 'settings.branches.edit', 'settings.branches.destroy', 'settings.filetypes.index', 'settings.filetypes.create', 'settings.filetypes.edit', 'settings.filetypes.destroy', 'settings.sectors.index', 'settings.sectors.create', 'settings.sectors.edit', 'settings.sectors.update', 'settings.sectors.destroy'],
             ],
         ];
 

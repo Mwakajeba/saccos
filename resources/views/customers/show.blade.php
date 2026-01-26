@@ -17,6 +17,10 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0 text-uppercase">Customer Profile</h6>
                 <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-info text-white" data-bs-toggle="modal"
+                        data-bs-target="#sendMessageModal">
+                        <i class="bx bx-message me-1"></i> Send Message
+                    </button>
                     <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal"
                         data-bs-target="#addNextOfKinModal">
                         <i class="bx bx-user-plus me-1"></i> Add Next of Kin
@@ -36,7 +40,7 @@
                                 <div>
                                     <p class="mb-0 text-secondary">Total Loans</p>
                                     <h4 class="my-1">
-                                        {{ number_format($customer->loans->sum('amount'), 2) }}
+                                        {{ number_format($customer->loans->whereNotIn('status', ['applied', 'approved'])->sum('amount'), 2) }}
                                     </h4>
                                     <p class="mb-0 font-13 text-success">
                                         <i class="bx bxs-up-arrow align-middle"></i> Up to date
@@ -71,11 +75,25 @@
                                                 ->sum(\DB::raw('principal + interest'));
 
                                             $diff = number_format($scheduled - $paid, 2);
+                                            
+                                            // Calculate actual days in arrears
+                                            $oldestDueDate = \App\Models\LoanSchedule::where('customer_id', $customer->id)
+                                                ->whereDate('due_date', '<', now())
+                                                ->whereRaw('(principal + interest) > COALESCE((SELECT SUM(principal + interest) FROM repayments WHERE loan_schedule_id = loan_schedules.id), 0)')
+                                                ->orderBy('due_date', 'asc')
+                                                ->value('due_date');
+                                            
+                                            $daysInArrears = $oldestDueDate ? \Carbon\Carbon::parse($oldestDueDate)->diffInDays(now()) : 0;
                                         @endphp
                                         {{ $diff }}
                                     </h4>
                                     <p class="mb-0 font-13 text-danger">
-                                        <i class="bx bxs-down-arrow align-middle"></i> In arrears (10 days)
+                                        <i class="bx bxs-down-arrow align-middle"></i> 
+                                        @if($daysInArrears > 0)
+                                            In arrears ({{ $daysInArrears }} {{ $daysInArrears == 1 ? 'day' : 'days' }})
+                                        @else
+                                            Up to date
+                                        @endif
                                     </p>
                                 </div>
                                 <div class="widgets-icons bg-light-danger text-danger ms-auto">
@@ -183,12 +201,159 @@
                                 </div>
                                 <h5 class="font-size-16 mb-1 text-truncate">{{ $customer->name }}</h5>
                                 <p class="text-muted text-truncate mb-3">{{ $customer->phone1 ?? 'No phone' }}</p>
+                                
+                                @php
+                                    // Calculate days in arrears for loan status
+                                    $oldestDueDate = \App\Models\LoanSchedule::where('customer_id', $customer->id)
+                                        ->whereDate('due_date', '<', now())
+                                        ->whereRaw('(principal + interest) > COALESCE((SELECT SUM(principal + interest) FROM repayments WHERE loan_schedule_id = loan_schedules.id), 0)')
+                                        ->orderBy('due_date', 'asc')
+                                        ->value('due_date');
+                                    
+                                    $daysInArrears = $oldestDueDate ? \Carbon\Carbon::parse($oldestDueDate)->diffInDays(now()) : 0;
+                                    
+                                    // Determine loan status based on days in arrears
+                                    if ($daysInArrears == 0) {
+                                        $statusClass = 'bg-success';
+                                        $statusText = 'Current';
+                                        $statusIcon = 'bx-check-circle';
+                                    } elseif ($daysInArrears <= 30) {
+                                        $statusClass = 'bg-warning';
+                                        $statusText = 'Watch (' . $daysInArrears . ' days)';
+                                        $statusIcon = 'bx-time-five';
+                                    } elseif ($daysInArrears <= 90) {
+                                        $statusClass = 'bg-orange';
+                                        $statusText = 'Substandard (' . $daysInArrears . ' days)';
+                                        $statusIcon = 'bx-error';
+                                    } else {
+                                        $statusClass = 'bg-danger';
+                                        $statusText = 'Default (' . $daysInArrears . ' days)';
+                                        $statusIcon = 'bx-x-circle';
+                                    }
+                                @endphp
+                                
+                                <div class="mb-3">
+                                    <span class="badge {{ $statusClass }} text-white px-3 py-2">
+                                        <i class="bx {{ $statusIcon }} me-1"></i>{{ $statusText }}
+                                    </span>
+                                </div>
                             </div>
 
                             <hr class="my-4">
 
                             <div class="text-muted">
                                 <div class="table-responsive">
+                                    <!-- Personal Information Section -->
+                                    <h6 class="mb-3 mt-3 text-primary border-bottom pb-2">
+                                        <i class="bx bx-user me-2"></i>Personal Information
+                                    </h6>
+                                    <table class="table table-borderless mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">Full Name :</th>
+                                                <td>{{ $customer->name }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Date of Birth :</th>
+                                                <td>
+                                                    @if($customer->dob)
+                                                        {{ \Carbon\Carbon::parse($customer->dob)->format('M d, Y') }}
+                                                        ({{ \Carbon\Carbon::parse($customer->dob)->age }} years)
+                                                    @else
+                                                        N/A
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Gender :</th>
+                                                <td>{{ $customer->sex }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Marital Status :</th>
+                                                <td>{{ $customer->marital_status ?? 'N/A'}}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Reference :</th>
+                                                <td>{{ $customer->reference ?? 'N/A'}}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <!-- Communication Section -->
+                                    <h6 class="mb-3 mt-4 text-primary border-bottom pb-2">
+                                        <i class="bx bx-phone me-2"></i>Communication
+                                    </h6>
+                                    <table class="table table-borderless mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">Phone :</th>
+                                                <td>{{ $customer->phone1 }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Alt Phone :</th>
+                                                <td>{{ $customer->phone2 ?? 'N/A'}}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Email :</th>
+                                                <td>{{ $customer->email ?? 'N/A'}}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <!-- Work and Identification Section -->
+                                    <h6 class="mb-3 mt-4 text-primary border-bottom pb-2">
+                                        <i class="bx bx-briefcase me-2"></i>Work & Identification
+                                    </h6>
+                                    <table class="table table-borderless mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">Employment Status :</th>
+                                                <td>{{ $customer->employment_status ?? 'N/A'}}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Work/Business Name :</th>
+                                                <td>{{ $customer->work ?? 'N/A'}}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Work/Business Address :</th>
+                                                <td>{{ $customer->workAddress ?? 'N/A'}}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">ID Type :</th>
+                                                <td>{{ $customer->idType ?? 'N/A'}}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">ID Number :</th>
+                                                <td>{{ $customer->idNumber ?? 'N/A'}}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <!-- Address Section -->
+                                    <h6 class="mb-3 mt-4 text-primary border-bottom pb-2">
+                                        <i class="bx bx-map me-2"></i>Address
+                                    </h6>
+                                    <table class="table table-borderless mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">Region :</th>
+                                                <td>{{ $customer->region->name ?? 'N/A' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">District :</th>
+                                                <td>{{ $customer->district->name ?? 'N/A' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Street/Address :</th>
+                                                <td>{{ $customer->street ?? 'N/A' }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <!-- Other Information Section -->
+                                    <h6 class="mb-3 mt-4 text-primary border-bottom pb-2">
+                                        <i class="bx bx-list-ul me-2"></i>Other Information
+                                    </h6>
                                     <table class="table table-borderless mb-0">
                                         <tbody>
                                             <tr>
@@ -200,56 +365,75 @@
                                                 <td>{{ $customer->category }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Phone :</th>
-                                                <td>{{ $customer->phone1 }}</td>
+                                                <th scope="row">Relation :</th>
+                                                <td>{{ $customer->relation ?? 'N/A' }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Gender :</th>
-                                                <td>{{ $customer->sex }}</td>
+                                                <th scope="row">Number of Spouse :</th>
+                                                <td>{{ $customer->number_of_spouse ?? '0' }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Alt Phone :</th>
-                                                <td>{{ $customer->phone2 ?? 'N/A'}}</td>
+                                                <th scope="row">Number of Children :</th>
+                                                <td>{{ $customer->number_of_children ?? '0' }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Work :</th>
-                                                <td>{{ $customer->work ?? 'N/A'}}</td>
+                                                <th scope="row">Description :</th>
+                                                <td>{{ $customer->description ?? 'N/A' }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <!-- Financial Status Section -->
+                                    <h6 class="mb-3 mt-4 text-primary border-bottom pb-2">
+                                        <i class="bx bx-dollar-circle me-2"></i>Financial Status
+                                    </h6>
+                                    <table class="table table-borderless mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">Monthly Income :</th>
+                                                <td>{{ $customer->monthly_income ? 'TZS ' . number_format($customer->monthly_income, 2) : 'N/A' }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Work Address :</th>
-                                                <td>{{ $customer->workAddress ?? 'N/A'}}</td>
+                                                <th scope="row">Monthly Expenses :</th>
+                                                <td>{{ $customer->monthly_expenses ? 'TZS ' . number_format($customer->monthly_expenses, 2) : 'N/A' }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <!-- Bank Information Section -->
+                                    <h6 class="mb-3 mt-4 text-primary border-bottom pb-2">
+                                        <i class="bx bx-credit-card me-2"></i>Bank Information
+                                    </h6>
+                                    <table class="table table-borderless mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">Bank Name :</th>
+                                                <td>{{ $customer->bank_name ?? 'N/A' }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Id Type :</th>
-                                                <td>{{ $customer->idType ?? 'N/A'}}</td>
+                                                <th scope="row">Bank Account :</th>
+                                                <td>{{ $customer->bank_account ?? 'N/A' }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Id Number :</th>
-                                                <td>{{ $customer->idNumber ?? 'N/A'}}</td>
+                                                <th scope="row">Bank Account Name :</th>
+                                                <td>{{ $customer->bank_account_name ?? 'N/A' }}</td>
                                             </tr>
-                                            <tr>
-                                                <th scope="row">Region :</th>
-                                                <td>{{ $customer->region->name ?? 'N/A' }}</td>
-                                            </tr>
-                                            <tr>
-                                                <th scope="row">District :</th>
-                                                <td>{{ $customer->district->name ?? 'N/A' }}</td>
-                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    <!-- System Information Section -->
+                                    <h6 class="mb-3 mt-4 text-primary border-bottom pb-2">
+                                        <i class="bx bx-info-circle me-2"></i>System Information
+                                    </h6>
+                                    <table class="table table-borderless mb-0">
+                                        <tbody>
                                             <tr>
                                                 <th scope="row">Branch :</th>
                                                 <td>{{ $customer->branch->name ?? 'N/A' }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Relation with business :</th>
-                                                <td>{{ $customer->relation ?? 'N/A' }}</td>
-                                            </tr>
-                                            <tr>
                                                 <th scope="row">Company :</th>
                                                 <td>{{ $customer->company->name ?? 'N/A' }}</td>
-                                            </tr>
-                                            <tr>
-                                                <th scope="row">Description :</th>
-                                                <td>{{ $customer->description ?? 'N/A' }}</td>
                                             </tr>
                                             <tr>
                                                 <th scope="row">Registrar :</th>
@@ -265,48 +449,29 @@
                                             </tr>
                                         </tbody>
                                     </table>
-                                    <table class="table table-borderless">
-                                        <tr>
-                                            <th>Assigned Loan officers :</th>
-                                        </tr>
+
+                                    <!-- Loan Officers Section -->
+                                    <h6 class="mb-3 mt-4 text-primary border-bottom pb-2">
+                                        <i class="bx bx-user-check me-2"></i>Assigned Loan Officers
+                                    </h6>
+                                    <table class="table table-borderless mb-0">
+                                        <tbody>
                                         @foreach($customer->loanOfficers as $officers)
                                             <tr>
-                                                <td>{{$officers->name}}</td>
+                                                <td><i class="bx bx-user me-2"></i>{{ $officers->name }}</td>
                                             </tr>
                                         @endforeach
+                                        @if($customer->loanOfficers->isEmpty())
+                                            <tr>
+                                                <td class="text-muted">No loan officers assigned</td>
+                                            </tr>
+                                        @endif
+                                        </tbody>
                                     </table>
                                 </div>
                             </div>
 
-                            <!-- Action Buttons -->
-                            <div class="mt-4 d-flex flex-wrap gap-3">
-                                @can('edit customer')
-                                    <a href="{{ route('customers.edit', Hashids::encode($customer->id)) }}"
-                                        class="btn btn-warning text-white fw-bold px-4 py-2"
-                                        style="border-radius: 6px; min-width: 120px;">
-                                        <i class="bx bx-edit me-2"></i> Edit
-                                    </a>
-                                @endcan
 
-                                <!-- Send Message Button -->
-                                <button type="button" class="btn btn-info text-white fw-bold px-4 py-2"
-                                    data-bs-toggle="modal" data-bs-target="#sendMessageModal"
-                                    style="border-radius: 6px; min-width: 140px;">
-                                    <i class="bx bx-message me-2"></i> Send Message
-                                </button>
-
-                                @can('delete customer')
-                                    <form action="{{ route('customers.destroy', Hashids::encode($customer->id)) }}"
-                                        method="POST" class="delete-form" style="display:inline;">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-danger text-white fw-bold px-4 py-2"
-                                            data-name="{{ $customer->name }}" style="border-radius: 6px; min-width: 120px;">
-                                            <i class="bx bx-trash me-2"></i> Delete
-                                        </button>
-                                    </form>
-                                @endcan
-                            </div>
 
                         </div>
                     </div>
@@ -316,8 +481,94 @@
 
                 <!-- Profile Details -->
                 <div class="col-xl-8">
+                    <!-- Modern Document Management Card -->
+                    <div class="col-xl-12">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">
+                                        <i class="bx bx-folder me-2"></i>Customer Documents
+                                        <span class="badge bg-primary ms-2">{{ $customer->filetypes->count() }}</span>
+                                    </h5>
+                                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
+                                        data-bs-target="#uploadDocumentsModal">
+                                        <i class="bx bx-plus me-1"></i>Add Documents
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                @if ($customer->filetypes->count())
+                                    <div class="row g-3" id="documentsGrid">
+                                        @foreach ($customer->filetypes as $index => $file)
+                                            <div class="col-md-6 col-lg-4">
+                                                <div class="card border document-card" data-pivot-id="{{ $file->pivot->id }}">
+                                                    <div class="card-body p-3">
+                                                        <div class="d-flex align-items-center justify-content-between">
+                                                            <div class="flex-grow-1">
+                                                                <h6 class="mb-1 text-truncate fw-bold" title="{{ $file->name }}">
+                                                                    {{ $file->name }}
+                                                                </h6>
+                                                                <div class="d-flex align-items-center gap-1">
+                                                                    @if($file->pivot->document_path)
+                                                                        <span
+                                                                            class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                                                                            <i class="bx bx-check-circle me-1"></i>Uploaded
+                                                                        </span>
+                                                                    @else
+                                                                        <span
+                                                                            class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">
+                                                                            <i class="bx bx-x-circle me-1"></i>No file
+                                                                        </span>
+                                                                    @endif
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        @if($file->pivot->document_path)
+                                                            <div class="mt-3 d-flex gap-2">
+                                                                <a href="{{ route('customers.documents.view', [\Vinkla\Hashids\Facades\Hashids::encode($customer->id), $file->pivot->id]) }}"
+                                                                    class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+                                                                    target="_blank" title="View Document">
+                                                                    <span class="d-none d-sm-inline">View</span>
+                                                                </a>
+                                                                <a href="{{ route('customers.documents.download', [\Vinkla\Hashids\Facades\Hashids::encode($customer->id), $file->pivot->id]) }}"
+                                                                    class="btn btn-sm btn-outline-success d-flex align-iteems-center gap-1"
+                                                                    title="Download Document">
+                                                                    <span class="d-none d-sm-inline">Download</span>
+                                                                </a>
+                                                                <a type="button"
+                                                                    class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
+                                                                    onclick="deleteDocument({{ $file->pivot->id }})"
+                                                                    title="Delete Document">
+                                                                    <span class="d-none d-sm-inline">Delete</span>
+                                                                </a>
+                                                            </div>
+                                                        @else
+                                                            <div class="mt-3">
+                                                                <span class="text-danger small">
+                                                                    <i class="bx bx-info-circle me-1"></i>No file uploaded for this
+                                                                    document type
+                                                                </span>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <div class="text-center py-5">
+                                        <i class="bx bx-folder-open display-1 text-muted"></i>
+                                        <h5 class="mt-3 text-muted">No documents uploaded</h5>
+                                        <p class="text-muted">Click "Add Documents" to upload customer files</p>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Next of Kin Card -->
-                    <div class="card">
+                    <div class="card mt-3">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-4">
                                 <h5 class="card-title mb-0">Next of Kin</h5>
@@ -587,92 +838,6 @@
                             </div>
                         </div>
                     </div>
-                    </div>
-
-                    <!-- Modern Document Management Card -->
-                    <div class="col-xl-12">
-                        <div class="card">
-                            <div class="card-header bg-light">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <h5 class="mb-0">
-                                        <i class="bx bx-folder me-2"></i>Customer Documents
-                                        <span class="badge bg-primary ms-2">{{ $customer->filetypes->count() }}</span>
-                                    </h5>
-                                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
-                                        data-bs-target="#uploadDocumentsModal">
-                                        <i class="bx bx-plus me-1"></i>Add Documents
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="card-body">
-                                @if ($customer->filetypes->count())
-                                    <div class="row g-3" id="documentsGrid">
-                                        @foreach ($customer->filetypes as $index => $file)
-                                            <div class="col-md-6 col-lg-4">
-                                                <div class="card border document-card" data-pivot-id="{{ $file->pivot->id }}">
-                                                    <div class="card-body p-3">
-                                                        <div class="d-flex align-items-center justify-content-between">
-                                                            <div class="flex-grow-1">
-                                                                <h6 class="mb-1 text-truncate fw-bold" title="{{ $file->name }}">
-                                                                    {{ $file->name }}
-                                                                </h6>
-                                                                <div class="d-flex align-items-center gap-1">
-                                                                    @if($file->pivot->document_path)
-                                                                        <span
-                                                                            class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
-                                                                            <i class="bx bx-check-circle me-1"></i>Uploaded
-                                                                        </span>
-                                                                    @else
-                                                                        <span
-                                                                            class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">
-                                                                            <i class="bx bx-x-circle me-1"></i>No file
-                                                                        </span>
-                                                                    @endif
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        @if($file->pivot->document_path)
-                                                            <div class="mt-3 d-flex gap-2">
-                                                                <a href="{{ route('customers.documents.view', [\Vinkla\Hashids\Facades\Hashids::encode($customer->id), $file->pivot->id]) }}"
-                                                                    class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
-                                                                    target="_blank" title="View Document">
-                                                                    <span class="d-none d-sm-inline">View</span>
-                                                                </a>
-                                                                <a href="{{ route('customers.documents.download', [\Vinkla\Hashids\Facades\Hashids::encode($customer->id), $file->pivot->id]) }}"
-                                                                    class="btn btn-sm btn-outline-success d-flex align-iteems-center gap-1"
-                                                                    title="Download Document">
-                                                                    <span class="d-none d-sm-inline">Download</span>
-                                                                </a>
-                                                                <a type="button"
-                                                                    class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
-                                                                    onclick="deleteDocument({{ $file->pivot->id }})"
-                                                                    title="Delete Document">
-                                                                    <span class="d-none d-sm-inline">Delete</span>
-                                                                </a>
-                                                            </div>
-                                                        @else
-                                                            <div class="mt-3">
-                                                                <span class="text-danger small">
-                                                                    <i class="bx bx-info-circle me-1"></i>No file uploaded for this
-                                                                    document type
-                                                                </span>
-                                                            </div>
-                                                        @endif
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                @else
-                                    <div class="text-center py-5">
-                                        <i class="bx bx-folder-open display-1 text-muted"></i>
-                                        <h5 class="mt-3 text-muted">No documents uploaded</h5>
-                                        <p class="text-muted">Click "Add Documents" to upload customer files</p>
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
                     </div>
                 </div>
 
