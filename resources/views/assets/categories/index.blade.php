@@ -47,39 +47,57 @@
 @push('scripts')
 <script>
 $(function(){
-  $('#categoriesTable').DataTable({
+  console.log('Initializing Asset Categories DataTable...');
+  console.log('jQuery version:', $.fn.jquery);
+  console.log('DataTables available:', typeof $.fn.DataTable !== 'undefined');
+  
+  var table = $('#categoriesTable').DataTable({
     processing: true,
     serverSide: true,
     ajax: {
-      url: '{{ route('assets.categories.data') }}'
+      url: '{{ route('assets.categories.data') }}',
+      type: 'GET',
+      dataSrc: function(json) {
+        console.log('DataTable received data:', json);
+        return json.data;
+      },
+      error: function(xhr, error, code) {
+        console.error('DataTable AJAX Error:', error, code);
+        console.error('Status:', xhr.status);
+        console.error('Response:', xhr.responseText);
+        if (xhr.status === 500) {
+          try {
+            var response = JSON.parse(xhr.responseText);
+            Swal.fire('Server Error', response.message || 'An error occurred while loading data.', 'error');
+          } catch(e) {
+            Swal.fire('Error', 'Failed to load asset categories. Please refresh the page.', 'error');
+          }
+        } else if (xhr.status === 401) {
+          Swal.fire('Unauthorized', 'Please login again.', 'warning').then(() => {
+            window.location.href = '{{ route('login') }}';
+          });
+        } else {
+          Swal.fire('Error', 'Failed to load asset categories. Status: ' + xhr.status, 'error');
+        }
+      }
     },
     columns: [
-      { data: 'code', name: 'code', render: function(d){ return `<span class="badge bg-light text-dark">${d}</span>`; } },
+      { data: 'code', name: 'code', render: function(d){ return d ? `<span class="badge bg-light text-dark">${d}</span>` : ''; } },
       { data: 'name', name: 'name' },
-      { data: 'default_depreciation_method', name: 'default_depreciation_method', render: function(d){ d = d||''; d = d.replaceAll('_',' '); return `<span class="badge bg-info text-dark">${d.charAt(0).toUpperCase()+d.slice(1)}</span>`; } },
-      { data: 'default_useful_life_months', name: 'default_useful_life_months', render: function(d){ return `${d} m`; } },
+      { data: 'default_depreciation_method', name: 'default_depreciation_method', render: function(d){ d = d||''; d = d.replace(/_/g,' '); return d ? `<span class="badge bg-info text-dark">${d.charAt(0).toUpperCase()+d.slice(1)}</span>` : ''; } },
+      { data: 'default_useful_life_months', name: 'default_useful_life_months', render: function(d){ return d ? `${d} m` : '0 m'; } },
       { data: 'default_depreciation_rate', name: 'default_depreciation_rate', render: function(d){ d = d||0; return `${parseFloat(d).toFixed(2)}%`; } },
-      { data: 'depreciation_convention', name: 'depreciation_convention', render: function(d){ d = d||''; d = d.replaceAll('_',' '); return `<span class="badge bg-light text-dark">${d.charAt(0).toUpperCase()+d.slice(1)}</span>`; } },
-      { data: 'assets_count', name: 'assets_count', className: 'text-end', render: function(d){ return `<span class="badge bg-secondary">${d}</span>`; } },
-      { data: null, orderable: false, searchable: false, render: function(data, type, row){
-          const base = `{{ url('/asset-management/categories') }}`;
-          return `
-            <div class="btn-group" role="group">
-              <a href="${base}/${row.id}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-show"></i></a>
-              <a href="${base}/${row.id}/edit" class="btn btn-sm btn-outline-primary"><i class="bx bx-edit"></i></a>
-              <form method="POST" action="${base}/${row.id}" class="d-inline category-delete-form ms-1">
-                @csrf
-                @method('DELETE')
-                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-category"><i class="bx bx-trash"></i></button>
-              </form>
-            </div>`;
-        } }
+      { data: 'depreciation_convention', name: 'depreciation_convention', render: function(d){ d = d||''; d = d.replace(/_/g,' '); return d ? `<span class="badge bg-light text-dark">${d.charAt(0).toUpperCase()+d.slice(1)}</span>` : ''; } },
+      { data: 'assets_count', name: 'assets_count', className: 'text-end', render: function(d){ return `<span class="badge bg-secondary">${d||0}</span>`; } },
+      { data: 'actions', name: 'actions', orderable: false, searchable: false }
     ],
     order: [[1,'asc']],
     lengthMenu: [[10,25,50,100,500,-1],[10,25,50,100,500,'All']],
     pageLength: 25,
     dom: 'lfrtip'
   });
+  
+  console.log('DataTable initialized:', table);
 
   // SweetAlert delete confirmation
   $(document).on('click', '.btn-delete-category', function(){

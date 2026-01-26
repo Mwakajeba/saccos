@@ -118,19 +118,49 @@ class BulkCustomerImportJob implements ShouldQueue
             throw new \Exception("Phone number already exists: {$phone1}");
         }
 
+        // Get region ID from name
+        $regionId = null;
+        if (!empty($row['region'])) {
+            $region = \App\Models\Region::where('name', 'LIKE', '%' . trim($row['region']) . '%')->first();
+            $regionId = $region ? $region->id : null;
+        }
+
+        // Get district ID from name
+        $districtId = null;
+        if (!empty($row['district'])) {
+            $districtQuery = \App\Models\District::where('name', 'LIKE', '%' . trim($row['district']) . '%');
+            if ($regionId) {
+                $districtQuery->where('region_id', $regionId);
+            }
+            $district = $districtQuery->first();
+            $districtId = $district ? $district->id : null;
+        }
+
         return [
             'name' => trim($row['name']),
             'phone1' => $phone1,
             'phone2' => !empty($row['phone2']) ? $this->formatPhoneNumber(trim($row['phone2'])) : null,
+            'email' => trim($row['email'] ?? ''),
             'sex' => strtoupper($row['sex']),
             'dob' => $row['dob'],
-            'region_id' => $row['region_id'] ?? null,
-            'district_id' => $row['district_id'] ?? null,
+            'marital_status' => trim($row['marital_status'] ?? ''),
+            'region_id' => $regionId,
+            'district_id' => $districtId,
+            'street' => trim($row['street'] ?? ''),
+            'employment_status' => trim($row['employment_status'] ?? ''),
             'work' => trim($row['work'] ?? ''),
             'workAddress' => trim($row['workaddress'] ?? ''),
             'idType' => trim($row['idtype'] ?? ''),
             'idNumber' => trim($row['idnumber'] ?? ''),
+            'category' => !empty($row['category']) && in_array($row['category'], ['Member', 'Borrower', 'Guarantor']) ? $row['category'] : 'Member',
             'relation' => trim($row['relation'] ?? ''),
+            'number_of_spouse' => !empty($row['number_of_spouse']) ? (int)$row['number_of_spouse'] : 0,
+            'number_of_children' => !empty($row['number_of_children']) ? (int)$row['number_of_children'] : 0,
+            'monthly_income' => !empty($row['monthly_income']) ? (float)$row['monthly_income'] : null,
+            'monthly_expenses' => !empty($row['monthly_expenses']) ? (float)$row['monthly_expenses'] : null,
+            'bank_name' => trim($row['bank_name'] ?? ''),
+            'bank_account' => trim($row['bank_account'] ?? ''),
+            'bank_account_name' => trim($row['bank_account_name'] ?? ''),
             'description' => trim($row['description'] ?? ''),
             'reference' => trim($row['reference'] ?? ''),
             'customerNo' => ++$this->customerNoCounter,
@@ -139,7 +169,6 @@ class BulkCustomerImportJob implements ShouldQueue
             'company_id' => $this->companyId,
             'registrar' => $this->userId,
             'dateRegistered' => now()->toDateString(),
-            'category' => 'Member',
         ];
     }
 

@@ -30,6 +30,7 @@ class Loan extends Model
         'disbursed_on',
         'status',
         'sector',
+        'sector_id',
         'interest_cycle',
         'loan_officer_id',
         'loanNo',
@@ -109,6 +110,11 @@ class Loan extends Model
     public function topUpChildren()
     {
         return $this->hasMany(Loan::class, 'top_up_id');
+    }
+
+    public function sector()
+    {
+        return $this->belongsTo(Sector::class);
     }
 
     public function schedule()

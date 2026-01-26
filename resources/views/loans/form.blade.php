@@ -162,15 +162,15 @@
         <!-- Sector -->
         <div class="col-md-6 mb-3">
             <label class="form-label">Sector</label>
-            <select name="sector" class="form-select @error('sector') is-invalid @enderror">
+            <select name="sector_id" class="form-select @error('sector_id') is-invalid @enderror">
                 <option value="">Select Sector</option>
                 @foreach($sectors as $sector)
-                    <option value="{{ $sector }}" {{ old('sector', $loan->sector ?? '') == $sector ? 'selected' : '' }}>
-                        {{ $sector }}
+                    <option value="{{ $sector->id }}" {{ old('sector_id', $loan->sector_id ?? '') == $sector->id ? 'selected' : '' }}>
+                        {{ $sector->name }}
                     </option>
                 @endforeach
             </select>
-            @error('sector') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            @error('sector_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
         <!-- Add other loan fields as needed -->
     </div>

@@ -238,6 +238,25 @@
                             </div>
                             @endcan
 
+                            <!-- Sectors Settings -->
+                            @can('view sectors')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-success">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-briefcase fs-1 text-success"></i>
+                                        </div>
+                                        <h5 class="card-title">Business Sectors</h5>
+                                        <p class="card-text">Manage business sectors for customer categorization and loan classification.
+                                        </p>
+                                        <a href="{{ route('settings.sectors.index') }}" class="btn btn-success">
+                                            <i class="bx bx-list-ul me-1"></i> Manage Sectors
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
                             <!-- Journal References Settings -->
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-info">

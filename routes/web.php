@@ -394,6 +394,9 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     //Announcements settings
     Route::resource('announcements', \App\Http\Controllers\Settings\AnnouncementController::class);
 
+    //Sectors settings
+    Route::resource('sectors', \App\Http\Controllers\SectorController::class);
+
     Route::get('/', [SettingsController::class, 'index'])->name('index');
 
     // Company Settings
@@ -1519,6 +1522,9 @@ Route::prefix('accounting/loans/reports')->name('accounting.loans.reports.')->gr
     Route::get('/npl', [LoanReportController::class, 'nonPerformingLoanReport'])->name('npl');
     Route::get('/npl/export-excel', [LoanReportController::class, 'exportNPLToExcel'])->name('npl.export_excel');
     Route::get('/npl/export-pdf', [LoanReportController::class, 'exportNPLToPdf'])->name('npl.export_pdf');
+
+    // CRB Report
+    Route::get('/crb', [LoanReportController::class, 'crbReport'])->name('crb');
 });
 
 ////////////////////////////////////////////// END ACCOUNTING MANAGEMENT ///////////////////////////////////////////
