@@ -3,7 +3,6 @@
     method="POST" 
     enctype="multipart/form-data"
     id="journalForm"
-    onsubmit="return handleSubmit(this)"
 >
     @csrf
     @if(isset($journal))
@@ -20,7 +19,7 @@
                 <input type="date" 
                        name="date" 
                        id="date"
-                       class="form-control @error('date') is-invalid @enderror" 
+                       class="form-control transaction-date @error('date') is-invalid @enderror" 
                        value="{{ old('date', isset($journal) ? $journal->date->format('Y-m-d') : now()->format('Y-m-d')) }}"
                        required>
                 @error('date')
@@ -113,13 +112,13 @@
                                 <tr class="journal-item">
                     <td>
                                         <select name="items[{{ $index }}][account_id]" 
-                                                class="form-select account-select @error('items.'.$index.'.account_id') is-invalid @enderror"
+                                                class="form-select chart-account-select select2-single @error('items.'.$index.'.account_id') is-invalid @enderror"
                                                 required>
                             <option value="">-- Select Account --</option>
                             @foreach($accounts as $account)
                                 <option value="{{ $account->id }}"
                                                     {{ isset($item['account_id']) && $item['account_id'] == $account->id ? 'selected' : '' }}>
-                                                    {{ $account->account_code }} - {{ $account->account_name }}
+                                                    {{ $account->account_name }} ({{ $account->account_code }})
                                 </option>
                             @endforeach
                         </select>
@@ -220,29 +219,17 @@
     <!-- Submit Buttons -->
     <div class="d-flex justify-content-between align-items-center">
         <div>
-            @can('view journals')
             <a href="{{ route('accounting.journals.index') }}" class="btn btn-outline-secondary">
                 <i class="bx bx-arrow-back me-1"></i>Cancel
             </a>
-            @endcan
         </div>
         <div class="d-flex gap-2">
             <button type="button" class="btn btn-outline-primary" onclick="validateAndSubmit()">
                 <i class="bx bx-check me-1"></i>Validate Entry
             </button>
-            @if(isset($journal))
-                @can('edit journal')
-                <button type="submit" class="btn btn-outline-primary" id="submitBtn" style="display: none;">
-                    <i class="bx bx-save me-1"></i>Update Journal Entry
-                </button>
-                @endcan
-            @else
-                @can('create journal')
-                <button type="submit" class="btn btn-outline-primary" id="submitBtn" style="display: none;">
-                    <i class="bx bx-save me-1"></i>Create Journal Entry
-                </button>
-                @endcan
-            @endif
+            <button type="submit" class="btn btn-primary" id="submitBtn" style="display: none;" data-processing-text="Processing...">
+                <i class="bx bx-save me-1"></i>{{ isset($journal) ? 'Update' : 'Create' }} Journal Entry
+        </button>
         </div>
     </div>
 </form>
@@ -281,18 +268,44 @@ function initializeForm() {
     console.log('Document ready - initializing form...');
     console.log('Initial item count:', itemIndex);
     
-    // Initialize Select2 for account dropdowns
-    $('.account-select').select2({
-        placeholder: 'Select an account',
-        allowClear: true,
+    // Initialize Select2 for all select2-single dropdowns (matching sales invoice style)
+    $('.select2-single').select2({
+        theme: 'bootstrap-5',
+        width: '100%'
+    });
+    
+    // Initialize Select2 for account dropdowns specifically
+    $('.chart-account-select').select2({
+        theme: 'bootstrap-5',
         width: '100%'
     });
 
     // Calculate totals on page load with delay to ensure DOM is ready
+    // Use multiple delays to ensure totals are calculated after all initialization
     setTimeout(function() {
-        console.log('Calculating initial totals...');
+        console.log('Calculating initial totals (first attempt)...');
         calculateTotals();
     }, 300);
+    
+    // Additional calculation after Select2 is fully initialized
+    setTimeout(function() {
+        console.log('Calculating initial totals (second attempt)...');
+        calculateTotals();
+    }, 800);
+    
+    // Final calculation to ensure all values are loaded
+    setTimeout(function() {
+        console.log('Calculating initial totals (final attempt)...');
+        calculateTotals();
+    }, 1500);
+    
+    // Also calculate when window is fully loaded (important for edit mode)
+    $(window).on('load', function() {
+        setTimeout(function() {
+            console.log('Window loaded - calculating totals for edit mode...');
+            calculateTotals();
+        }, 500);
+    });
 
     // Add event listeners for amount changes
     $(document).on('input', '.amount-input', function() {
@@ -312,10 +325,10 @@ function initializeForm() {
     const newRow = `
         <tr class="journal-item">
             <td>
-                <select name="items[${itemIndex}][account_id]" class="form-select account-select" required>
+                <select name="items[${itemIndex}][account_id]" class="form-select chart-account-select select2-single" required>
                     <option value="">-- Select Account --</option>
                     @foreach($accounts as $account)
-                        <option value="{{ $account->id }}">{{ $account->account_code }} - {{ $account->account_name }}</option>
+                        <option value="{{ $account->id }}">{{ $account->account_name }} ({{ $account->account_code }})</option>
                     @endforeach
                 </select>
             </td>
@@ -346,11 +359,11 @@ function initializeForm() {
     
     tbody.append(newRow);
     
-    // Initialize Select2 for the new row
+    // Initialize Select2 for the new row (matching sales invoice style)
     setTimeout(function() {
-        tbody.find('.account-select').last().select2({
-            placeholder: 'Select an account',
-            allowClear: true,
+        const newSelect = tbody.find('.chart-account-select').last();
+        newSelect.select2({
+            theme: 'bootstrap-5',
             width: '100%'
         });
     }, 100);
@@ -407,11 +420,22 @@ function calculateTotals() {
         console.log('  - Amount input found:', amountInput.length > 0);
         console.log('  - Nature select found:', natureSelect.length > 0);
         
-        const amount = parseFloat(amountInput.val()) || 0;
-        const nature = natureSelect.val();
+        // Get amount value - ensure we get the actual value
+        let amountValue = amountInput.val();
+        if (!amountValue || amountValue === '') {
+            amountValue = amountInput.attr('value') || '0';
+        }
+        const amount = parseFloat(amountValue) || 0;
         
-        console.log(`  - Amount value: ${amountInput.val()}, parsed: ${amount}`);
-        console.log(`  - Nature value: ${natureSelect.val()}`);
+        // Get nature value - handle both regular select and Select2
+        let nature = natureSelect.val();
+        if (!nature || nature === '') {
+            // Try to get from selected option
+            nature = natureSelect.find('option:selected').val() || '';
+        }
+        
+        console.log(`  - Amount value: ${amountValue}, parsed: ${amount}`);
+        console.log(`  - Nature value: ${nature}`);
         
         if (nature === 'debit') {
             totalDebit += amount;
@@ -419,6 +443,8 @@ function calculateTotals() {
         } else if (nature === 'credit') {
             totalCredit += amount;
             console.log(`  - Added to credit: ${amount}`);
+        } else {
+            console.log(`  - Warning: Unknown nature "${nature}" for amount ${amount}`);
         }
     });
     
@@ -426,12 +452,14 @@ function calculateTotals() {
     
     console.log(`Final Totals: Debit = ${totalDebit}, Credit = ${totalCredit}, Balance = ${balance}`);
     
-    $('#total-debit').text('TZS ' + totalDebit.toFixed(2));
-    $('#total-credit').text('TZS ' + totalCredit.toFixed(2));
-    $('#balance').text('TZS ' + balance.toFixed(2));
+    // Ensure all values are formatted to 2 decimal places with comma separators
+    $('#total-debit').text('TZS ' + Number(totalDebit).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+    $('#total-credit').text('TZS ' + Number(totalCredit).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+    $('#balance').text('TZS ' + Number(balance).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
     
     // Update balance color and show/hide submit button
-    if (balance === 0 && $('.journal-item').length > 0) {
+    // Use Math.abs() to handle floating point precision issues
+    if (Math.abs(balance) < 0.01 && $('.journal-item').length > 0) {
         $('#balance').removeClass('text-warning text-danger').addClass('text-success');
         $('#submitBtn').show();
         $('#balance-status').show();
@@ -449,15 +477,11 @@ function calculateTotals() {
     }
 
 function validateAndSubmit() {
-    // Check if form is already submitted
-    const form = document.getElementById('journalForm');
-    if (form && form.dataset.submitted === "true") {
-        return false;
-    }
+    // Remove TZS prefix and comma separators before parsing
+    const balanceText = $('#balance').text().replace('TZS ', '').replace(/,/g, '');
+    const balance = parseFloat(balanceText) || 0;
     
-    const balance = parseFloat($('#balance').text().replace('TZS ', ''));
-    
-    if (balance !== 0) {
+    if (Math.abs(balance) >= 0.01) {
         Swal.fire({
             title: 'Unbalanced Entry',
             text: 'The journal entry is not balanced. Debit and Credit totals must be equal.',
@@ -491,11 +515,44 @@ function validateAndSubmit() {
         }, 100);
     });
 
-// Form validation before submission
-function validateForm() {
-    const balance = parseFloat($('#balance').text().replace('TZS ', ''));
+// Period lock check helper
+function checkPeriodLock(date, onResult) {
+    if (!date) return;
+    $.ajax({
+        url: '{{ route('settings.period-closing.check-date') }}',
+        method: 'GET',
+        data: { date: date },
+        success: function(response) {
+            if (typeof onResult === 'function') onResult(response);
+        },
+        error: function() {
+            console.error('Failed to check period lock status.');
+        }
+    });
+}
+
+// Warn when user selects a locked period date
+$('.transaction-date').on('change', function() {
+    const date = $(this).val();
+    checkPeriodLock(date, function(response) {
+        if (response.locked) {
+            Swal.fire({
+                title: 'Locked Period',
+                text: response.message || 'The selected period is locked. Please choose another date.',
+                icon: 'warning'
+            });
+        }
+    });
+});
+
+// Form validation + period lock enforcement
+$('#journalForm').on('submit', function(e) {
+    // Remove TZS prefix and comma separators before parsing
+    const balanceText = $('#balance').text().replace('TZS ', '').replace(/,/g, '');
+    const balance = parseFloat(balanceText) || 0;
     
-    if (balance !== 0) {
+    if (Math.abs(balance) >= 0.01) {
+        e.preventDefault();
         Swal.fire({
             title: 'Cannot Save',
             text: 'The journal entry must be balanced before saving. Debit and Credit totals must be equal.',
@@ -506,6 +563,7 @@ function validateForm() {
     }
     
     if ($('.journal-item').length === 0) {
+        e.preventDefault();
         Swal.fire({
             title: 'No Entries',
             text: 'Please add at least one journal entry before saving.',
@@ -514,62 +572,31 @@ function validateForm() {
         });
         return false;
     }
-    
-    return true;
-}
-</script>
 
-@push('scripts')
-    <script>
-        function handleSubmit(form) {
-            // Validate form first
-            if (!validateForm()) {
-                return false;
-            }
-            
-            // Prevent multiple submissions
-            if (form.dataset.submitted === "true") return false;
-            form.dataset.submitted = "true";
+    const form = this;
+    const date = $('.transaction-date').val();
+    if (!date) {
+        return true;
+    }
 
-            // Disable ALL submit buttons in this form
-            form.querySelectorAll('button[type="submit"]').forEach(btn => {
-                btn.disabled = true;
-                btn.classList.add('opacity-50', 'cursor-not-allowed');
-                btn.setAttribute('aria-disabled', 'true');
+    // If we already passed the check once, allow submit
+    if ($(form).data('period-checked') === true) {
+        return true;
+    }
 
-                const label = btn.querySelector('.label');
-                const spinner = btn.querySelector('.spinner');
-                if (label) label.textContent = 'Processing...';
-                if (spinner) spinner.classList.remove('hidden');
+    e.preventDefault();
+
+    checkPeriodLock(date, function(response) {
+        if (response.locked) {
+            Swal.fire({
+                title: 'Locked Period',
+                text: response.message || 'The selected period is locked. Please choose another date.',
+                icon: 'error'
             });
-
-            // Also disable the validate button
-            const validateBtn = document.querySelector('button[onclick="validateAndSubmit()"]');
-            if (validateBtn) {
-                validateBtn.disabled = true;
-                validateBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            }
-
-            // Add loading overlay to prevent any further interactions
-            const overlay = document.createElement('div');
-            overlay.id = 'form-loading-overlay';
-            overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 9999; display: flex; align-items: center; justify-content: center;';
-            overlay.innerHTML = '<div style="background: white; padding: 20px; border-radius: 8px; text-align: center;"><i class="bx bx-loader-alt bx-spin" style="font-size: 24px; color: #007bff;"></i><br><span style="margin-top: 10px; display: block;">Processing...</span></div>';
-            document.body.appendChild(overlay);
-
-            // Allow the submit to proceed
-            return true;
+        } else {
+            $(form).data('period-checked', true);
+            form.submit();
         }
-
-        // Optional safety: prevent Enter-key spamming multiple submits in some browsers
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                const active = document.activeElement;
-                // Only submit on Enter when focused on a button or inside a textarea (adjust to your UX)
-                if (active && active.tagName !== 'TEXTAREA' && active.type !== 'submit') {
-                    // e.preventDefault(); // uncomment if Enter should NOT submit forms
-                }
-            }
-        });
-    </script>
-@endpush
+    });
+});
+</script>

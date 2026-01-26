@@ -95,7 +95,7 @@
                             </div>
 
                             <div class="row">
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-4 mb-3">
                                     <label for="year" class="form-label fw-semibold">
                                         <i class="bx bx-calendar me-1"></i>Budget Year
                                     </label>
@@ -113,7 +113,28 @@
                                     @enderror
                                 </div>
 
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-4 mb-3">
+                                    <label for="branch_id" class="form-label fw-semibold">
+                                        <i class="bx bx-building me-1"></i>Budget Branch
+                                    </label>
+                                    <select class="form-select @error('branch_id') is-invalid @enderror" 
+                                            id="branch_id" name="branch_id">
+                                        <option value="all" {{ old('branch_id', 'all') == 'all' ? 'selected' : '' }}>
+                                            All Branches
+                                        </option>
+                                        @foreach($branches as $branch)
+                                            <option value="{{ $branch->id }}" {{ old('branch_id') == $branch->id ? 'selected' : '' }}>
+                                                {{ $branch->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <small class="text-muted">Select a specific branch or "All Branches" for company-wide budget</small>
+                                    @error('branch_id')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-md-4 mb-3">
                                     <label for="description" class="form-label fw-semibold">
                                         <i class="bx bx-note me-1"></i>Description (Optional)
                                     </label>

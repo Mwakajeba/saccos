@@ -10,6 +10,7 @@
         <div class="page-content">
             <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
             ['label' => 'Account Class Groups', 'url' => '#', 'icon' => 'bx bx-category']
         ]" />
 
@@ -33,57 +34,87 @@
 
             <h6 class="mb-0 text-uppercase">ACCOUNT CLASS GROUPS </h6>
             <hr />
+            
+            @if(session('success'))
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    {{ session('success') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            @endif
+
+            @if($errors->has('error'))
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    {{ $errors->first('error') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            @endif
+
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h5 class="mb-0">Chart of Accounts - Account Class Groups</h5>
-                        @can('create account class group')
                         <div>
                             <a href="{{ route('accounting.account-class-groups.create') }}" class="btn btn-primary ms-2">
                                 <i class="bx bx-plus"></i> Add New Group
                             </a>
                         </div>
-                        @endcan
                     </div>
                     <div class="table-responsive">
                         <table id="accountClassGroupsTable" class="table table-striped table-bordered" style="width:100%">
                             <thead>
                                 <tr>
                                     <th>#</th>
+                                    <th>Main Group</th>
                                     <th>Account Class</th>
                                     <th>Group Code</th>
-                                    <th>Name</th>
+                                    <th>FSLI Name</th>
+                                    <th>In Use</th>
                                     <th>Created At</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach($accountClassGroups as $index => $group)
+                                    @php
+                                        $isInUse = $group->chart_accounts_count > 0;
+                                    @endphp
                                     <tr>
                                         <td>{{ $index + 1 }}</td>
+                                        <td>{{ $group->mainGroup->name ?? 'N/A' }}</td>
                                         <td>{{ $group->accountClass->name ?? 'N/A' }}</td>
                                         <td>{{ $group->group_code ?? 'N/A' }}</td>
                                         <td>{{ $group->name }}</td>
+                                        <td>
+                                            @if($isInUse)
+                                                <span class="badge bg-info" title="Used by {{ $group->chart_accounts_count }} Chart Account(s)">
+                                                    Yes ({{ $group->chart_accounts_count }})
+                                                </span>
+                                            @else
+                                                <span class="badge bg-secondary">No</span>
+                                            @endif
+                                        </td>
                                         <td>{{ $group->created_at->format('M d, Y') }}</td>
                                         <td>
-                                            @can('view account class group details')
                                             <a href="{{ route('accounting.account-class-groups.show', Hashids::encode($group->id)) }}"
                                                 class="btn btn-sm btn-outline-primary">View</a>
-                                            @endcan
-                                            @can('edit account class group')
                                             <a href="{{ route('accounting.account-class-groups.edit', Hashids::encode($group->id)) }}"
                                                 class="btn btn-sm btn-outline-warning">Edit</a>
-                                            @endcan
-                                            @can('delete account class group')
-                                            <form
-                                                action="{{ route('accounting.account-class-groups.destroy', Hashids::encode($group->id)) }}"
-                                                method="POST" class="d-inline delete-form">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                    data-name="{{ $group->name }}">Delete</button>
-                                            </form>
-                                            @endcan
+
+                                            @if($isInUse)
+                                                <button type="button" class="btn btn-sm btn-outline-danger" disabled
+                                                    title="Cannot delete: This Account Class Group is being used by {{ $group->chart_accounts_count }} Chart Account(s)">
+                                                    Delete
+                                                </button>
+                                            @else
+                                                <form
+                                                    action="{{ route('accounting.account-class-groups.destroy', Hashids::encode($group->id)) }}"
+                                                    method="POST" class="d-inline delete-form">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                        data-name="{{ $group->name }}">Delete</button>
+                                                </form>
+                                            @endif
                                         </td>
                                     </tr>
                                 @endforeach

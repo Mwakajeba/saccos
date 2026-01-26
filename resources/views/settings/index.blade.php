@@ -133,26 +133,23 @@
                                 </div>
                             </div>
                             @endcan
-
-                            <!-- AI Assistant
-                                                                @can('use AI assistant')
-                                                                <div class="col-md-6 col-lg-4 mb-4">
-                                                                    <div class="card border-purple">
-                                                                        <div class="card-body text-center">
-                                                                            <div class="mb-3">
-                                                                                <i class="bx bx-bot fs-1 text-purple"></i>
-                                                                            </div>
-                                                                            <h5 class="card-title">AI Assistant</h5>
-                                                                            <p class="card-text">Get intelligent reports and insights with AI-powered
-                                                                                analysis.</p>
-                                                                            <a href="{{ route('settings.ai') }}" class="btn btn-purple">
-                                                                                <i class="bx bx-bot me-1"></i> Start Chat
-                                                                            </a>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                @endcan -->
-
+                            <!-- Budget Settings -->
+                            @can('view system configurations')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-teal">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-chart fs-1 text-teal"></i>
+                                        </div>
+                                        <h5 class="card-title">Budget Settings</h5>
+                                        <p class="card-text">Configure budget checking and over-budget allowances.</p>
+                                        <a href="{{ route('settings.budget') }}" class="btn btn-teal">
+                                            <i class="bx bx-cog me-1"></i> Configure
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
                             <!-- Roles & Permissions -->
                             @can('manage role & permission')
                             <div class="col-md-6 col-lg-4 mb-4">
@@ -170,7 +167,7 @@
                                 </div>
                             </div>
                             @endcan
-<!-- 
+                            <!-- 
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-info">
                                     <div class="card-body text-center">
@@ -296,7 +293,7 @@
                             </div>
 
                             <!-- SMS Setting -->
-                           @role('super-admin')
+                            @role('super-admin')
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-warning">
                                     <div class="card-body text-center">
@@ -359,7 +356,7 @@
                             </div>
                             @endcan
 
-                            @role('super-admin')
+                            {{-- @role('super-admin')
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-purple">
                                     <div class="card-body text-center">
@@ -377,7 +374,128 @@
                                     </div>
                                 </div>
                             </div>
-                            @endrole
+                            @endrole --}}
+                            <!-- Account Transfer Approval -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-primary">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-transfer fs-1 text-primary"></i>
+                                        </div>
+                                        <h5 class="card-title">Account Transfer Approval</h5>
+                                        <p class="card-text">
+                                            Configure approval workflows for inter-account transfers.
+                                            Set up approval levels, approvers, and approval thresholds.
+                                        </p>
+                                        <a href="{{ route('settings.account-transfer-approval') }}" class="btn btn-primary">
+                                            <i class="bx bx-transfer me-1"></i> Configure Approval
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+                            <!-- Provision Approval (IAS 37) -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-success">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-shield-quarter fs-1 text-success"></i>
+                                        </div>
+                                        <h5 class="card-title">Provision Approval (IAS 37)</h5>
+                                        <p class="card-text">
+                                            Configure approval workflows for IAS 37 provisions.
+                                            Set up approval levels and approvers for provision recognition and changes.
+                                        </p>
+                                        <a href="{{ route('settings.provision-approval') }}" class="btn btn-success">
+                                            <i class="bx bx-shield-quarter me-1"></i> Configure Approval
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+                            <!-- Petty Cash Settings -->
+                            @can('view system configurations')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-info">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-wallet fs-1 text-info"></i>
+                                        </div>
+                                        <h5 class="card-title">Petty Cash Settings</h5>
+                                        <p class="card-text">
+                                            Configure petty cash operation mode (Sub-Imprest or Standalone) and system settings.
+                                        </p>
+                                        <a href="{{ route('settings.petty-cash') }}" class="btn btn-info">
+                                            <i class="bx bx-cog me-1"></i> Configure
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
+                            <!-- Journal Entry Approval -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-warning">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-book-open fs-1 text-warning"></i>
+                                        </div>
+                                        <h5 class="card-title">Journal Entry Approval</h5>
+                                        <p class="card-text">
+                                            Configure approval workflows for journal entries.
+                                            Set up approval levels, approvers, and enable approval requirements.
+                                        </p>
+                                        <a href="{{ route('settings.journal-entry-approval') }}" class="btn btn-warning">
+                                            <i class="bx bx-book-open me-1"></i> Configure Approval
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+                            <!-- Period-End Closing -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-purple">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-calendar-check fs-1 text-purple"></i>
+                                        </div>
+                                        <h5 class="card-title">Period-End Closing</h5>
+                                        <p class="card-text">
+                                            Manage fiscal years, accounting periods, period closing workflows,
+                                            year-end adjustments, and retained earnings roll.
+                                        </p>
+                                        <a href="{{ route('settings.period-closing.index') }}" class="btn btn-purple">
+                                            <i class="bx bx-calendar-check me-1"></i> Manage Period Closing
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
+                            <!-- Approval Levels Management -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-primary">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-layer fs-1 text-primary"></i>
+                                        </div>
+                                        <h5 class="card-title">Approval Levels (Budget, Bank Reconciliation, Assets & HFS)</h5>
+                                        <p class="card-text">
+                                            Configure multi-level approval workflows and assign approvers for Budget, Bank Reconciliation,
+                                            Asset Revaluation, Asset Impairment, Asset Disposal, and HFS Requests.
+                                        </p>
+                                        <a href="{{ route('settings.approval-levels.index') }}" class="btn btn-primary">
+                                            <i class="bx bx-layer me-1"></i> Manage Approval Levels
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
 
                             <!-- Opening Balance Accounts Settings -->
                             <div class="col-md-6 col-lg-4 mb-4">
@@ -552,5 +670,6 @@
         border-color: #bb2d3b;
         color: white;
     }
+
 </style>
 @endpush

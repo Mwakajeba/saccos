@@ -8,6 +8,7 @@
         <!-- Breadcrumb -->
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Purchases', 'url' => route('purchases.index'), 'icon' => 'bx bx-purchase-tag'],
             ['label' => 'Bill Purchases', 'url' => route('accounting.bill-purchases'), 'icon' => 'bx bx-receipt'],
             ['label' => 'Bill #' . $billPurchase->reference, 'url' => '#', 'icon' => 'bx bx-show']
         ]" />
@@ -150,12 +151,12 @@
                 </div>
 
                 <!-- Payments -->
-                @if($billPurchase->payments->count() > 0)
-                    <div class="card">
-                        <div class="card-header bg-info text-white">
-                            <h5 class="mb-0"><i class="bx bx-money me-2"></i>Payments</h5>
-                        </div>
-                        <div class="card-body">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bx bx-money me-2"></i>Payment History</h5>
+                    </div>
+                    <div class="card-body">
+                        @if($billPurchase->payments->count() > 0)
                             <div class="table-responsive">
                                 <table class="table table-striped">
                                     <thead>
@@ -215,9 +216,19 @@
                                     </tfoot>
                                 </table>
                             </div>
-                        </div>
+                        @else
+                            <div class="text-center py-4">
+                                <i class="bx bx-info-circle text-muted" style="font-size: 3rem;"></i>
+                                <p class="text-muted mt-3 mb-0">No payments have been made for this bill yet.</p>
+                                @if(!$billPurchase->isPaid())
+                                    <a href="{{ route('accounting.bill-purchases.payment', $billPurchase) }}" class="btn btn-success mt-3">
+                                        <i class="bx bx-money me-1"></i> Add Payment
+                                    </a>
+                                @endif
+                            </div>
+                        @endif
                     </div>
-                @endif
+                </div>
             </div>
 
             <!-- Summary -->

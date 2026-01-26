@@ -10,9 +10,7 @@ use App\Models\Region;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Vinkla\Hashids\Facades\Hashids;
-use Yajra\DataTables\Facades\DataTables;
 
 class SupplierController extends Controller
 {
@@ -21,11 +19,19 @@ class SupplierController extends Controller
         $user = auth()->user();
         $companyId = $user->company_id ?? null;
 
-        // Get stats only for dashboard display
+        $branchId = $user->branch_id ?? null;
         if ($companyId) {
-            $suppliers = Supplier::byCompany($companyId);
+            $suppliers = Supplier::with(['company', 'branch', 'createdBy'])
+                ->byCompany($companyId)
+                ->when($branchId, function($q) use ($branchId){ $q->where('branch_id', $branchId); })
+                ->orderBy('name')
+                ->get();
         } else {
-            $suppliers = Supplier::query();
+            // If user doesn't have company_id, show by branch if present, else all suppliers
+            $suppliers = Supplier::with(['company', 'branch', 'createdBy'])
+                ->when($branchId, function($q) use ($branchId){ $q->where('branch_id', $branchId); })
+                ->orderBy('name')
+                ->get();
         }
 
         $stats = [
@@ -35,121 +41,7 @@ class SupplierController extends Controller
             'blacklisted' => $suppliers->where('status', 'blacklisted')->count(),
         ];
 
-        return view('accounting.suppliers.index', compact('stats'));
-    }
-
-    // Ajax endpoint for DataTables
-    public function getSuppliersData(Request $request)
-    {
-        if ($request->ajax()) {
-            $user = auth()->user();
-            $companyId = $user->company_id ?? null;
-
-            if ($companyId) {
-                $suppliers = Supplier::with(['company', 'branch', 'createdBy'])
-                    ->byCompany($companyId)
-                    ->select('suppliers.*');
-            } else {
-                $suppliers = Supplier::with(['company', 'branch', 'createdBy'])
-                    ->select('suppliers.*');
-            }
-
-            return DataTables::eloquent($suppliers)
-                ->addColumn('supplier_name', function ($supplier) {
-                    return '<div class="d-flex align-items-center">
-                                <div class="avatar-sm bg-light-primary text-primary rounded-circle d-flex align-items-center justify-content-center me-3">
-                                    <i class="bx bx-store font-size-18"></i>
-                                </div>
-                                <div>
-                                    <h6 class="mb-0 fw-bold">' . e($supplier->name) . '</h6>
-                                    ' . ($supplier->company_registration_name ? '<small class="text-muted">' . e($supplier->company_registration_name) . '</small>' : '') . '
-                                </div>
-                            </div>';
-                })
-                ->addColumn('contact_info', function ($supplier) {
-                    $contact = '';
-                    if ($supplier->email) {
-                        $contact .= '<div><i class="bx bx-envelope me-1"></i>' . e($supplier->email) . '</div>';
-                    }
-                    if ($supplier->phone) {
-                        $contact .= '<div><i class="bx bx-phone me-1"></i>' . e($supplier->phone) . '</div>';
-                    }
-                    return $contact ?: '<span class="text-muted">No contact info</span>';
-                })
-                ->addColumn('location', function ($supplier) {
-                    return $supplier->address ? '<div><i class="bx bx-map me-1"></i>' . e($supplier->address) . '</div>' : '<span class="text-muted">No address</span>';
-                })
-                ->addColumn('business_details', function ($supplier) {
-                    $details = '';
-                    if ($supplier->tin_number) {
-                        $details .= '<div><strong>TIN:</strong> ' . e($supplier->tin_number) . '</div>';
-                    }
-                    if ($supplier->vat_number) {
-                        $details .= '<div><strong>VAT:</strong> ' . e($supplier->vat_number) . '</div>';
-                    }
-                    if ($supplier->products_or_services) {
-                        $details .= '<div><strong>Services:</strong> ' . e(Str::limit($supplier->products_or_services, 50)) . '</div>';
-                    }
-                    return $details ?: '<span class="text-muted">No business details</span>';
-                })
-                ->addColumn('status_badge', function ($supplier) {
-                    $statusColors = [
-                        'active' => 'success',
-                        'inactive' => 'warning',
-                        'blacklisted' => 'danger'
-                    ];
-                    $color = $statusColors[$supplier->status] ?? 'secondary';
-                    return '<span class="badge bg-' . $color . '">' . ucfirst($supplier->status) . '</span>';
-                })
-                ->addColumn('branch_name', function ($supplier) {
-                    return optional($supplier->branch)->name ?? '<span class="text-muted">No branch</span>';
-                })
-                ->addColumn('actions', function ($supplier) {
-                    $actions = '';
-                    $encodedId = Hashids::encode($supplier->id);
-                    
-                    // View action
-                    if (auth()->user()->can('view supplier details')) {
-                        $actions .= '<a href="' . route('accounting.suppliers.show', $encodedId) . '" 
-                                        class="btn btn-sm btn-outline-primary me-1" 
-                                        data-bs-toggle="tooltip" 
-                                        data-bs-placement="top" 
-                                        title="View supplier details">
-                                        <i class="bx bx-show"></i>
-                                    </a>';
-                    }
-                    
-                    // Edit action
-                    if (auth()->user()->can('edit supplier')) {
-                        $actions .= '<a href="' . route('accounting.suppliers.edit', $encodedId) . '" 
-                                        class="btn btn-sm btn-outline-warning me-1" 
-                                        data-bs-toggle="tooltip" 
-                                        data-bs-placement="top" 
-                                        title="Edit supplier">
-                                        <i class="bx bx-edit"></i>
-                                    </a>';
-                    }
-                    
-                    // Delete action
-                    if (auth()->user()->can('delete supplier')) {
-                        $actions .= '<button type="button"
-                                        class="btn btn-sm btn-outline-danger delete-supplier-btn"
-                                        data-bs-toggle="tooltip" 
-                                        data-bs-placement="top" 
-                                        title="Delete supplier"
-                                        data-supplier-id="' . $encodedId . '"
-                                        data-supplier-name="' . e($supplier->name) . '">
-                                        <i class="bx bx-trash"></i>
-                                    </button>';
-                    }
-                    
-                    return '<div class="text-center">' . $actions . '</div>';
-                })
-                ->rawColumns(['supplier_name', 'contact_info', 'location', 'business_details', 'status_badge', 'branch_name', 'actions'])
-                ->make(true);
-        }
-        
-        return response()->json(['error' => 'Invalid request'], 400);
+        return view('accounting.suppliers.index', compact('suppliers', 'stats'));
     }
 
     public function create()
@@ -176,26 +68,23 @@ class SupplierController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|max:255',
-            'phone' => 'nullable|string|size:12|regex:/^[0-9]+$/',
+            'phone' => 'nullable|string|max:30',
             'address' => 'nullable|string|max:500',
             'region' => 'nullable|string|max:100',
             'company_registration_name' => 'nullable|string|max:255',
-            'tin_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
-            'vat_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
+            'tin_number' => 'nullable|string|max:50',
+            'vat_number' => 'nullable|string|max:50',
             'bank_name' => 'nullable|string|max:255',
             'bank_account_number' => 'nullable|string|max:50',
             'account_name' => 'nullable|string|max:255',
             'products_or_services' => 'nullable|string|max:1000',
             'status' => 'required|in:active,inactive,blacklisted',
-            'branch_id' => 'nullable|exists:branches,id',
-        ], [
-            'phone.size' => 'Phone number must be exactly 12 digits.',
-            'phone.regex' => 'Phone number must contain only numbers.',
-            'tin_number.regex' => 'TIN number must contain only numbers.',
-            'vat_number.regex' => 'VAT number must contain only numbers.',
         ]);
 
         if ($validator->fails()) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+            }
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();
@@ -203,6 +92,14 @@ class SupplierController extends Controller
 
         $user = auth()->user();
         $companyId = $user->company_id ?? Company::first()->id ?? 1;
+
+        // Debug: Log the Business & Legal Information fields
+        \Log::info('SupplierController::store - Business & Legal fields received:', [
+            'company_registration_name' => $request->company_registration_name,
+            'tin_number' => $request->tin_number,
+            'vat_number' => $request->vat_number,
+            'products_or_services' => $request->products_or_services
+        ]);
 
         $supplier = Supplier::create([
             'name' => $request->name,
@@ -219,9 +116,28 @@ class SupplierController extends Controller
             'products_or_services' => $request->products_or_services,
             'status' => $request->status,
             'company_id' => $companyId,
-            'branch_id' => $request->branch_id,
+            'branch_id' => (Auth::user()->branch_id) ?? (session('branch_id') ?: null) ?? (function_exists('current_branch_id') ? current_branch_id() : null),
             'created_by' => auth()->id(),
         ]);
+
+        // Debug: Log what was actually saved
+        \Log::info('SupplierController::store - Business & Legal fields saved:', [
+            'company_registration_name' => $supplier->company_registration_name,
+            'tin_number' => $supplier->tin_number,
+            'vat_number' => $supplier->vat_number,
+            'products_or_services' => $supplier->products_or_services
+        ]);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'message' => 'Supplier created successfully',
+                'supplier' => [
+                    'id' => $supplier->id,
+                    'name' => $supplier->name,
+                    'phone' => $supplier->phone,
+                ],
+            ], 201);
+        }
 
         return redirect()->route('accounting.suppliers.index')
             ->with('success', 'Supplier created successfully!');
@@ -278,26 +194,29 @@ class SupplierController extends Controller
 
         $supplier = Supplier::findOrFail($decoded[0]);
 
+        // Debug: Log the Business & Legal Information fields
+        \Log::info('SupplierController::update - Business & Legal fields received:', [
+            'company_registration_name' => $request->company_registration_name,
+            'tin_number' => $request->tin_number,
+            'vat_number' => $request->vat_number,
+            'products_or_services' => $request->products_or_services
+        ]);
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|max:255',
-            'phone' => 'nullable|string|size:12|regex:/^[0-9]+$/',
+            'phone' => 'nullable|string|max:30',
             'address' => 'nullable|string|max:500',
             'region' => 'nullable|string|max:100',
             'company_registration_name' => 'nullable|string|max:255',
-            'tin_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
-            'vat_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
+            'tin_number' => 'nullable|string|max:50',
+            'vat_number' => 'nullable|string|max:50',
             'bank_name' => 'nullable|string|max:255',
             'bank_account_number' => 'nullable|string|max:50',
             'account_name' => 'nullable|string|max:255',
             'products_or_services' => 'nullable|string|max:1000',
             'status' => 'required|in:active,inactive,blacklisted',
             'branch_id' => 'nullable|exists:branches,id',
-        ], [
-            'phone.size' => 'Phone number must be exactly 12 digits.',
-            'phone.regex' => 'Phone number must contain only numbers.',
-            'tin_number.regex' => 'TIN number must contain only numbers.',
-            'vat_number.regex' => 'VAT number must contain only numbers.',
         ]);
 
         if ($validator->fails()) {
@@ -322,6 +241,14 @@ class SupplierController extends Controller
             'status' => $request->status,
             'branch_id' => $request->branch_id,
             'updated_by' => auth()->id(),
+        ]);
+
+        // Debug: Log what was actually updated
+        \Log::info('SupplierController::update - Business & Legal fields updated:', [
+            'company_registration_name' => $supplier->fresh()->company_registration_name,
+            'tin_number' => $supplier->fresh()->tin_number,
+            'vat_number' => $supplier->fresh()->vat_number,
+            'products_or_services' => $supplier->fresh()->products_or_services
         ]);
 
         return redirect()->route('accounting.suppliers.index')

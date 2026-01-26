@@ -96,6 +96,53 @@ class SystemSettingService
     }
 
     /**
+     * Get rate limiting configuration
+     */
+    public static function getRateLimitingConfig()
+    {
+        return [
+            'login' => [
+                'max_attempts' => self::get('rate_limit_login_attempts', config('rate-limiting.login.max_attempts', 5)),
+                'decay_minutes' => self::get('rate_limit_login_decay', config('rate-limiting.login.decay_minutes', 15)),
+            ],
+            'password_reset' => [
+                'max_attempts' => self::get('rate_limit_password_reset_attempts', config('rate-limiting.password_reset.max_attempts', 3)),
+                'decay_minutes' => self::get('rate_limit_password_reset_decay', config('rate-limiting.password_reset.decay_minutes', 15)),
+            ],
+            'otp' => [
+                'max_attempts' => self::get('rate_limit_otp_attempts', config('rate-limiting.otp.max_attempts', 5)),
+                'decay_minutes' => self::get('rate_limit_otp_decay', config('rate-limiting.otp.decay_minutes', 5)),
+            ],
+            'api' => [
+                'authenticated' => [
+                    'max_attempts' => self::get('rate_limit_api_auth_attempts', config('rate-limiting.api.authenticated.max_attempts', 60)),
+                    'decay_minutes' => self::get('rate_limit_api_auth_decay', config('rate-limiting.api.authenticated.decay_minutes', 1)),
+                ],
+                'unauthenticated' => [
+                    'max_attempts' => self::get('rate_limit_api_unauth_attempts', config('rate-limiting.api.unauthenticated.max_attempts', 20)),
+                    'decay_minutes' => self::get('rate_limit_api_unauth_decay', config('rate-limiting.api.unauthenticated.decay_minutes', 1)),
+                ],
+            ],
+            'global' => [
+                'max_attempts' => self::get('rate_limit_global_attempts', config('rate-limiting.global.max_attempts', 200)),
+                'decay_minutes' => self::get('rate_limit_global_decay', config('rate-limiting.global.decay_minutes', 1)),
+            ],
+            'registration' => [
+                'max_attempts' => self::get('rate_limit_registration_attempts', config('rate-limiting.registration.max_attempts', 3)),
+                'decay_minutes' => self::get('rate_limit_registration_decay', config('rate-limiting.registration.decay_minutes', 60)),
+            ],
+            'search' => [
+                'max_attempts' => self::get('rate_limit_search_attempts', config('rate-limiting.search.max_attempts', 30)),
+                'decay_minutes' => self::get('rate_limit_search_decay', config('rate-limiting.search.decay_minutes', 1)),
+            ],
+            'upload' => [
+                'max_attempts' => self::get('rate_limit_upload_attempts', config('rate-limiting.upload.max_attempts', 10)),
+                'decay_minutes' => self::get('rate_limit_upload_decay', config('rate-limiting.upload.decay_minutes', 1)),
+            ],
+        ];
+    }
+
+    /**
      * Get backup configuration
      */
     public static function getBackupConfig()
@@ -109,20 +156,6 @@ class SystemSettingService
         ];
     }
 
-    /**
-     * Get microfinance configuration
-     */
-    public static function getMicrofinanceConfig()
-    {
-        return [
-            'loan_interest_rate_default' => self::get('loan_interest_rate_default', 12.5),
-            'loan_processing_fee' => self::get('loan_processing_fee', 2.0),
-            'savings_interest_rate' => self::get('savings_interest_rate', 5.0),
-            'minimum_savings_balance' => self::get('minimum_savings_balance', 100),
-            'late_payment_penalty' => self::get('late_payment_penalty', 5.0),
-            'grace_period_days' => self::get('grace_period_days', 7),
-        ];
-    }
 
     /**
      * Check if maintenance mode is enabled

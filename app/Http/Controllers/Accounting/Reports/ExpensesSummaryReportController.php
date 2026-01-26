@@ -66,6 +66,9 @@ class ExpensesSummaryReportController extends Controller
         $user = Auth::user();
         $company = $user->company;
 
+        // Get cost of goods sold account from settings to exclude it
+        $costOfGoodsSoldAccountId = \App\Models\SystemSetting::where('key', 'inventory_default_cost_account')->value('value') ?? 173;
+
         // Build the base query for expense accounts
         $query = DB::table('gl_transactions')
             ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
@@ -74,6 +77,11 @@ class ExpensesSummaryReportController extends Controller
             ->where('account_class_groups.company_id', $company->id)
             ->whereBetween('gl_transactions.date', [$startDate, $endDate])
             ->whereIn('account_class.name', ['expenses', 'expense']);
+
+        // Exclude cost of goods sold account if it's set in settings
+        if ($costOfGoodsSoldAccountId && is_numeric($costOfGoodsSoldAccountId)) {
+            $query->where('chart_accounts.id', '!=', $costOfGoodsSoldAccountId);
+        }
 
         // Constrain to user's assigned branches always
         $assignedBranchIds = $user->branches()

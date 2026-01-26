@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use App\Traits\LogsActivity;
-use App\Helpers\HashIdHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Vinkla\Hashids\Facades\Hashids;
 
 class Budget extends Model
 {
@@ -25,6 +26,15 @@ class Budget extends Model
         'user_id',
         'branch_id',
         'company_id',
+        'status',
+        'current_approval_level',
+        'submitted_by',
+        'submitted_at',
+        'approved_by',
+        'approved_at',
+        'rejected_by',
+        'rejected_at',
+        'rejection_reason',
     ];
 
     /**
@@ -34,6 +44,10 @@ class Budget extends Model
      */
     protected $casts = [
         'year' => 'integer',
+        'current_approval_level' => 'integer',
+        'submitted_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'rejected_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -71,6 +85,46 @@ class Budget extends Model
     }
 
     /**
+     * Get the reallocations for this budget.
+     */
+    public function reallocations(): HasMany
+    {
+        return $this->hasMany(BudgetReallocation::class);
+    }
+
+    /**
+     * Get the approval history for this budget.
+     */
+    public function approvalHistories(): MorphMany
+    {
+        return $this->morphMany(ApprovalHistory::class, 'approvable');
+    }
+
+    /**
+     * Get the user who submitted this budget for approval.
+     */
+    public function submittedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by');
+    }
+
+    /**
+     * Get the user who approved this budget.
+     */
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /**
+     * Get the user who rejected this budget.
+     */
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
+    }
+
+    /**
      * Scope to filter budgets by year.
      */
     public function scopeByYear($query, $year)
@@ -88,9 +142,13 @@ class Budget extends Model
 
     /**
      * Scope to filter budgets by branch.
+     * If branchId is null, returns budgets for all branches (where branch_id is null).
      */
     public function scopeByBranch($query, $branchId)
     {
+        if ($branchId === null) {
+            return $query->whereNull('branch_id');
+        }
         return $query->where('branch_id', $branchId);
     }
 
@@ -109,7 +167,7 @@ class Budget extends Model
      */
     public function getHashIdAttribute()
     {
-        return HashIdHelper::encode($this->id);
+        return Hashids::encode($this->id);
     }
 
     /**
@@ -130,15 +188,15 @@ class Budget extends Model
      */
     public function resolveRouteBinding($value, $field = null)
     {
-        if ($field === 'hash_id' || $field === null) {
-            $id = HashIdHelper::decode($value);
-            if ($id !== null) {
-                return $this->findOrFail($id);
-            }
+        // Try to decode the hash ID first
+        $decoded = Hashids::decode($value);
+        
+        if (!empty($decoded)) {
+            return static::where('id', $decoded[0])->first();
         }
         
-        // If not a hash ID, try as regular ID
-        return $this->findOrFail($value);
+        // Fallback to regular ID lookup
+        return static::where('id', $value)->first();
     }
 
     /**
@@ -148,6 +206,6 @@ class Budget extends Model
      */
     public function getRouteKey()
     {
-        return HashIdHelper::encode($this->id);
+        return $this->hash_id;
     }
 }

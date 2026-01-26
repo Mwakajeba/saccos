@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
 use App\Models\Budget;
+use App\Models\BudgetReallocation;
 use App\Models\Branch;
 use App\Models\ChartAccount;
+use App\Models\ApprovalHistory;
+use App\Services\ApprovalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -21,17 +24,21 @@ class BudgetController extends Controller
     {
         $user = Auth::user();
         $query = Budget::with(['user', 'branch', 'company', 'budgetLines']);
-        
+
         // Filter by company scope
         if ($user->company_id) {
             $query->byCompany($user->company_id);
         }
-        
-        // Filter by branch scope
-        if ($user->branch_id) {
-            $query->byBranch($user->branch_id);
+
+        // Filter by branch scope - show budgets for user's branch and company-wide budgets (branch_id is null)
+        $sessionBranchId = session('branch_id');
+        if ($sessionBranchId) {
+            $query->where(function($q) use ($sessionBranchId) {
+                $q->where('branch_id', $sessionBranchId)
+                  ->orWhereNull('branch_id'); // Include company-wide budgets
+            });
         }
-        
+
         // Apply search filters
         if ($request->filled('search')) {
             $search = $request->search;
@@ -40,61 +47,69 @@ class BudgetController extends Controller
                   ->orWhere('year', 'like', "%{$search}%");
             });
         }
-        
+
         if ($request->filled('year')) {
             $query->byYear($request->year);
         }
-        
+
         $budgets = $query->orderBy('created_at', 'desc')->paginate(15);
-        
-        
+
+
         return view('budgets.index', compact('budgets'));
     }
-    
+
     /**
      * Show the form for creating a new resource.
      */
     public function create()
     {
-        $this->authorize('create', Budget::class);
-        
         $user = Auth::user();
         $accounts = ChartAccount::whereHas('accountClassGroup', function ($query) {
             $query->where('company_id', Auth::user()->company_id);
         })->get();
-        
-        return view('budgets.create', compact('accounts'));
+
+        // Get branches for the user's company
+        $branches = Branch::where('company_id', $user->company_id)->orderBy('name')->get();
+
+        return view('budgets.create', compact('accounts', 'branches'));
     }
-    
+
     /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
     {
-        $this->authorize('create', Budget::class);
-        
+        // Convert 'all' to null before validation
+        $request->merge([
+            'branch_id' => ($request->branch_id === 'all' || $request->branch_id === '') ? null : $request->branch_id
+        ]);
+
         $request->validate([
             'name' => 'required|string|max:255',
             'year' => 'required|integer|min:2020|max:2030',
             'description' => 'nullable|string|max:1000',
+            'branch_id' => 'nullable|exists:branches,id',
             'budget_lines' => 'required|array|min:1',
             'budget_lines.*.account_id' => 'required|exists:chart_accounts,id',
             'budget_lines.*.amount' => 'required|numeric|min:0',
             'budget_lines.*.category' => 'required|in:Revenue,Expense,Capital Expenditure',
         ]);
-        
+
         try {
             DB::beginTransaction();
-            
+
+            // Handle branch_id: if null, set to null (for all branches)
+            $branchId = $request->branch_id;
+
             $budget = Budget::create([
                 'name' => $request->name,
                 'year' => $request->year,
                 'description' => $request->description,
                 'user_id' => Auth::id(),
-                'branch_id' => Auth::user()->branch_id,
+                'branch_id' => $branchId,
                 'company_id' => Auth::user()->company_id,
             ]);
-            
+
             // Create budget lines
             foreach ($request->budget_lines as $line) {
                 $budget->budgetLines()->create([
@@ -103,9 +118,9 @@ class BudgetController extends Controller
                     'category' => $line['category'],
                 ]);
             }
-            
+
             DB::commit();
-            
+
             return redirect()->route('accounting.budgets.index')
                 ->with('success', 'Budget created successfully.');
         } catch (\Exception $e) {
@@ -113,77 +128,100 @@ class BudgetController extends Controller
             return back()->withInput()->with('error', 'Failed to create budget: ' . $e->getMessage());
         }
     }
-    
+
     /**
      * Display the specified resource.
      */
-public function show(Budget $budget)
+    public function show(Budget $budget)
     {
-        // Ensure user can only access budgets from their branch
-        if ($budget->branch_id !== Auth::user()->branch_id) {
-            abort(403, 'You can only access budgets from your own branch.');
+        $user = Auth::user();
+        // Ensure user can only access budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only access budgets from your own branch or company-wide budgets.');
         }
         
-        $budget->load(['user', 'branch', 'company', 'budgetLines.account']);
+        $budget->load(['user', 'branch', 'company', 'budgetLines.account', 'submittedBy', 'approvedBy', 'rejectedBy', 'approvalHistories.approvalLevel', 'approvalHistories.approver']);
         
-        return view('budgets.show', compact('budget'));
+        // Get approval service data
+        $approvalService = app(ApprovalService::class);
+        $canSubmit = $approvalService->canUserSubmit($budget, $user->id);
+        $canApprove = $approvalService->canUserApprove($budget, $user->id);
+        $currentApprovers = $approvalService->getCurrentApprovers($budget);
+        $currentLevel = $approvalService->getCurrentApprovalLevel($budget);
+        $approvalSummary = $approvalService->getApprovalStatusSummary($budget);
+        
+        return view('budgets.show', compact('budget', 'canSubmit', 'canApprove', 'currentApprovers', 'currentLevel', 'approvalSummary'));
     }
-    
+
     /**
      * Show the form for editing the specified resource.
      */
     public function edit(Budget $budget)
     {
-        $this->authorize('update', $budget);
-        
-        // Ensure user can only edit budgets from their branch
-        if ($budget->branch_id !== Auth::user()->branch_id) {
-            abort(403, 'You can only edit budgets from your own branch.');
+        $user = Auth::user();
+        // Ensure user can only edit budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only edit budgets from your own branch or company-wide budgets.');
         }
         
         $accounts = ChartAccount::whereHas('accountClassGroup', function ($query) {
             $query->where('company_id', Auth::user()->company_id);
         })->get();
-        
+
+        // Get branches for the user's company
+        $branches = Branch::where('company_id', $user->company_id)->orderBy('name')->get();
+
         $budget->load('budgetLines');
-        
-        return view('budgets.edit', compact('budget', 'accounts'));
+
+        return view('budgets.edit', compact('budget', 'accounts', 'branches'));
     }
-    
+
     /**
      * Update the specified resource in storage.
      */
     public function update(Request $request, Budget $budget)
     {
-        $this->authorize('update', $budget);
-        
-        // Ensure user can only update budgets from their branch
-        if ($budget->branch_id !== Auth::user()->branch_id) {
-            abort(403, 'You can only update budgets from your own branch.');
+        $user = Auth::user();
+        // Ensure user can only update budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only update budgets from your own branch or company-wide budgets.');
         }
+
+        // Convert 'all' to null before validation
+        $request->merge([
+            'branch_id' => ($request->branch_id === 'all' || $request->branch_id === '') ? null : $request->branch_id
+        ]);
+
         $request->validate([
             'name' => 'required|string|max:255',
             'year' => 'required|integer|min:2020|max:2030',
             'description' => 'nullable|string|max:1000',
+            'branch_id' => 'nullable|exists:branches,id',
             'budget_lines' => 'required|array|min:1',
             'budget_lines.*.account_id' => 'required|exists:chart_accounts,id',
             'budget_lines.*.amount' => 'required|numeric|min:0',
             'budget_lines.*.category' => 'required|in:Revenue,Expense,Capital Expenditure',
         ]);
-        
+
         try {
             DB::beginTransaction();
-            
+
+            // Handle branch_id: if null, set to null (for all branches)
+            $branchId = $request->branch_id;
+
             $budget->update([
                 'name' => $request->name,
                 'year' => $request->year,
                 'description' => $request->description,
-                'branch_id' => Auth::user()->branch_id,
+                'branch_id' => $branchId,
             ]);
-            
+
             // Delete existing budget lines
             $budget->budgetLines()->delete();
-            
+
             // Create new budget lines
             foreach ($request->budget_lines as $line) {
                 $budget->budgetLines()->create([
@@ -192,9 +230,9 @@ public function show(Budget $budget)
                     'category' => $line['category'],
                 ]);
             }
-            
+
             DB::commit();
-            
+
             return redirect()->route('accounting.budgets.index')
                 ->with('success', 'Budget updated successfully.');
         } catch (\Exception $e) {
@@ -202,15 +240,18 @@ public function show(Budget $budget)
             return back()->withInput()->with('error', 'Failed to update budget: ' . $e->getMessage());
         }
     }
-    
+
     /**
      * Remove the specified resource from storage.
      */
     public function destroy(Budget $budget)
     {
-        $this->authorize('delete', $budget);
-        
-        // Ensure user can only delete budgets from their branch
+        $user = Auth::user();
+        // Ensure user can only delete budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only delete budgets from your own branch or company-wide budgets.');
+        }
         
         try {
             $budget->delete();
@@ -231,7 +272,10 @@ public function show(Budget $budget)
             $query->where('company_id', Auth::user()->company_id);
         })->get();
 
-        return view('budgets.import', compact('accounts'));
+        // Get branches for the user's company
+        $branches = Branch::where('company_id', $user->company_id)->orderBy('name')->get();
+
+        return view('budgets.import', compact('accounts', 'branches'));
     }
 
     /**
@@ -239,11 +283,17 @@ public function show(Budget $budget)
      */
     public function storeImport(Request $request)
     {
+        // Convert 'all' to null before validation
+        $request->merge([
+            'branch_id' => ($request->branch_id === 'all' || $request->branch_id === '') ? null : $request->branch_id
+        ]);
+
         $request->validate([
             'import_file' => 'required|file|mimes:xlsx,xls,csv|max:2048',
             'year' => 'required|integer|min:2020|max:2030',
             'budget_name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
+            'branch_id' => 'nullable|exists:branches,id',
         ]);
 
         try {
@@ -377,13 +427,16 @@ public function show(Budget $budget)
                 return back()->withInput()->with('error', 'No valid budget lines found in the file.');
             }
 
+            // Handle branch_id: if null, set to null (for all branches)
+            $branchId = $request->branch_id;
+
             // Create budget using same logic as store method
             $budget = Budget::create([
                 'name' => $request->budget_name, // Using budget_name from form
                 'year' => $request->year,
                 'description' => $request->description,
                 'user_id' => Auth::id(),
-                'branch_id' => Auth::user()->branch_id,
+                'branch_id' => $branchId,
                 'company_id' => Auth::user()->company_id,
             ]);
 
@@ -499,11 +552,11 @@ public function show(Budget $budget)
      */
     public function exportExcel(Budget $budget)
     {
-        $this->authorize('view budget details', $budget);
-        
-        // Ensure user can only export budgets from their branch
-        if ($budget->branch_id !== Auth::user()->branch_id) {
-            abort(403, 'You can only export budgets from your own branch.');
+        $user = Auth::user();
+        // Ensure user can only export budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only export budgets from your own branch or company-wide budgets.');
         }
 
         $budget->load(['user', 'branch', 'company', 'budgetLines.account']);
@@ -592,11 +645,11 @@ public function show(Budget $budget)
      */
     public function exportPdf(Budget $budget)
     {
-        $this->authorize('view budget details', $budget);
-        
-        // Ensure user can only export budgets from their branch
-        if ($budget->branch_id !== Auth::user()->branch_id) {
-            abort(403, 'You can only export budgets from your own branch.');
+        $user = Auth::user();
+        // Ensure user can only export budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only export budgets from your own branch or company-wide budgets.');
         }
 
         $budget->load(['user', 'branch', 'company', 'budgetLines.account']);
@@ -606,5 +659,312 @@ public function show(Budget $budget)
         $filename = 'budget_' . $budget->name . '_' . $budget->year . '.pdf';
         
         return $pdf->download($filename);
+    }
+
+    /**
+     * Show the form for reallocating budget amounts.
+     */
+    public function showReallocate(Budget $budget)
+    {
+        $user = Auth::user();
+        // Ensure user can only reallocate budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only reallocate budgets from your own branch or company-wide budgets.');
+        }
+
+        $budget->load(['budgetLines.account']);
+        
+        // Get accounts that have budget lines in this budget (for "from" dropdown)
+        $budgetAccounts = $budget->budgetLines->map(function ($line) {
+            return $line->account;
+        })->unique('id')->values();
+
+        // Get all accounts for the company (for "to" dropdown - allows allocating to accounts without budget lines)
+        $allAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($user) {
+            $query->where('company_id', $user->company_id);
+        })->orderBy('account_code')->get();
+
+        return view('budgets.reallocate', compact('budget', 'budgetAccounts', 'allAccounts'));
+    }
+
+    /**
+     * Process the budget reallocation.
+     */
+    public function reallocate(Request $request, Budget $budget)
+    {
+        $user = Auth::user();
+        // Ensure user can only reallocate budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only reallocate budgets from your own branch or company-wide budgets.');
+        }
+
+        $request->validate([
+            'from_account_id' => 'required|exists:chart_accounts,id',
+            'to_account_id' => 'required|exists:chart_accounts,id|different:from_account_id',
+            'amount' => 'required|numeric|min:0.01',
+            'reason' => 'nullable|string|max:1000',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            // Store original status to check if re-approval is needed
+            $originalStatus = $budget->status;
+            $requiresReapproval = in_array($originalStatus, ['approved', 'active']);
+
+            // Get the source budget line
+            $fromBudgetLine = $budget->budgetLines()->where('account_id', $request->from_account_id)->first();
+            
+            if (!$fromBudgetLine) {
+                return back()->withInput()->with('error', 'Source account does not have a budget line in this budget.');
+            }
+
+            // Check if source account has sufficient amount
+            if ($fromBudgetLine->amount < $request->amount) {
+                return back()->withInput()->with('error', 'Insufficient amount in source account. Available: ' . number_format($fromBudgetLine->amount, 2));
+            }
+
+            // Get or create the destination budget line
+            $toBudgetLine = $budget->budgetLines()->where('account_id', $request->to_account_id)->first();
+            
+            if (!$toBudgetLine) {
+                // Create new budget line for destination account if it doesn't exist
+                $toAccount = ChartAccount::find($request->to_account_id);
+                $toBudgetLine = $budget->budgetLines()->create([
+                    'account_id' => $request->to_account_id,
+                    'amount' => 0,
+                    'category' => $fromBudgetLine->category, // Use same category as source
+                ]);
+            }
+
+            // Update amounts
+            $fromBudgetLine->decrement('amount', $request->amount);
+            $toBudgetLine->increment('amount', $request->amount);
+
+            // Record the reallocation
+            $reallocationReason = $request->reason ?: 'Budget reallocation';
+            BudgetReallocation::create([
+                'budget_id' => $budget->id,
+                'from_account_id' => $request->from_account_id,
+                'to_account_id' => $request->to_account_id,
+                'amount' => $request->amount,
+                'reason' => $reallocationReason,
+                'user_id' => Auth::id(),
+            ]);
+
+            // If budget was approved or active, trigger re-approval workflow
+            if ($requiresReapproval) {
+                $approvalService = app(ApprovalService::class);
+                $fromAccount = ChartAccount::find($request->from_account_id);
+                $toAccount = ChartAccount::find($request->to_account_id);
+                $changeReason = "Reallocation: TZS " . number_format($request->amount, 2) . " from {$fromAccount->account_code} to {$toAccount->account_code}. " . ($request->reason ? "Reason: {$request->reason}" : "");
+                
+                // Pass false for useTransaction since we're already in a transaction
+                $approvalService->resubmitForApprovalAfterChange($budget, $user->id, $changeReason, false);
+            }
+
+            DB::commit();
+
+            $successMessage = 'Budget amount reallocated successfully.';
+            if ($requiresReapproval) {
+                $successMessage = 'Budget amount reallocated successfully. The budget has been resubmitted for approval due to changes made.';
+            }
+
+            return redirect()->route('accounting.budgets.show', $budget)
+                ->with('success', $successMessage);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withInput()->with('error', 'Failed to reallocate budget: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Submit budget for approval.
+     */
+    public function submitForApproval(Budget $budget, Request $request)
+    {
+        $user = Auth::user();
+        
+        // Check permission
+        if (!$user->can('submit budget for approval')) {
+            abort(403, 'You do not have permission to submit budgets for approval.');
+        }
+        
+        // Ensure user can only submit budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only submit budgets from your own branch or company-wide budgets.');
+        }
+
+        // Validate budget is complete
+        if ($budget->budgetLines->isEmpty()) {
+            return redirect()->back()->with('error', 'Budget must have at least one line item before submission.');
+        }
+
+        // Check if budget can be submitted
+        if (!in_array($budget->status, ['draft', 'rejected'])) {
+            return redirect()->back()->with('error', 'Budget can only be submitted from draft or rejected status.');
+        }
+
+        $approvalService = app(ApprovalService::class);
+
+        try {
+            if (!$approvalService->canUserSubmit($budget, $user->id)) {
+                return redirect()->back()->with('error', 'You do not have permission to submit this budget.');
+            }
+
+            $approvalService->submitForApproval($budget, $user->id);
+
+            return redirect()->back()->with('success', 'Budget submitted for approval successfully.');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Failed to submit budget: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Approve budget at current level.
+     */
+    public function approve(Budget $budget, Request $request)
+    {
+        $user = Auth::user();
+        
+        // Check permission
+        if (!$user->can('approve budget')) {
+            abort(403, 'You do not have permission to approve budgets.');
+        }
+        
+        // Ensure user can only approve budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only approve budgets from your own branch or company-wide budgets.');
+        }
+
+        $request->validate([
+            'approval_level_id' => 'required|exists:approval_levels,id',
+            'comments' => 'nullable|string|max:1000',
+        ]);
+
+        $approvalService = app(ApprovalService::class);
+
+        try {
+            $approvalService->approve(
+                $budget,
+                $request->approval_level_id,
+                $user->id,
+                $request->comments
+            );
+
+            $message = 'Budget approved successfully.';
+            if ($budget->fresh()->status === 'approved') {
+                $message = 'Budget fully approved and ready for activation.';
+            }
+
+            return redirect()->back()->with('success', $message);
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Reject budget at current level.
+     */
+    public function reject(Budget $budget, Request $request)
+    {
+        $user = Auth::user();
+        
+        // Check permission
+        if (!$user->can('reject budget')) {
+            abort(403, 'You do not have permission to reject budgets.');
+        }
+        
+        // Ensure user can only reject budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only reject budgets from your own branch or company-wide budgets.');
+        }
+
+        $request->validate([
+            'approval_level_id' => 'required|exists:approval_levels,id',
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $approvalService = app(ApprovalService::class);
+
+        try {
+            $approvalService->reject(
+                $budget,
+                $request->approval_level_id,
+                $user->id,
+                $request->reason
+            );
+
+            return redirect()->back()->with('success', 'Budget rejected.');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Reassign budget approval to another approver.
+     */
+    public function reassign(Budget $budget, Request $request)
+    {
+        $user = Auth::user();
+        
+        // Ensure user can only reassign budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only reassign budgets from your own branch or company-wide budgets.');
+        }
+
+        $request->validate([
+            'approval_level_id' => 'required|exists:approval_levels,id',
+            'new_approver_id' => 'required|exists:users,id',
+            'comments' => 'nullable|string|max:1000',
+        ]);
+
+        $approvalService = app(ApprovalService::class);
+
+        try {
+            $approvalService->reassign(
+                $budget,
+                $request->approval_level_id,
+                $user->id,
+                $request->new_approver_id,
+                $request->comments
+            );
+
+            return redirect()->back()->with('success', 'Budget approval reassigned successfully.');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Get approval history for a budget.
+     */
+    public function approvalHistory(Budget $budget)
+    {
+        $user = Auth::user();
+        
+        // Check permission
+        if (!$user->can('view budget approval history')) {
+            abort(403, 'You do not have permission to view budget approval history.');
+        }
+        
+        // Ensure user can only view budgets from their branch or company-wide budgets
+        $sessionBranchId = session('branch_id');
+        if ($budget->branch_id !== null && $budget->branch_id !== $sessionBranchId) {
+            abort(403, 'You can only view budgets from your own branch or company-wide budgets.');
+        }
+
+        $approvalService = app(ApprovalService::class);
+        $history = $approvalService->getApprovalHistory($budget);
+        $summary = $approvalService->getApprovalStatusSummary($budget);
+        $currentApprovers = $approvalService->getCurrentApprovers($budget);
+
+        return view('budgets.approval-history', compact('budget', 'history', 'summary', 'currentApprovers'));
     }
 } 

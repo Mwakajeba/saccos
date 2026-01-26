@@ -6,102 +6,102 @@
         <div class="page-content">
             <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
             ['label' => 'Account Class Groups', 'url' => route('accounting.account-class-groups.index'), 'icon' => 'bx bx-category'],
             ['label' => 'Edit Group', 'url' => '#', 'icon' => 'bx bx-edit']
         ]" />
 
-            <h6 class="mb-0 text-uppercase">EDIT ACCOUNT CLASS GROUP</h6>
+            <h6 class="mb-0 text-uppercase">EDIT ACCOUNT CLASS GROUP (FSLI)</h6>
             <hr />
+            
             <div class="row">
-                <!-- Left Column: Form -->
+                <!-- Left Column - Form -->
                 <div class="col-lg-8">
                     <div class="card">
                         <div class="card-body">
+                            <h5 class="card-title mb-3">
+                                <i class="bx bx-edit text-warning me-2"></i>Edit FSLI Information
+                            </h5>
                             @include('account-class-groups.form')
                         </div>
                     </div>
                 </div>
-                
-                <!-- Right Column: Information -->
+
+                <!-- Right Column - Guidelines -->
                 <div class="col-lg-4">
-                    <div class="card border-info">
-                        <div class="card-header bg-info text-white">
-                            <h6 class="mb-0"><i class="bx bx-info-circle me-2"></i>Information & Guidelines</h6>
+                    <div class="card border-warning">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="card-title mb-0">
+                                <i class="bx bx-info-circle me-2"></i>Update Guidelines
+                            </h5>
                         </div>
                         <div class="card-body">
-                            <div class="mb-4">
-                                <h6 class="text-primary"><i class="bx bx-help-circle me-2"></i>Editing Account Class Group</h6>
-                                <ul class="list-unstyled mb-0">
-                                    <li class="mb-2">
-                                        <i class="bx bx-check-circle text-success me-2"></i>
-                                        You can modify the Account Class if needed
-                                    </li>
-                                    <li class="mb-2">
-                                        <i class="bx bx-check-circle text-success me-2"></i>
-                                        Update the Group Code as necessary
-                                    </li>
-                                    <li class="mb-2">
-                                        <i class="bx bx-check-circle text-success me-2"></i>
-                                        Modify the Group Name to reflect changes
-                                    </li>
-                                    <li class="mb-2">
-                                        <i class="bx bx-check-circle text-success me-2"></i>
-                                        Review all changes before saving
-                                    </li>
+                            <h6 class="text-warning mb-3">
+                                <i class="bx bx-edit me-1"></i>Editing FSLI
+                            </h6>
+                            <p class="small">
+                                You are updating a Financial Statement Line Item. Changes will affect how accounts are organized and displayed on reports.
+                            </p>
+
+                            <hr>
+
+                            <h6 class="text-warning mb-3">
+                                <i class="bx bx-error-circle me-1"></i>Important Considerations
+                            </h6>
+                            <ul class="small">
+                                <li class="mb-2">
+                                    <strong>Main Group:</strong> Changing the main group will change the account class hierarchy
+                                </li>
+                                <li class="mb-2">
+                                    <strong>Group Code:</strong> Update if you need a new unique identifier
+                                </li>
+                                <li class="mb-2">
+                                    <strong>Name Changes:</strong> Will reflect on all financial statements
+                                </li>
+                                <li class="mb-2">
+                                    <strong>Existing Accounts:</strong> All chart accounts under this FSLI will be affected
+                                </li>
+                            </ul>
+
+                            <hr>
+
+                            <h6 class="text-warning mb-3">
+                                <i class="bx bx-shield-quarter me-1"></i>Best Practices
+                            </h6>
+                            <div class="small">
+                                <ul>
+                                    <li class="mb-2">Review the main group selection carefully</li>
+                                    <li class="mb-2">Ensure the name accurately reflects the line item</li>
+                                    <li class="mb-2">Check if any chart accounts are linked</li>
+                                    <li class="mb-2">Coordinate changes with your accounting team</li>
                                 </ul>
                             </div>
 
                             <hr>
 
-                            <div class="mb-4">
-                                <h6 class="text-warning"><i class="bx bx-error-circle me-2"></i>Important Notes</h6>
-                                <ul class="list-unstyled mb-0">
-                                    <li class="mb-2">
-                                        <i class="bx bx-info-circle text-info me-2"></i>
-                                        Changing the Account Class may affect existing chart accounts
-                                    </li>
-                                    <li class="mb-2">
-                                        <i class="bx bx-info-circle text-info me-2"></i>
-                                        Group names must remain unique within the class
-                                    </li>
-                                    <li class="mb-2">
-                                        <i class="bx bx-info-circle text-info me-2"></i>
-                                        Changes will affect all accounts in this group
-                                    </li>
-                                    <li class="mb-2">
-                                        <i class="bx bx-info-circle text-info me-2"></i>
-                                        Review impact on financial reports before saving
-                                    </li>
-                                </ul>
+                            <h6 class="text-warning mb-3">
+                                <i class="bx bx-sitemap me-1"></i>Current Hierarchy
+                            </h6>
+                            <div class="small mb-3">
+                                <div class="mb-2">
+                                    <strong>Account Class:</strong><br>
+                                    <span class="text-muted">{{ $accountClassGroup->accountClass->name ?? 'N/A' }}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Main Group:</strong><br>
+                                    <span class="text-muted">{{ $accountClassGroup->mainGroup->name ?? 'N/A' }}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Current FSLI:</strong><br>
+                                    <span class="text-muted">{{ $accountClassGroup->name }}</span>
+                                </div>
                             </div>
 
                             <hr>
 
-                            <div class="mb-3">
-                                <h6 class="text-success"><i class="bx bx-bookmark me-2"></i>Account Class Groups (FSLI)</h6>
-                                <p class="text-muted small mb-2">
-                                    Account Class Groups are Financial Statement Line Items (FSLI) that organize chart accounts into meaningful categories for financial reporting.
-                                </p>
-                                <p class="text-muted small mb-0">
-                                    They help structure your chart of accounts for accurate financial statement generation.
-                                </p>
-                            </div>
-
-                            <hr>
-
-                            <div class="mb-3">
-                                <h6 class="text-secondary"><i class="bx bx-calculator me-2"></i>Quick Tips</h6>
-                                <ul class="list-unstyled mb-0 small">
-                                    <li class="mb-2">
-                                        <strong>Group Code:</strong> Use consistent numbering for easy reference
-                                    </li>
-                                    <li class="mb-2">
-                                        <strong>Group Name:</strong> Use standard accounting terminology
-                                    </li>
-                                    <li class="mb-0">
-                                        <strong>Account Class:</strong> Determines the code range for accounts
-                                    </li>
-                                </ul>
+                            <div class="alert alert-warning small mb-0">
+                                <i class="bx bx-info-circle me-1"></i>
+                                <strong>Note:</strong> Changes to this FSLI will be reflected immediately on all financial statements and reports.
                             </div>
                         </div>
                     </div>

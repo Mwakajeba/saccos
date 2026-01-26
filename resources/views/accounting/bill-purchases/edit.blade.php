@@ -8,6 +8,7 @@
         <!-- Breadcrumb -->
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Purchases', 'url' => route('purchases.index'), 'icon' => 'bx bx-purchase-tag'],
             ['label' => 'Bill Purchases', 'url' => route('accounting.bill-purchases'), 'icon' => 'bx bx-receipt'],
             ['label' => 'Bill #' . $billPurchase->reference, 'url' => route('accounting.bill-purchases.show', $billPurchase), 'icon' => 'bx bx-show'],
             ['label' => 'Edit Bill', 'url' => '#', 'icon' => 'bx bx-edit']
@@ -111,6 +112,34 @@
                                     @error('note') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
                             </div>
+
+                            <!-- VAT Section -->
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">VAT Mode</label>
+                                    <select name="vat_mode" class="form-select @error('vat_mode') is-invalid @enderror">
+                                        @php
+                                            $selectedVatMode = old('vat_mode', $billPurchase->vat_mode ?? 'NONE');
+                                        @endphp
+                                        <option value="NONE" {{ $selectedVatMode == 'NONE' ? 'selected' : '' }}>None</option>
+                                        <option value="EXCLUSIVE" {{ $selectedVatMode == 'EXCLUSIVE' ? 'selected' : '' }}>Exclusive</option>
+                                        <option value="INCLUSIVE" {{ $selectedVatMode == 'INCLUSIVE' ? 'selected' : '' }}>Inclusive</option>
+                                    </select>
+                                    @error('vat_mode') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                    <small class="form-text text-muted">
+                                        <strong>Exclusive:</strong> VAT separate from base<br>
+                                        <strong>Inclusive:</strong> VAT included in total<br>
+                                        <strong>None:</strong> No VAT
+                                    </small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">VAT Rate (%)</label>
+                                    <input type="number" name="vat_rate" class="form-control @error('vat_rate') is-invalid @enderror" 
+                                           value="{{ old('vat_rate', $billPurchase->vat_rate ?? get_default_vat_rate()) }}" 
+                                           step="0.01" min="0" max="100" placeholder="0.00">
+                                    @error('vat_rate') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -203,14 +232,6 @@
 @push('scripts')
 <script>
 $(document).ready(function() {
-    // Initialize Select2 for existing dropdowns
-    $('.select2-single').select2({
-        placeholder: 'Select an option',
-        allowClear: true,
-        width: '100%',
-        theme: 'bootstrap-5'
-    });
-    
     let lineItemIndex = {{ $billPurchase->billItems->count() }};
 
     // Add line item
@@ -247,17 +268,6 @@ $(document).ready(function() {
             </div>
         `;
         $('#lineItemsContainer').append(newLineItem);
-        
-        // Initialize Select2 for the newly added dropdown
-        setTimeout(function() {
-            $('#lineItemsContainer .debit-account.select2-single').last().select2({
-                placeholder: 'Select account',
-                allowClear: true,
-                width: '100%',
-                theme: 'bootstrap-5'
-            });
-        }, 100);
-        
         lineItemIndex++;
         updateRemoveButtons();
     });

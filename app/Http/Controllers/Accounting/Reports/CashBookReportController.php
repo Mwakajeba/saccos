@@ -28,11 +28,23 @@ class CashBookReportController extends Controller
         $bankAccountId = $request->get('bank_account_id', 'all');
         $branchId = $request->get('branch_id', 'all');
 
-        // Get bank accounts for filter
+        // Get user's assigned branches for scoping
+        $assignedBranchIds = $user->branches()
+            ->where('branches.company_id', $company->id)
+            ->pluck('branches.id')
+            ->toArray();
+
+        // Get bank accounts for filter, respecting branch scope
         $bankAccounts = DB::table('bank_accounts')
             ->join('chart_accounts', 'bank_accounts.chart_account_id', '=', 'chart_accounts.id')
             ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
             ->where('account_class_groups.company_id', $company->id)
+            ->when(!empty($assignedBranchIds), function ($query) use ($assignedBranchIds) {
+                $query->where(function ($q) use ($assignedBranchIds) {
+                    $q->where('bank_accounts.is_all_branches', true)
+                      ->orWhereIn('bank_accounts.branch_id', $assignedBranchIds);
+                });
+            })
             ->select('bank_accounts.*', 'chart_accounts.account_name')
             ->get();
 
@@ -64,17 +76,111 @@ class CashBookReportController extends Controller
         $user = Auth::user();
         $company = $user->company;
 
+        // Get chart_account_id(s) from bank_accounts based on filter
+        $chartAccountIds = [];
+        if ($bankAccountId && $bankAccountId != 'all') {
+            // First, get the chart_account_id directly from bank_accounts
+            $bankAccount = DB::table('bank_accounts')
+                ->where('bank_accounts.id', $bankAccountId)
+                ->select('bank_accounts.chart_account_id', 'bank_accounts.name as bank_name')
+                ->first();
+         
+                
+            
+            if ($bankAccount) {
+                // Verify the chart_account belongs to this company
+                $chartAccount = DB::table('chart_accounts')
+                    ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+                    ->where('chart_accounts.id', $bankAccount->chart_account_id)
+                    ->where('account_class_groups.company_id', $company->id)
+                    ->select('chart_accounts.id', 'chart_accounts.account_name')
+                    ->first();
+                
+                if ($chartAccount) {
+                    $chartAccountIds = [$bankAccount->chart_account_id];
+                } else {
+                   
+                    
+                    return [
+                        'opening_balance' => 0,
+                        'transactions' => [],
+                        'total_receipts' => 0,
+                        'total_payments' => 0,
+                        'final_balance' => 0,
+                        'start_date' => $startDate,
+                        'end_date' => $endDate,
+                        'bank_account_id' => $bankAccountId,
+                        'branch_id' => $branchId
+                    ];
+                }
+            } else {
+               
+                return [
+                    'opening_balance' => 0,
+                    'transactions' => [],
+                    'total_receipts' => 0,
+                    'total_payments' => 0,
+                    'final_balance' => 0,
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
+                    'bank_account_id' => $bankAccountId,
+                    'branch_id' => $branchId
+                ];
+            }
+        } else {
+            // Get all chart_account_ids from bank_accounts for this company,
+            // respecting branch scope (all branches vs specific branch)
+            $assignedBranchIds = Auth::user()->branches()
+                ->pluck('branches.id')
+                ->toArray();
+
+            $bankAccountQuery = DB::table('bank_accounts')
+                ->join('chart_accounts', 'bank_accounts.chart_account_id', '=', 'chart_accounts.id')
+                ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+                ->where('account_class_groups.company_id', $company->id);
+
+            if (!empty($assignedBranchIds)) {
+                $bankAccountQuery->where(function ($q) use ($assignedBranchIds) {
+                    $q->where('bank_accounts.is_all_branches', true)
+                      ->orWhereIn('bank_accounts.branch_id', $assignedBranchIds);
+                });
+            }
+
+            $chartAccountIds = $bankAccountQuery
+                ->pluck('bank_accounts.chart_account_id')
+                ->unique()
+                ->toArray();
+        }
+
+        // If no bank accounts found, return empty data
+        if (empty($chartAccountIds)) {
+            
+            
+            return [
+                'opening_balance' => 0,
+                'transactions' => [],
+                'total_receipts' => 0,
+                'total_payments' => 0,
+                'final_balance' => 0,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'bank_account_id' => $bankAccountId,
+                'branch_id' => $branchId
+            ];
+        }
+        
+    
+        
+
         // Get opening balance (transactions before start date)
+        // Filter gl_transactions by chart_account_id(s) from bank accounts
+        $startDateWithTime = $startDate . ' 00:00:00';
         $openingBalanceQuery = DB::table('gl_transactions')
             ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
             ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
-            ->join('bank_accounts', 'chart_accounts.id', '=', 'bank_accounts.chart_account_id')
             ->where('account_class_groups.company_id', $company->id)
-            ->where('gl_transactions.date', '<', $startDate);
-
-        if ($bankAccountId && $bankAccountId != 'all') {
-            $openingBalanceQuery->where('bank_accounts.id', $bankAccountId);
-        }
+            ->whereIn('gl_transactions.chart_account_id', $chartAccountIds)
+            ->where('gl_transactions.date', '<', $startDateWithTime);
 
         $assignedBranchIds = Auth::user()->branches()->pluck('branches.id')->toArray();
         if ($branchId === 'all') {
@@ -95,16 +201,20 @@ class CashBookReportController extends Controller
         ')->first()->opening_balance ?? 0;
 
         // Get transactions for the period
+        // Filter gl_transactions by chart_account_id(s) from bank accounts
+        // Use whereDate or extend end date to include full day (23:59:59)
+        $endDateWithTime = $endDate . ' 23:59:59';
+        $startDateWithTime = $startDate . ' 00:00:00';
+   
+        
         $transactionsQuery = DB::table('gl_transactions')
             ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
             ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
-            ->join('bank_accounts', 'chart_accounts.id', '=', 'bank_accounts.chart_account_id')
+            ->leftJoin('bank_accounts', 'chart_accounts.id', '=', 'bank_accounts.chart_account_id')
             ->where('account_class_groups.company_id', $company->id)
-            ->whereBetween('gl_transactions.date', [$startDate, $endDate]);
-
-        if ($bankAccountId && $bankAccountId != 'all') {
-            $transactionsQuery->where('bank_accounts.id', $bankAccountId);
-        }
+            ->whereIn('gl_transactions.chart_account_id', $chartAccountIds)
+            ->where('gl_transactions.date', '>=', $startDateWithTime)
+            ->where('gl_transactions.date', '<=', $endDateWithTime);
 
         if ($branchId === 'all') {
             if (!empty($assignedBranchIds)) {
@@ -122,13 +232,94 @@ class CashBookReportController extends Controller
         ->select(
             'gl_transactions.*',
             'chart_accounts.account_name',
+            'chart_accounts.account_code',
             'bank_accounts.name as bank_account_name',
             'bank_accounts.account_number',
+            'bank_accounts.id as bank_account_id',
             'customers.name as customer_name'
         )
         ->orderBy('gl_transactions.date', 'asc')
         ->orderBy('gl_transactions.id', 'asc')
         ->get();
+        
+        \Log::info('Cash Book - Transactions Query Result', [
+            'transactions_count' => $transactions->count(),
+            'chart_account_ids' => $chartAccountIds,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'branch_id' => $branchId,
+            'sample_transactions' => $transactions->take(5)->map(function($t) {
+                return [
+                    'id' => $t->id,
+                    'date' => $t->date,
+                    'chart_account_id' => $t->chart_account_id,
+                    'transaction_type' => $t->transaction_type,
+                    'transaction_id' => $t->transaction_id,
+                    'nature' => $t->nature,
+                    'amount' => $t->amount,
+                    'branch_id' => $t->branch_id
+                ];
+            })
+        ]);
+
+        // Debug: Check for POS sale transactions that should appear
+        $debugEndDateWithTime = $endDate . ' 23:59:59';
+        $debugPosSales = DB::table('gl_transactions')
+            ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
+            ->leftJoin('bank_accounts', 'chart_accounts.id', '=', 'bank_accounts.chart_account_id')
+            ->where('gl_transactions.transaction_type', 'pos_sale')
+            ->where('gl_transactions.date', '>=', $startDate)
+            ->where('gl_transactions.date', '<=', $debugEndDateWithTime)
+            ->select(
+                'gl_transactions.id',
+                'gl_transactions.transaction_id',
+                'gl_transactions.chart_account_id',
+                'gl_transactions.date',
+                'gl_transactions.nature',
+                'gl_transactions.amount',
+                'gl_transactions.branch_id',
+                'gl_transactions.customer_id',
+                'chart_accounts.account_name',
+                'chart_accounts.account_code',
+                'bank_accounts.id as bank_account_id',
+                'bank_accounts.name as bank_account_name',
+                'bank_accounts.account_number'
+            )
+            ->get();
+
+        // Check specifically for the POS sale transaction with account code 1003
+        $debugAccount1003 = DB::table('gl_transactions')
+            ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
+            ->leftJoin('bank_accounts', 'chart_accounts.id', '=', 'bank_accounts.chart_account_id')
+            ->where('gl_transactions.transaction_type', 'pos_sale')
+            ->where('chart_accounts.account_code', '1003')
+            ->where('gl_transactions.date', '>=', $startDate)
+            ->where('gl_transactions.date', '<=', $debugEndDateWithTime)
+            ->select(
+                'gl_transactions.id',
+                'gl_transactions.transaction_id',
+                'gl_transactions.chart_account_id',
+                'chart_accounts.id as chart_account_table_id',
+                'chart_accounts.account_code',
+                'chart_accounts.account_name',
+                'bank_accounts.id as bank_account_id',
+                'bank_accounts.chart_account_id as bank_account_chart_account_id',
+                'bank_accounts.name as bank_account_name'
+            )
+            ->get();
+
+        \Log::info('Cash Book Report Query Debug', [
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'bank_account_id' => $bankAccountId,
+            'branch_id' => $branchId,
+            'transactions_count' => $transactions->count(),
+            'pos_sales_count' => $transactions->where('transaction_type', 'pos_sale')->count(),
+            'debug_pos_sales_count' => $debugPosSales->count(),
+            'debug_pos_sales' => $debugPosSales->toArray(),
+            'debug_account_1003' => $debugAccount1003->toArray(),
+            'sample_pos_sale' => $transactions->where('transaction_type', 'pos_sale')->first(),
+        ]);
 
         // Process transactions
         $processedTransactions = [];
@@ -149,11 +340,47 @@ class CashBookReportController extends Controller
             $reference = '';
             $transactionNo = $transaction->transaction_type . '-' . $transaction->transaction_id;
 
+            // Enhance description for POS sales
+            $customerName = $transaction->customer_name ?? 'N/A';
+            if ($transaction->transaction_type === 'pos_sale') {
+                try {
+                    $posSale = \App\Models\Sales\PosSale::find($transaction->transaction_id);
+                    if ($posSale) {
+                        // Use the POS sale number in the description
+                        // For walk-in customers, customer_id is null, so use customer_name from pos_sales table
+                        if ($posSale->customer_id) {
+                            $customerName = $posSale->customer ? $posSale->customer->name : 'Unknown Customer';
+                        } else {
+                            // Walk-in customer - use customer_name from pos_sales table or default
+                            $customerName = $posSale->customer_name ?? 'Walk-in Customer';
+                        }
+                        $description = "POS sale #{$posSale->pos_number} - {$customerName}";
+                        $reference = $posSale->pos_number;
+                    } else {
+                        // POS sale not found, but keep the description from GL transaction
+                        $customerName = $transaction->customer_name ?? 'Walk-in Customer';
+                    }
+                } catch (\Exception $e) {
+                    // If POS sale not found, use the existing description
+                    \Log::warning('POS Sale not found for GL transaction', [
+                        'transaction_id' => $transaction->transaction_id,
+                        'gl_transaction_id' => $transaction->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    $customerName = $transaction->customer_name ?? 'Walk-in Customer';
+                }
+            }
+
+            // Get bank account name and account number (should always be present since we join with bank_accounts)
+            $bankAccountName = $transaction->bank_account_name ?? 'N/A';
+            $accountNumber = $transaction->account_number ?? '';
+
             $processedTransactions[] = [
                 'date' => $transaction->date,
                 'description' => $description,
-                'customer_name' => $transaction->customer_name ?? 'N/A',
-                'bank_account' => $transaction->bank_account_name,
+                'customer_name' => $customerName,
+                'bank_account' => $bankAccountName,
+                'account_number' => $accountNumber,
                 'transaction_no' => $transactionNo,
                 'reference_no' => $reference,
                 'debit' => $debit,
@@ -223,6 +450,7 @@ class CashBookReportController extends Controller
             'branchName' => $branchName
         ]);
 
+        $pdf->setPaper('A4', 'landscape');
         $filename = 'cash_book_' . $startDate . '_to_' . $endDate . '.pdf';
         return $pdf->download($filename);
     }

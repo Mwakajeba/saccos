@@ -37,6 +37,12 @@ class EquityCategorySeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+             [
+                'name' => 'Revaluation Reverse',
+                'description' => 'Equity transactions related to revaluation reversals',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ];
 
         foreach ($equityCategories as $category) {

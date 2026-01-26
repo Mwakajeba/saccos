@@ -13,34 +13,37 @@ class CashCollateralTypeSeeder extends Seeder
      */
     public function run(): void
     {
+        $customerDepositAccount = DB::table('chart_accounts')->where('account_code', '2001')->first();
+        $chartAccountId = $customerDepositAccount ? $customerDepositAccount->id : null;
+
         $cashCollateralTypes = [
             [
                 'name' => 'Customer Operation Account',
-                'chart_account_id' => 8, // Customer operation account (2010)
+                'chart_account_id' => $chartAccountId,
                 'description' => 'Customer Operation Account performing various customer operations and transaction management',
                 'is_active' => true,
             ],
             [
                 'name' => 'Savings Account',
-                'chart_account_id' => 8, // Customer operation account (2010)
+                'chart_account_id' => $chartAccountId,
                 'description' => 'Customer savings account for long-term deposits and savings management',
                 'is_active' => true,
             ],
             [
                 'name' => 'Fixed Deposit Account',
-                'chart_account_id' => 8, // Customer operation account (2010)
+                'chart_account_id' => $chartAccountId,
                 'description' => 'Fixed deposit account with predetermined interest rates and maturity periods',
                 'is_active' => true,
             ],
             [
                 'name' => 'Current Account',
-                'chart_account_id' => 8, // Customer operation account (2010)
+                'chart_account_id' => $chartAccountId,
                 'description' => 'Current account for day-to-day banking operations and transactions',
                 'is_active' => true,
             ],
             [
                 'name' => 'Security Deposit',
-                'chart_account_id' => 8, // Customer operation account (2010)
+                'chart_account_id' => $chartAccountId,
                 'description' => 'Security deposit account for loan collateral and guarantee purposes',
                 'is_active' => true,
             ],
