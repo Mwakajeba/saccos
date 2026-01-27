@@ -3549,6 +3549,10 @@ class LoanController extends Controller
 
             // Validate CSV structure
             $expectedHeaders = ['customer_no', 'customer_name', 'group_id', 'group_name', 'amount', 'interest', 'period', 'date_applied', 'sector', 'amount_paid'];
+            
+            info("headers of the csv ", [$headers]);
+            info("expected headers",[$expectedHeaders]);
+
             if (array_diff($expectedHeaders, $headers)) {
                 return redirect()->back()->withErrors(['csv_file' => 'Invalid CSV format. Please download the template and use it.']);
             }
