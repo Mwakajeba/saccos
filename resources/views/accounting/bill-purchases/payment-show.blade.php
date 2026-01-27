@@ -6,18 +6,15 @@
 <div class="page-wrapper">
     <div class="page-content">
         <!-- Breadcrumb -->
-        <div class="page-breadcrumb d-none d-sm-flex align-items-center mb-3">
-            <div class="breadcrumb-title pe-3">Accounting</div>
-            <div class="ps-3">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb mb-0 p-0">
-                        <li class="breadcrumb-item"><a href="{{ route('dashboard') }}"><i class="bx bx-home-alt"></i></a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('accounting.bill-purchases') }}">Bill Purchases</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Payment Details</li>
-                    </ol>
-                </nav>
-            </div>
-        </div>
+        <x-breadcrumbs-with-icons :links="[
+            ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Purchases', 'url' => route('purchases.index'), 'icon' => 'bx bx-purchase-tag'],
+            ['label' => 'Bill Purchases', 'url' => route('accounting.bill-purchases'), 'icon' => 'bx bx-receipt'],
+            ['label' => $bill ? 'Bill #' . $bill->reference : 'Bill Purchases', 'url' => $bill ? route('accounting.bill-purchases.show', $bill) : route('accounting.bill-purchases'), 'icon' => 'bx bx-show'],
+            ['label' => 'Payment Details', 'url' => '#', 'icon' => 'bx bx-money']
+        ]" />
+        <h6 class="mb-0 text-uppercase">BILL PAYMENT DETAILS</h6>
+        <hr />
 
         <!-- Page Header -->
         <div class="row">
@@ -173,9 +170,15 @@
                                 @csrf
                                 @method('DELETE')
                             </form>
-                            <a href="{{ route('accounting.bill-purchases.show', $payment->reference) }}" class="btn btn-outline-secondary">
-                                <i class="bx bx-arrow-back me-1"></i> Back to Bill
-                            </a>
+                            @if($bill)
+                                <a href="{{ route('accounting.bill-purchases.show', $bill) }}" class="btn btn-outline-secondary">
+                                    <i class="bx bx-arrow-back me-1"></i> Back to Bill
+                                </a>
+                            @else
+                                <a href="{{ route('accounting.bill-purchases') }}" class="btn btn-outline-secondary">
+                                    <i class="bx bx-arrow-back me-1"></i> Back to Bills
+                                </a>
+                            @endif
                         </div>
                     </div>
                 </div>

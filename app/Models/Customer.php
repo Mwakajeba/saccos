@@ -14,11 +14,12 @@ class Customer extends Model
         'customerNo',
         'reference',
         'name',
-        'description', // Added description
+        'description',
         'work',
         'workAddress',
         'phone1',
         'phone2',
+        'email',
         'registrar',
         'idType',
         'idNumber',
@@ -28,6 +29,7 @@ class Customer extends Model
         'branch_id',
         'company_id',
         'sex',
+        'marital_status',
         'password',
         'dateRegistered',
         'relation',
@@ -36,6 +38,15 @@ class Customer extends Model
         'has_cash_collateral',
         'category',
         'status',
+        'employment_status',
+        'street',
+        'number_of_spouse',
+        'number_of_children',
+        'monthly_income',
+        'monthly_expenses',
+        'bank_name',
+        'bank_account',
+        'bank_account_name',
     ];
 
     protected $hidden = [

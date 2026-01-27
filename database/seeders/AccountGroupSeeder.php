@@ -15,161 +15,43 @@ class AccountGroupSeeder extends Seeder
      */
     public function run(): void
     {
-        $groups = [
-            [
-                'class_id' => 1,
-                'company_id' => 1,
-                'group_code' => '1000',
-                'name' => 'Cash and Bank',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 1,
-                'company_id' => 1,
-                'group_code' => '1100',
-                'name' => 'Loan Receivables',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 1,
-                'company_id' => 1,
-                'group_code' => '1200',
-                'name' => 'Interest Receivables',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 1,
-                'company_id' => 1,
-                'group_code' => '1300',
-                'name' => 'Other Receivables',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 2,
-                'company_id' => 1,
-                'group_code' => '2000',
-                'name' => 'Cash Deposit',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 2,
-                'company_id' => 1,
-                'group_code' => '2100',
-                'name' => 'Other payables',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 2,
-                'company_id' => 1,
-                'group_code' => '2200',
-                'name' => 'Hisa za Wanachama',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 2,
-                'company_id' => 1,
-                'group_code' => '2300',
-                'name' => 'Amana za Wanachama',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 2,
-                'company_id' => 1,
-                'group_code' => '2400',
-                'name' => 'Akiba za Wanachama',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 5,
-                'company_id' => 1,
-                'group_code' => '3000',
-                'name' => 'Retained Earnings',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 5,
-                'company_id' => 1,
-                'group_code' => '3100',
-                'name' => 'Business Capital',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 3,
-                'company_id' => 1,
-                'group_code' => '4000',
-                'name' => 'Interest Income',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 3,
-                'company_id' => 1,
-                'group_code' => '4100',
-                'name' => 'Other Income',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 4,
-                'company_id' => 1,
-                'group_code' => '5000',
-                'name' => 'Loan Loss Provision',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 4,
-                'company_id' => 1,
-                'group_code' => '5100',
-                'name' => 'Operating Expenses',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 4,
-                'company_id' => 1,
-                'group_code' => '5200',
-                'name' => 'Administrative Expenses',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 4,
-                'company_id' => 1,
-                'group_code' => '5300',
-                'name' => 'Interest Expenses',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'class_id' => 4,
-                'company_id' => 1,
-                'group_code' => '5400',
-                'name' => 'Finance Expenses',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
+        $accountGroups = [
+            // Assets (Class ID: 1)
+            ['id' => 1, 'name' => 'Current Assets', 'class_id' => 1, 'group_code' => 'CA'],
+            ['id' => 2, 'name' => 'Non Current Assets', 'class_id' => 1, 'group_code' => 'NCA'],
+            
+            // Liabilities (Class ID: 2)
+            ['id' => 5, 'name' => 'Current Liabilities', 'class_id' => 2, 'group_code' => 'CL'],
+            ['id' => 6, 'name' => 'Non Current Liabilities', 'class_id' => 2, 'group_code' => 'NCL'],
+            
+            // Equity (Class ID: 5)
+            ['id' => 7, 'name' => 'Share Capital', 'class_id' => 5, 'group_code' => 'SC'],
+            ['id' => 8, 'name' => 'Retained Earnings', 'class_id' => 5, 'group_code' => 'RE'],
+            ['id' => 9, 'name' => 'Other Equity', 'class_id' => 5, 'group_code' => 'OEQ'],
+            
+            // Revenue (Class ID: 3)
+            ['id' => 10, 'name' => 'Sales Revenue', 'class_id' => 3, 'group_code' => 'SR'],
+            ['id' => 11, 'name' => 'Other Income', 'class_id' => 3, 'group_code' => 'OI'],
+            ['id' => 12, 'name' => 'Interest Income', 'class_id' => 3, 'group_code' => 'II'],
+            
+            // Expenses (Class ID: 4)
+            ['id' => 13, 'name' => 'Cost of Goods Sold', 'class_id' => 4, 'group_code' => 'COGS'],
+            ['id' => 14, 'name' => 'Operating Expenses', 'class_id' => 4, 'group_code' => 'OPEX'],
+            ['id' => 15, 'name' => 'Administrative Expenses', 'class_id' => 4, 'group_code' => 'ADMIN'],
+            ['id' => 16, 'name' => 'Financial Expenses', 'class_id' => 4, 'group_code' => 'FIN'],
         ];
 
-        // Insert or update each group (prevents duplicate entry errors)
-        foreach ($groups as $group) {
+        foreach ($accountGroups as $group) {
             DB::table('account_class_groups')->updateOrInsert(
+                ['id' => $group['id']],
                 [
+                    'class_id' => $group['class_id'],
+                    'company_id' => 1, // Default company_id for seeding
+                    'group_code' => $group['group_code'],
                     'name' => $group['name'],
-                    'company_id' => $group['company_id']
-                ],
-                $group
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
             );
         }
     }

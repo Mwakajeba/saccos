@@ -649,6 +649,44 @@
         })();
     </script>
 
+    <!-- Prevent double submission globally and show processing text on buttons -->
+    <script>
+        (function() {
+            function setButtonProcessingText(button) {
+                const originalHtml = button.getAttribute('data-original-html') || button.innerHTML;
+                button.setAttribute('data-original-html', originalHtml);
+                const processingText = button.getAttribute('data-processing-text') || 'Creating...';
+                button.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${processingText}`;
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                document.querySelectorAll('form').forEach(function(form) {
+                    // Skip forms explicitly opting out
+                    if (form.classList.contains('no-global-submit-guard')) return;
+
+                    form.addEventListener('submit', function (e) {
+                        // If already submitted, block
+                        if (form.getAttribute('data-submitted') === 'true') {
+                            e.preventDefault();
+                            return false;
+                        }
+
+                        // Mark as submitted
+                        form.setAttribute('data-submitted', 'true');
+
+                        // Disable all submit buttons and show processing text
+                        const submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+                        submitButtons.forEach(function(btn) {
+                            if (btn.disabled) return;
+                            btn.disabled = true;
+                            // Set context-aware text if provided via data attribute
+                            setButtonProcessingText(btn);
+                        });
+                    }, { capture: true });
+                });
+            });
+        })();
+    </script>
     @stack('scripts')
 </body>
 

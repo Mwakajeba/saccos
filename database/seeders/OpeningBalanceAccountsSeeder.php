@@ -15,7 +15,7 @@ class OpeningBalanceAccountsSeeder extends Seeder
     public function run(): void
     {
         // Get Retained Earnings chart account
-        $retainedEarningsAccount = ChartAccount::where('account_code', '3000')
+        $retainedEarningsAccount = ChartAccount::where('account_code', '3001')
             ->where('account_name', 'Retained Earnings')
             ->first();
 

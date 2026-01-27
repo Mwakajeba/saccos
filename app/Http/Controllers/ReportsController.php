@@ -41,4 +41,11 @@ class ReportsController extends Controller
         
         return view('reports.shares.index', compact('user'));
     }
+
+    public function contributions()
+    {
+        $user = Auth::user();
+        
+        return view('reports.contributions.index', compact('user'));
+    }
 } 

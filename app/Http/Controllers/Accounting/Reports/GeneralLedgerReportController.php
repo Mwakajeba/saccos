@@ -352,6 +352,7 @@ class GeneralLedgerReportController extends Controller
             'branchName' => $branchName
         ]);
 
+        $pdf->setPaper('A4', 'landscape');
         $filename = 'general_ledger_' . $startDate . '_to_' . $endDate . '_' . $reportType . '.pdf';
         return $pdf->download($filename);
     }

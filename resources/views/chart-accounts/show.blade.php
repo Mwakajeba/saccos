@@ -11,6 +11,7 @@
             <!-- Breadcrumbs -->
             <x-breadcrumbs-with-icons :links="[ 
                 ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+                ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
                 ['label' => 'Chart of Accounts', 'url' => route('accounting.chart-accounts.index'), 'icon' => 'bx bx-spreadsheet'],
                 ['label' => 'Account Details', 'url' => '#', 'icon' => 'bx bx-book-open']
             ]" />
@@ -26,12 +27,10 @@
                             </h4>
                         </div>
                         <div class="d-flex gap-2">
-                            @can('edit chart account')
                             <a href="{{ route('accounting.chart-accounts.edit', Hashids::encode($chartAccount->id)) }}"
                                 class="btn btn-primary">
                                 <i class="bx bx-edit me-1"></i> Edit Account
                             </a>
-                            @endcan
                             <a href="{{ route('accounting.chart-accounts.index') }}" class="btn btn-outline-secondary">
                                 <i class="bx bx-arrow-back me-1"></i> Back to List
                             </a>
@@ -103,7 +102,7 @@
                                     </div>
                                 </div>
 
-                                <div class="col-6">
+                                <div class="col-12">
                                     <div class="d-flex align-items-center mb-3">
                                         <div class="bg-light rounded-circle p-2 me-3">
                                             <i class="bx bx-bookmark text-danger fs-5"></i>
@@ -111,22 +110,6 @@
                                         <div>
                                             <small class="text-muted d-block">Account Name</small>
                                             <span class="fw-bold text-dark fs-5">{{ $chartAccount->account_name }}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-
-                                <div class="col-md-6">
-                                    <div class="d-flex align-items-center mb-3">
-                                        <div class="bg-light rounded-circle p-2 me-3">
-                                            <i class="bx bx-money text-success fs-5"></i>
-                                        </div>
-                                        <div>
-                                            <small class="text-muted d-block">Account Balance</small>
-                                            <span class="fw-bold text-dark fs-6 {{ $accountBalance >= 0 ? 'text-success' : 'text-danger' }}">
-                                                {{ number_format($accountBalance, 2) }}
-                                                <small class="text-muted ms-1">TZS</small>
-                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -230,13 +213,10 @@
                         </div>
                         <div class="card-body p-3">
                             <div class="d-grid gap-2">
-                                @can('edit chart account')
                                 <a href="{{ route('accounting.chart-accounts.edit', Hashids::encode($chartAccount->id)) }}"
                                     class="btn btn-outline-primary btn-sm">
                                     <i class="bx bx-edit me-1"></i> Edit Account
                                 </a>
-                                @endcan
-                                @can('delete chart account')
                                 <form
                                     action="{{ route('accounting.chart-accounts.destroy', Hashids::encode($chartAccount->id)) }}"
                                     method="POST" class="d-inline delete-form">
@@ -247,7 +227,6 @@
                                         <i class="bx bx-trash me-1"></i> Delete Account
                                     </button>
                                 </form>
-                                @endcan
                             </div>
                         </div>
                     </div>

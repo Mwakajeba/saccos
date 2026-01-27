@@ -14,11 +14,23 @@ class ReceiptItem extends Model
         'receipt_id',
         'chart_account_id',
         'amount',
+        'wht_treatment',
+        'wht_rate',
+        'wht_amount',
+        'base_amount',
+        'net_receivable',
+        'vat_mode',
+        'vat_amount',
         'description',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'wht_rate' => 'decimal:2',
+        'wht_amount' => 'decimal:2',
+        'base_amount' => 'decimal:2',
+        'net_receivable' => 'decimal:2',
+        'vat_amount' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -107,7 +107,205 @@ class PermissionGroupsSeeder extends Seeder
                 'view graphs',
                 'view recent activities'
             ],
+            'customers' => [
+                'view customers',
+                'create customer',
+                'edit customer',
+                'delete customer',
+                'view customer profile',
+                'manage customer documents',
+                'view customer history',
+                'approve customer registration',
+                'view borrowers',
+                'create borrower',
+                'edit borrower',
+                'delete borrower',
+                'view borrower profile',
+                'view guarantors',
+                'create guarantor',
+                'edit guarantor',
+                'delete guarantor',
+                'view guarantor profile'
+            ],
 
+            'loan_management' => [
+                'view loan products',
+                'create loan product',
+                'edit loan product',
+                'delete loan product',
+                'view loan product details',
+                'deactivate loan product',
+                'manage loan products',
+                'view groups',
+                'create group',
+                'edit group',
+                'delete group',
+                'view group details',
+                'manage group payments',
+                'view loans',
+                'create loan',
+                'edit loan',
+                'delete loan',
+                'view loan details',
+                'manage loan documents',
+                'view loan documents',
+                'calculate loan interest',
+                'generate loan schedule',
+                'process loan payments',
+                'manage loan fees',
+                'view loan history',
+                'view checked loans',
+                'view applied loans',
+                'view approved loans',
+                'view authorized loans',
+                'view defaulted loans',
+                'view rejected loans',
+                'remove guarantor',
+                'add guarantor',
+                'default loan',
+                'approve loan',
+                'reject loan',
+                'disburse loan',
+                'view completed loans'
+            ],
+
+            'cash_collaterals' => [
+                'view cash collateral types',
+                'create cash collateral type',
+                'edit cash collateral type',
+                'delete cash collateral type',
+                'view cash collateral type details',
+                'view cash collaterals',
+                'create cash collateral',
+                'edit cash collateral',
+                'delete cash collateral',
+                'view cash collateral details',
+                'deposit cash collateral',
+                'withdraw cash collateral',
+                'print cash collateral transactions'
+            ],
+
+            'accounting' => [
+                'view account class groups',
+                'create account class group',
+                'edit account class group',
+                'delete account class group',
+                'view account class group details',
+                'view chart accounts',
+                'create chart account',
+                'edit chart account',
+                'delete chart account',
+                'view chart account details',
+                'manage chart of accounts',
+                'view journals',
+                'create journal',
+                'edit journal',
+                'delete journal',
+                'view journal details',
+                'view payment vouchers',
+                'create payment voucher',
+                'edit payment voucher',
+                'delete payment voucher',
+                'view payment voucher details',
+                'view receipt vouchers',
+                'create receipt voucher',
+                'edit receipt voucher',
+                'delete receipt voucher',
+                'view receipt voucher details',
+                'view bank accounts',
+                'create bank account',
+                'edit bank account',
+                'delete bank account',
+                'view bank account details',
+                'manage bank account transactions',
+                'view bank reconciliation',
+                'create bank reconciliation',
+                'edit bank reconciliation',
+                'delete bank reconciliation',
+                'view bank reconciliation details',
+                'perform bank reconciliation',
+                'submit bank reconciliation for approval',
+                'approve bank reconciliation',
+                'reject bank reconciliation',
+                'view bank reconciliation approval history',
+                'view budgets',
+                'create budget',
+                'edit budget',
+                'delete budget',
+                'view budget details',
+                'submit budget for approval',
+                'approve budget',
+                'reject budget',
+                'view budget approval history',
+                'view petty cash units',
+                'view inter-account transfers',
+                'view cashflow forecasts',
+                'view fx rates',
+                'view fx revaluation',
+                'view fx settings',
+                'view accruals prepayments',
+                'view provisions',
+            ],
+              'hr_payroll' => [
+                // HR & Payroll Permissions
+                'view employees',
+                'create employee',
+                'edit employee',
+                'delete employee',
+                'view employee profile',
+                'manage employee documents',
+                'view payrolls',
+                'create payroll',
+                'edit payroll',
+                'delete payroll',
+                'process payroll',
+                'view payslips',
+                'generate payslip',
+                'view leave types',
+                'create leave type',
+                'edit leave type',
+                'delete leave type',
+                'view leave applications',
+                'approve leave application',
+                'reject leave application',
+                'manage leave settings',
+            ],
+            'reports' => [
+                'view reports',
+                'generate reports',
+                'export reports',
+                'view financial reports',
+                'view customer reports',
+                'view loan reports',
+                'view collection reports',
+                'view accounting reports',
+                'view loan portfolio report',
+                'view loan performance report',
+                'view loan delinquency report',
+                'view loan disbursement report',
+                'view loan repayments report',
+                'view loan aging report',
+                'view loan aging installment report',
+                'view loan outstanding report',
+                'view arrears',
+                'view expected vs collected',
+                'view portfolio at risk',
+                'view non perfoming loans',        // Accounting report item-level permissions
+                'view balance sheet report',
+                'view trial balance report',
+                'view income statement report',
+                'view cash book report',
+                'view cash flow report',
+                'view general ledger report',
+                'view expenses summary report',
+                'view accounting notes report',
+                'view changes in equity report',
+                'view fees report',
+                'view penalties report',
+                'view other income report',
+                'view budget report',
+                'view bank reconciliation report',
+            ],
             'settings' => [
                 'view settings',
                 'edit settings',
@@ -136,6 +334,10 @@ class PermissionGroupsSeeder extends Seeder
                 'view role',
                 'create role',
                 'create permission',
+                'view sectors',
+                'create sector',
+                'edit sector',
+                'delete sector',
                 'view permission groups',
                 'create permission group',
                 'edit permission group',
@@ -414,30 +616,30 @@ class PermissionGroupsSeeder extends Seeder
             ]
         ];
 
-        // Update permissions with their groups
-        $updatedCount = 0;
-        foreach ($groupMapping as $group => $permissionNames) {
-            $permissionGroup = PermissionGroup::where('name', $group)->first();
-
-            foreach ($permissionNames as $permissionName) {
-                $permission = Permission::where('name', $permissionName)->first();
-                if ($permission && $permissionGroup) {
-                    $permission->update(['permission_group_id' => $permissionGroup->id]);
-                    $updatedCount++;
-                }
-            }
-        }
-
-        // Set remaining permissions to 'settings' group
-        $settingsGroup = PermissionGroup::where('name', 'settings')->first();
-        if ($settingsGroup) {
-            $remainingPermissions = Permission::whereNull('permission_group_id')->get();
-            foreach ($remainingPermissions as $permission) {
-                $permission->update(['permission_group_id' => $settingsGroup->id]);
-                $updatedCount++;
-            }
-        }
-
-        $this->command->info("Permission groups created and {$updatedCount} permissions assigned to groups.");
-    }
+         // Update permissions with their groups
+         $updatedCount = 0;
+         foreach ($groupMapping as $group => $permissionNames) {
+             $permissionGroup = PermissionGroup::where('name', $group)->first();
+ 
+             foreach ($permissionNames as $permissionName) {
+                 $permission = Permission::where('name', $permissionName)->first();
+                 if ($permission && $permissionGroup) {
+                     $permission->update(['permission_group_id' => $permissionGroup->id]);
+                     $updatedCount++;
+                 }
+             }
+         }
+ 
+         // Set remaining permissions to 'settings' group
+         $settingsGroup = PermissionGroup::where('name', 'settings')->first();
+         if ($settingsGroup) {
+             $remainingPermissions = Permission::whereNull('permission_group_id')->get();
+             foreach ($remainingPermissions as $permission) {
+                 $permission->update(['permission_group_id' => $settingsGroup->id]);
+                 $updatedCount++;
+             }
+         }
+ 
+         $this->command->info("Permission groups created and {$updatedCount} permissions assigned to groups.");
+     }
 }

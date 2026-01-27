@@ -27,6 +27,48 @@ class MenuSeeder extends Seeder
                 'hiddenRoutes' => [],
             ],
 
+            'Accounting' => [
+                'icon' => 'bx bx-calculator',
+                'visibleRoutes' => [
+                    ['name' => 'Accounting Management', 'route' => 'accounting.index'],
+                   
+                ],
+                'hiddenRoutes' => [
+                    'accounting.chart-accounts.create',
+                    'accounting.chart-accounts.edit',
+                    'accounting.chart-accounts.destroy',
+                    'accounting.journals.edit',
+                    'accounting.journals.destroy',
+                    'accounting.journals.create',
+                    'accounting.journals.show',
+                    'accounting.fx-rates.create',
+                    'accounting.fx-rates.edit',
+                    'accounting.fx-rates.import',
+                    'accounting.fx-rates.lock',
+                    'accounting.fx-rates.unlock',
+                    'accounting.fx-rates.process-import',
+                    'accounting.fx-rates.download-sample',
+                    'accounting.fx-rates.get-rate',
+                    'accounting.fx-revaluation.create',
+                    'accounting.fx-revaluation.preview',
+                    'accounting.fx-revaluation.store',
+                    'accounting.fx-revaluation.show',
+                    'accounting.fx-revaluation.reverse',
+                    'accounting.fx-settings.update',
+                    'accounting.accruals-prepayments.create',
+                    'accounting.accruals-prepayments.edit',
+                    'accounting.accruals-prepayments.destroy',
+                    'accounting.accruals-prepayments.show',
+                    'accounting.accruals-prepayments.submit',
+                    'accounting.accruals-prepayments.approve',
+                    'accounting.accruals-prepayments.reject',
+                    'accounting.accruals-prepayments.post-journal',
+                    'accounting.accruals-prepayments.post-all-pending',
+                    'accounting.accruals-prepayments.amortisation-schedule',
+                    'accounting.accruals-prepayments.export-pdf',
+                    'accounting.accruals-prepayments.export-excel'
+                ],
+            ],
             'Customers' => [
                 'icon' => 'bx bx-group',
                 'visibleRoutes' => [
@@ -42,31 +84,6 @@ class MenuSeeder extends Seeder
                     ['name' => 'Complains', 'route' => 'complains.index'],
                 ],
                 'hiddenRoutes' => ['complains.data', 'complains.show', 'complains.edit', 'complains.update'],
-            ],
-            'Accounting' => [
-                'icon' => 'bx bx-calculator',
-                'visibleRoutes' => [
-                    ['name' => 'Accounting', 'route' => 'accounting.index'],
-                ],
-                'hiddenRoutes' => [
-                    'accounting.account-class-groups.index',
-                    'accounting.chart-accounts.index',
-                    'accounting.suppliers.index',
-                    'accounting.journals.index',
-                    'accounting.payment-vouchers.index',
-                    'accounting.receipt-vouchers.index',
-                    'accounting.bank-accounts',
-                    'accounting.bank-reconciliation.index',
-                    'accounting.bill-purchases',
-                    'accounting.budgets.index',
-                    'accounting.chart-accounts.create',
-                    'accounting.chart-accounts.edit',
-                    'accounting.chart-accounts.destroy',
-                    'accounting.journals.edit',
-                    'accounting.journals.destroy',
-                    'accounting.journals.create',
-                    'accounting.journals.show'
-                ],
             ],
              'Contributions' => [
                             'icon' => 'bx bx-donate-heart',
@@ -102,6 +119,61 @@ class MenuSeeder extends Seeder
                 'hiddenRoutes' => ['shares.products.index', 'shares.accounts.index', 'shares.deposits.index', 'shares.withdrawals.index', 'shares.transfers.index'],
             ],
 
+            'Inventory' => [
+                'icon' => 'bx bx-package',
+                'visibleRoutes' => [
+                    ['name' => 'Inventory Management', 'route' => 'inventory.index'],
+                ],
+                'hiddenRoutes' => ['inventory.items.index', 'inventory.items.create', 'inventory.items.edit', 'inventory.items.destroy', 'inventory.items.show', 'inventory.categories.index', 'inventory.categories.create', 'inventory.categories.edit', 'inventory.categories.destroy', 'inventory.movements.index', 'inventory.movements.create', 'inventory.movements.edit', 'inventory.movements.destroy'],
+            ],
+
+            'Assets Management' => [
+                'icon' => 'bx bx-building',
+                'visibleRoutes' => [
+                    ['name' => 'Assets Management', 'route' => 'assets.index'],
+                ],
+                'hiddenRoutes' => [
+                    'assets.depreciation.index',
+                    'assets.depreciation.process',
+                    'assets.depreciation.history',
+                    'assets.depreciation.history.data',
+                    'assets.depreciation.forecast',
+                    'assets.tax-depreciation.index',
+                    'assets.tax-depreciation.process',
+                    'assets.tax-depreciation.history',
+                    'assets.tax-depreciation.history.data',
+                    'assets.tax-depreciation.reports.tra-schedule',
+                    'assets.tax-depreciation.reports.tra-schedule.data',
+                    'assets.tax-depreciation.reports.book-tax-reconciliation',
+                    'assets.tax-depreciation.reports.book-tax-reconciliation.data',
+                    'assets.deferred-tax.index',
+                    'assets.deferred-tax.process',
+                    'assets.deferred-tax.schedule',
+                    'assets.deferred-tax.schedule.data',
+                ],
+            ],
+
+             'Purchases' => [
+                'icon' => 'bx bx-shopping-bag',
+                'visibleRoutes' => [
+                    ['name' => 'Purchases Management', 'route' => 'purchases.index'],
+                ],
+                'hiddenRoutes' => [
+                    'purchases.quotations.index',
+                    'purchases.quotations.create',
+                    'purchases.quotations.edit',
+                    'purchases.quotations.destroy',
+                    'purchases.quotations.show'
+                ],
+            ],
+
+            'HR & Payroll' => [
+                'icon' => 'bx bx-user',
+                'visibleRoutes' => [
+                    ['name' => 'HR & Payroll', 'route' => 'hr-payroll.index'],
+                ],
+                'hiddenRoutes' => [],
+            ],
             'Investment' => [
                 'icon' => 'bx bx-trending-up',
                 'visibleRoutes' => [
@@ -135,7 +207,9 @@ class MenuSeeder extends Seeder
                     ['name' => 'Loans Reports', 'route' => 'reports.loans'],
                     ['name' => 'Customer Reports', 'route' => 'reports.customers'],
                     ['name' => 'Share Reports', 'route' => 'reports.shares'],
+                    ['name' => 'Contribution Reports', 'route' => 'reports.contributions'],
                     ['name' => 'Bot Reports', 'route' => 'reports.bot'],
+                    ['name' => 'Payroll Reports', 'route' => 'hr.payroll-reports.index'],
                 ],
                 'hiddenRoutes' => [],
             ],
@@ -161,7 +235,7 @@ class MenuSeeder extends Seeder
                 'visibleRoutes' => [
                     ['name' => 'General Settings', 'route' => 'settings.index'],
                 ],
-                'hiddenRoutes' => ['settings.company', 'settings.branches', 'settings.user', 'settings.system', 'settings.backup', 'settings.branches.create', 'settings.branches.edit', 'settings.branches.destroy', 'settings.filetypes.index', 'settings.filetypes.create', 'settings.filetypes.edit', 'settings.filetypes.destroy'],
+                'hiddenRoutes' => ['settings.company', 'settings.branches', 'settings.user', 'settings.system', 'settings.backup', 'settings.branches.create', 'settings.branches.edit', 'settings.branches.destroy', 'settings.filetypes.index', 'settings.filetypes.create', 'settings.filetypes.edit', 'settings.filetypes.destroy', 'settings.sectors.index', 'settings.sectors.create', 'settings.sectors.edit', 'settings.sectors.update', 'settings.sectors.destroy'],
             ],
         ];
 

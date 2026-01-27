@@ -5,9 +5,11 @@ namespace App\Models;
 use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\ImprestApprovalSettings;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Models\Hr\Department as HrDepartment;
 
 class ImprestRequest extends Model
 {
@@ -17,6 +19,7 @@ class ImprestRequest extends Model
     protected $fillable = [
         'request_number',
         'employee_id',
+        'department_id',
         'company_id',
         'branch_id',
         'purpose',
@@ -56,6 +59,11 @@ class ImprestRequest extends Model
         return $this->belongsTo(User::class, 'employee_id');
     }
 
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(HrDepartment::class);
+    }
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
@@ -93,7 +101,7 @@ class ImprestRequest extends Model
 
     public function payment(): BelongsTo
     {
-        return $this->belongsTo(Payment::class, 'payment_id');
+        return $this->belongsTo(\App\Models\Payment::class, 'payment_id');
     }
 
     public function disbursement(): HasOne
@@ -105,6 +113,8 @@ class ImprestRequest extends Model
     {
         return $this->hasOne(ImprestLiquidation::class);
     }
+
+ 
 
     public function journalEntries(): HasMany
     {
@@ -168,33 +178,61 @@ class ImprestRequest extends Model
         return $this->status === 'disbursed' && ($this->payment_id || $this->disbursement) && !$this->liquidation;
     }
 
-    public function canBeClosed(): bool
+    public function canBeRetired(): bool
     {
-        return $this->status === 'liquidated' && $this->liquidation && $this->liquidation->status === 'approved';
+        return $this->status === 'disbursed' && ($this->payment_id || $this->disbursement) && !$this->retirement;
     }
 
+    public function canBeClosed(): bool
+    {
+        return $this->status === 'liquidated' &&
+            $this->retirement &&
+            $this->retirement->status === 'approved';
+    }
+
+    /**
+     * Check if a user can check this imprest request based on approval settings
+     * DEPRECATED: Use multi-level approval system instead
+     */
     public function canUserCheck(User $user): bool
     {
+        // For multi-level approval, use the new system
         if ($this->requiresApproval()) {
-            return $this->canUserApproveAtLevel($user, 1);
+            return $this->canUserApproveAtLevel($user, 1); // First level is typically checker
         }
+
+        // Legacy fallback - allow checking if no multi-level approval required
         return $this->canBeChecked();
     }
 
+    /**
+     * Check if a user can approve this imprest request based on approval settings
+     * DEPRECATED: Use multi-level approval system instead
+     */
     public function canUserApprove(User $user): bool
     {
+        // For multi-level approval, check if user can approve at current level
         if ($this->requiresApproval()) {
             $currentLevel = $this->getCurrentApprovalLevel();
             return $currentLevel ? $this->canUserApproveAtLevel($user, $currentLevel) : false;
         }
+
+        // Legacy fallback - allow approval if no multi-level approval required
         return $this->canBeApproved();
     }
 
+    /**
+     * Check if a user can disburse this imprest request based on approval settings
+     * DEPRECATED: Use multi-level approval system instead
+     */
     public function canUserDisburse(User $user): bool
     {
+        // For multi-level approval, check if all approvals are complete
         if ($this->requiresApproval()) {
             return $this->isFullyApproved() && $this->canBeDisbursed();
         }
+
+        // Legacy fallback - allow disbursement if no multi-level approval required
         return $this->canBeDisbursed();
     }
 
@@ -204,11 +242,11 @@ class ImprestRequest extends Model
             return 0;
         }
 
-        if (!$this->liquidation) {
+        if (!$this->retirement) {
             return (float) ($this->disbursed_amount ?? 0);
         }
 
-        return (float) $this->liquidation->balance_returned;
+        return (float) $this->retirement->remaining_balance;
     }
 
     public function getStatusBadgeClass(): string
@@ -258,6 +296,7 @@ class ImprestRequest extends Model
     // Multi-level approval methods
     public function getApprovalSettings()
     {
+        // Get approval settings directly by company_id and branch_id
         return ImprestApprovalSettings::where('company_id', $this->company_id)
             ->where('branch_id', $this->branch_id)
             ->first();
@@ -269,23 +308,52 @@ class ImprestRequest extends Model
         return $settings && $settings->approval_required;
     }
 
+    /**
+     * Get the required approval levels (just the level numbers) for this imprest request
+     * @return array Array of level numbers, e.g., [1, 2, 3]
+     */
     public function getRequiredApprovalLevels(): array
     {
         $levelDetails = $this->getRequiredApprovalLevelDetails();
+
+        // Extract just the level numbers
         return array_column($levelDetails, 'level');
     }
 
+    /**
+     * Get the full required approval level details including approvers and thresholds
+     * @return array Array of level details with 'level', 'approvers', and 'threshold' keys
+     */
     public function getRequiredApprovalLevelDetails(): array
     {
         $settings = $this->getApprovalSettings();
+        info('Settings foundddd', ['settings' => $settings]);
 
-        if (!$settings || !$settings->approval_required) {
+        if (!$settings) {
+            info('No settings found for company_id: ' . $this->company_id . ' branch_id: ' . $this->branch_id);
             return [];
         }
 
+        info('Settings found', [
+            'approval_required' => $settings->approval_required,
+            'approval_levels' => $settings->approval_levels,
+            'type' => gettype($settings->approval_required)
+        ]);
+
+        if (!$settings->approval_required) {
+            info('Approval not required');
+            return [];
+        }
+
+        $amount = $this->amount_requested;
+        info('Getting required approvals for amount: ' . $amount);
+
         $result = [];
+
+        // Get required levels based on approval_levels setting
         $maxLevels = $settings->approval_levels;
 
+        // Check each level up to the configured approval_levels
         for ($level = 1; $level <= $maxLevels; $level++) {
             $thresholdField = "level{$level}_amount_threshold";
             $approversField = "level{$level}_approvers";
@@ -293,16 +361,20 @@ class ImprestRequest extends Model
             $threshold = $settings->{$thresholdField};
             $approvers = $settings->{$approversField};
 
+            // Skip if approvers not set (threshold can be null for sequential levels)
             if (is_null($approvers) || empty($approvers)) {
                 continue;
             }
 
+            // Add this level to required approvals
             $result[] = [
                 'level' => $level,
                 'threshold' => $threshold,
                 'approvers' => is_array($approvers) ? $approvers : json_decode($approvers, true) ?? []
             ];
         }
+
+        info('Required approvals result', ['result' => $result]);
 
         return $result;
     }
@@ -321,28 +393,42 @@ class ImprestRequest extends Model
     {
         $settings = $this->getApprovalSettings();
 
+        // If no approval settings or approval not required, consider it approved
         if (!$settings || !$settings->approval_required) {
+            info('isFullyApproved: No settings or approval not required', [
+                'has_settings' => !is_null($settings),
+                'approval_required' => $settings ? $settings->approval_required : null
+            ]);
             return true;
         }
 
         $requiredLevels = $this->getRequiredApprovalLevels();
+        info('isFullyApproved: Required levels', ['count' => count($requiredLevels), 'levels' => $requiredLevels]);
+
+       info('requiredLevels', [$requiredLevels]);
 
         if (empty($requiredLevels)) {
+            info('isFullyApproved: No required levels for this amount');
             return true;
         }
 
+        // Check if each required level has been approved
         foreach ($requiredLevels as $level) {
             $approvalExists = $this->approvals()
                 ->where('approval_level', $level)
                 ->where('status', ImprestApproval::STATUS_APPROVED)
                 ->exists();
 
+            info('Checking level ' . $level, ['exists' => $approvalExists]);
+
             if (!$approvalExists) {
-                return false;
+                info('isFullyApproved: Level ' . $level . ' not approved yet');
+                return false; // This level hasn't been approved yet
             }
         }
 
-        return true;
+        info('isFullyApproved: All levels approved');
+        return true; // All required levels have been approved
     }
 
     public function hasRejectedApprovals(): bool
@@ -365,7 +451,7 @@ class ImprestRequest extends Model
             }
         }
 
-        return null;
+        return null; // All levels approved
     }
 
     public function canUserApproveAtLevel(User $user, int $level): bool
@@ -387,6 +473,7 @@ class ImprestRequest extends Model
             $level = $levelData['level'];
             $approvers = $levelData['approvers'];
 
+            // Create approval request for each approver at this level
             foreach ($approvers as $approverId) {
                 ImprestApproval::create([
                     'imprest_request_id' => $this->id,

@@ -207,7 +207,7 @@ class BudgetReportController extends Controller
             'filters' => $budgetData['filters'],
             'company' => $company,
             'generated_at' => now()->format('d/m/Y H:i:s'),
-        ]);
+        ])->setPaper('a4', 'landscape');
 
         $filename = 'budget_report_' . $request->get('year', date('Y')) . '_' . date('Y-m-d_H-i-s') . '.pdf';
         
@@ -301,6 +301,13 @@ class BudgetReportController extends Controller
                             THEN ROUND(((ROUND(bl.amount / {$budgetDivisionFactor}, 2) - COALESCE(gl.actual_amount, 0)) / ROUND(bl.amount / {$budgetDivisionFactor}, 2)) * 100, 2) 
                             ELSE 0 END
                     END as variance_percentage
+                "),
+                DB::raw("
+                    CASE 
+                        WHEN ROUND(bl.amount / {$budgetDivisionFactor}, 2) > 0 
+                        THEN ROUND((COALESCE(gl.actual_amount, 0) / ROUND(bl.amount / {$budgetDivisionFactor}, 2)) * 100, 2)
+                        ELSE 0 
+                    END as achievement_percentage
                 ")
             ])
             ->where('b.year', $year)

@@ -45,12 +45,6 @@ class ShareProductController extends Controller
                     ->addColumn('nominal_price_formatted', function ($product) {
                         return number_format($product->nominal_price, 2);
                     })
-                    ->addColumn('minimum_active_period_display', function ($product) {
-                        if ($product->minimum_active_period && $product->minimum_active_period_type) {
-                            return $product->minimum_active_period . ' ' . $product->minimum_active_period_type;
-                        }
-                        return 'N/A';
-                    })
                     ->addColumn('lockin_period_display', function ($product) {
                         if ($product->lockin_period_frequency && $product->lockin_period_frequency_type) {
                             return $product->lockin_period_frequency . ' ' . $product->lockin_period_frequency_type;
@@ -203,10 +197,6 @@ class ShareProductController extends Controller
             'maximum_purchase_amount' => 'nullable|numeric|min:0',
             'maximum_shares_per_member' => 'nullable|numeric|min:0',
             'minimum_shares_for_membership' => 'nullable|numeric|min:0',
-            'share_purchase_increment' => 'nullable|numeric|min:0',
-            'minimum_active_period' => 'required|integer|min:1',
-            'minimum_active_period_type' => 'required|string|in:Days,Weeks,Months,Years',
-            'allow_dividends_for_inactive_member' => 'required|string|in:Yes,No',
             'dividend_rate' => 'nullable|numeric|min:0|max:100',
             'dividend_calculation_method' => 'nullable|string|in:on_share_capital,on_share_value,on_minimum_balance,on_average_balance',
             'dividend_payment_frequency' => 'nullable|string|in:Monthly,Quarterly,Semi_Annually,Annually',
@@ -219,26 +209,8 @@ class ShareProductController extends Controller
             'certificate_number_prefix' => 'nullable|string|max:20',
             'certificate_number_format' => 'nullable|string|max:100',
             'auto_generate_certificate' => 'boolean',
-            'opening_date' => 'nullable|date',
-            'closing_date' => 'nullable|date|after_or_equal:opening_date',
-            'allow_new_subscriptions' => 'boolean',
-            'allow_additional_purchases' => 'boolean',
-            'maximum_total_shares' => 'nullable|numeric|min:0',
             'allow_share_transfers' => 'boolean',
-            'transfer_fee' => 'nullable|numeric|min:0',
-            'transfer_fee_type' => 'nullable|string|in:fixed,percentage',
             'allow_share_withdrawals' => 'boolean',
-            'withdrawal_fee' => 'nullable|numeric|min:0',
-            'withdrawal_fee_type' => 'nullable|string|in:fixed,percentage',
-            'withdrawal_notice_period' => 'nullable|integer|min:0',
-            'withdrawal_notice_period_type' => 'nullable|string|in:Days,Weeks,Months',
-            'minimum_withdrawal_amount' => 'nullable|numeric|min:0',
-            'maximum_withdrawal_amount' => 'nullable|numeric|min:0',
-            'allow_partial_withdrawal' => 'boolean',
-            'has_charges' => 'boolean',
-            'charge_id' => 'nullable|required_if:has_charges,1|exists:fees,id',
-            'charge_type' => 'nullable|required_if:has_charges,1|in:fixed,percentage',
-            'charge_amount' => 'nullable|required_if:has_charges,1|numeric|min:0',
             'journal_reference_id' => 'required|exists:journal_references,id',
             'hrms_code' => 'nullable|string|max:255',
             'liability_account_id' => 'required|exists:chart_accounts,id',
@@ -253,28 +225,30 @@ class ShareProductController extends Controller
         }
 
         $data = $request->all();
-        $data['allow_dividends_for_inactive_member'] = $request->allow_dividends_for_inactive_member === 'Yes';
-        $data['has_charges'] = $request->has('has_charges');
         $data['auto_generate_certificate'] = $request->has('auto_generate_certificate');
-        $data['allow_new_subscriptions'] = $request->has('allow_new_subscriptions');
-        $data['allow_additional_purchases'] = $request->has('allow_additional_purchases');
         $data['allow_share_transfers'] = $request->has('allow_share_transfers');
         $data['allow_share_withdrawals'] = $request->has('allow_share_withdrawals');
-        $data['allow_partial_withdrawal'] = $request->has('allow_partial_withdrawal');
         
-        // Clear charge fields if has_charges is not checked
-        if (!$data['has_charges']) {
-            $data['charge_id'] = null;
-            $data['charge_type'] = null;
-            $data['charge_amount'] = null;
-        }
-
-        // Handle empty string dates
-        $data['opening_date'] = !empty($data['opening_date']) ? $data['opening_date'] : null;
-        $data['closing_date'] = !empty($data['closing_date']) ? $data['closing_date'] : null;
-        
-        // Set income_account_id to null if not provided
-        $data['income_account_id'] = $data['income_account_id'] ?? null;
+        // Set default values for removed fields to avoid database errors
+        $data['minimum_active_period'] = 1;
+        $data['minimum_active_period_type'] = 'Days';
+        $data['share_purchase_increment'] = null;
+        $data['withdrawal_notice_period'] = null;
+        $data['withdrawal_notice_period_type'] = null;
+        $data['minimum_withdrawal_amount'] = null;
+        $data['maximum_withdrawal_amount'] = null;
+        $data['allow_partial_withdrawal'] = false;
+        $data['transfer_fee'] = null;
+        $data['transfer_fee_type'] = null;
+        $data['withdrawal_fee'] = null;
+        $data['withdrawal_fee_type'] = null;
+        $data['has_charges'] = false;
+        $data['charge_id'] = null;
+        $data['charge_type'] = null;
+        $data['charge_amount'] = null;
+        $data['income_account_id'] = null;
+        $data['share_capital_account_id'] = null;
+        $data['fee_income_account_id'] = null;
 
         ShareProduct::create($data);
 
@@ -413,10 +387,6 @@ class ShareProductController extends Controller
             'maximum_purchase_amount' => 'nullable|numeric|min:0',
             'maximum_shares_per_member' => 'nullable|numeric|min:0',
             'minimum_shares_for_membership' => 'nullable|numeric|min:0',
-            'share_purchase_increment' => 'nullable|numeric|min:0',
-            'minimum_active_period' => 'required|integer|min:1',
-            'minimum_active_period_type' => 'required|string|in:Days,Weeks,Months,Years',
-            'allow_dividends_for_inactive_member' => 'required|string|in:Yes,No',
             'dividend_rate' => 'nullable|numeric|min:0|max:100',
             'dividend_calculation_method' => 'nullable|string|in:on_share_capital,on_share_value,on_minimum_balance,on_average_balance',
             'dividend_payment_frequency' => 'nullable|string|in:Monthly,Quarterly,Semi_Annually,Annually',
@@ -429,26 +399,8 @@ class ShareProductController extends Controller
             'certificate_number_prefix' => 'nullable|string|max:20',
             'certificate_number_format' => 'nullable|string|max:100',
             'auto_generate_certificate' => 'boolean',
-            'opening_date' => 'nullable|date',
-            'closing_date' => 'nullable|date|after_or_equal:opening_date',
-            'allow_new_subscriptions' => 'boolean',
-            'allow_additional_purchases' => 'boolean',
-            'maximum_total_shares' => 'nullable|numeric|min:0',
             'allow_share_transfers' => 'boolean',
-            'transfer_fee' => 'nullable|numeric|min:0',
-            'transfer_fee_type' => 'nullable|string|in:fixed,percentage',
             'allow_share_withdrawals' => 'boolean',
-            'withdrawal_fee' => 'nullable|numeric|min:0',
-            'withdrawal_fee_type' => 'nullable|string|in:fixed,percentage',
-            'withdrawal_notice_period' => 'nullable|integer|min:0',
-            'withdrawal_notice_period_type' => 'nullable|string|in:Days,Weeks,Months',
-            'minimum_withdrawal_amount' => 'nullable|numeric|min:0',
-            'maximum_withdrawal_amount' => 'nullable|numeric|min:0',
-            'allow_partial_withdrawal' => 'boolean',
-            'has_charges' => 'boolean',
-            'charge_id' => 'nullable|required_if:has_charges,1|exists:fees,id',
-            'charge_type' => 'nullable|required_if:has_charges,1|in:fixed,percentage',
-            'charge_amount' => 'nullable|required_if:has_charges,1|numeric|min:0',
             'journal_reference_id' => 'required|exists:journal_references,id',
             'hrms_code' => 'nullable|string|max:255',
             'liability_account_id' => 'required|exists:chart_accounts,id',
@@ -463,28 +415,30 @@ class ShareProductController extends Controller
         }
 
         $data = $request->all();
-        $data['allow_dividends_for_inactive_member'] = $request->allow_dividends_for_inactive_member === 'Yes';
-        $data['has_charges'] = $request->has('has_charges');
         $data['auto_generate_certificate'] = $request->has('auto_generate_certificate');
-        $data['allow_new_subscriptions'] = $request->has('allow_new_subscriptions');
-        $data['allow_additional_purchases'] = $request->has('allow_additional_purchases');
         $data['allow_share_transfers'] = $request->has('allow_share_transfers');
         $data['allow_share_withdrawals'] = $request->has('allow_share_withdrawals');
-        $data['allow_partial_withdrawal'] = $request->has('allow_partial_withdrawal');
         
-        // Clear charge fields if has_charges is not checked
-        if (!$data['has_charges']) {
-            $data['charge_id'] = null;
-            $data['charge_type'] = null;
-            $data['charge_amount'] = null;
-        }
-
-        // Handle empty string dates
-        $data['opening_date'] = !empty($data['opening_date']) ? $data['opening_date'] : null;
-        $data['closing_date'] = !empty($data['closing_date']) ? $data['closing_date'] : null;
-        
-        // Set income_account_id to null if not provided
-        $data['income_account_id'] = $data['income_account_id'] ?? null;
+        // Set default values for removed fields to avoid database errors
+        $data['minimum_active_period'] = 1;
+        $data['minimum_active_period_type'] = 'Days';
+        $data['share_purchase_increment'] = null;
+        $data['withdrawal_notice_period'] = null;
+        $data['withdrawal_notice_period_type'] = null;
+        $data['minimum_withdrawal_amount'] = null;
+        $data['maximum_withdrawal_amount'] = null;
+        $data['allow_partial_withdrawal'] = false;
+        $data['transfer_fee'] = null;
+        $data['transfer_fee_type'] = null;
+        $data['withdrawal_fee'] = null;
+        $data['withdrawal_fee_type'] = null;
+        $data['has_charges'] = false;
+        $data['charge_id'] = null;
+        $data['charge_type'] = null;
+        $data['charge_amount'] = null;
+        $data['income_account_id'] = null;
+        $data['share_capital_account_id'] = null;
+        $data['fee_income_account_id'] = null;
 
         $shareProduct->update($data);
 

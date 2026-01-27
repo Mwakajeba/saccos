@@ -1,516 +1,676 @@
 @extends('layouts.main')
 
-@section('title', 'Balance Sheet')
+@section('title', 'Balance Sheet Report')
 
 @section('content')
 <div class="page-wrapper">
-  <div class="page-content">
-    <h6 class="mb-0 text-uppercase">BALANCE SHEET</h6>
-    <small class="text-muted">As of {{ \Carbon\Carbon::parse($asOf)->format('d-m-Y') }}</small>
-    <hr />
+    <div class="page-content">
+        <x-breadcrumbs-with-icons :links="[
+            ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Accounting Reports', 'url' => route('reports.index'), 'icon' => 'bx bx-calculator'],
+            ['label' => 'Balance Sheet Report', 'url' => '#', 'icon' => 'bx bx-balance']
+        ]" />
+        
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h4 class="card-title mb-0">
+                                <i class="bx bx-balance me-2"></i>Balance Sheet Report
+                            </h4>
+                        </div>
 
-    <div class="card mb-3">
-      <div class="card-body">
-        <form method="GET" class="row g-3">
-          <div class="col-md-3">
-            <label class="form-label">As of</label>
-            <input type="date" name="as_of" class="form-control" value="{{ $asOf }}" />
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Comparative As of</label>
-            <input type="date" name="comparative_as_of" class="form-control" value="{{ $comparativeAsOf ?? '' }}" />
-          </div>
-          <div class="col-md-12">
-            <label class="form-label d-flex justify-content-between align-items-center">
-              <span>Additional Comparative Dates</span>
-              <button type="button" class="btn btn-sm btn-outline-primary" id="addComparativeBtn"><i class="bx bx-plus"></i> Add Year</button>
-            </label>
-            <div id="comparativesContainer" class="row g-2">
-              @if(is_array(request()->get('comparatives')))
-                @foreach(request()->get('comparatives') as $c)
-                  @if($c)
-                  <div class="col-md-3 comparative-item">
-                    <div class="input-group">
-                      <input type="date" name="comparatives[]" class="form-control" value="{{ $c }}" />
-                      <button class="btn btn-outline-danger remove-comparative" type="button"><i class="bx bx-x"></i></button>
+                        <!-- Filters -->
+                        <form id="balanceSheetForm" method="GET" action="{{ route('accounting.reports.balance-sheet') }}" class="row g-3 mb-4">
+                            <div class="col-md-3">
+                                <label for="as_of_date" class="form-label">As of Date</label>
+                                <input type="date" class="form-control" id="as_of_date" name="as_of_date" value="{{ $asOfDate }}" required>
+                            </div>
+
+                            <div class="col-md-2">
+                                <label for="reporting_type" class="form-label">Method</label>
+                                <select class="form-select" id="reporting_type" name="reporting_type">
+                                    <option value="accrual" {{ $reportingType === 'accrual' ? 'selected' : '' }}>Accrual Basis</option>
+                                    <option value="cash" {{ $reportingType === 'cash' ? 'selected' : '' }}>Cash Basis</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-2">
+                                <label for="branch_id" class="form-label">Branch</label>
+                                <select class="form-select" id="branch_id" name="branch_id">
+                                    @if(($branches->count() ?? 0) > 1)
+                                        <option value="all" {{ $branchId === 'all' ? 'selected' : '' }}>All Branches</option>
+                                    @endif
+                                    @foreach($branches as $branch)
+                                        <option value="{{ $branch->id }}" {{ $branchId == $branch->id ? 'selected' : '' }}>
+                                            {{ $branch->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="col-md-2">
+                                <label for="report_type" class="form-label">Type</label>
+                                <select class="form-select" id="report_type" name="report_type">
+                                    <option value="summary" {{ $reportType === 'summary' ? 'selected' : '' }}>Summary</option>
+                                    <option value="detailed" {{ $reportType === 'detailed' ? 'selected' : '' }}>Detailed</option>
+                                </select>
+                            </div>
+
+                            <!-- Comparative Dates (optional) -->
+                            <div class="col-12">
+                                <div class="card border border-info">
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-center justify-content-between mb-3">
+                                            <h6 class="card-title mb-0 text-info">
+                                                <i class="bx bx-calendar me-2"></i>Comparative Dates (optional)
+                                            </h6>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addComparative()">
+                                                <i class="bx bx-plus"></i> Add Comparative
+                                            </button>
+                                        </div>
+                                        <div id="comparatives_container">
+                                            @if(!empty($comparativeDates))
+                                                @foreach($comparativeDates as $idx => $compDate)
+                                                    <div class="row g-2 align-items-end mb-2 comparative-row">
+                                                        <div class="col-md-4">
+                                                            <label class="form-label">Name</label>
+                                                            <input type="text" class="form-control" name="comparative_dates[{{ $idx }}][name]" value="{{ $compDate['name'] ?? ('Comparative '.($idx+1)) }}" placeholder="e.g. Previous Quarter">
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label class="form-label">As of Date</label>
+                                                            <input type="date" class="form-control" name="comparative_dates[{{ $idx }}][as_of_date]" value="{{ $compDate['as_of_date'] ?? '' }}" required>
+                                                        </div>
+                                                        <div class="col-md-2 text-end">
+                                                            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.comparative-row').remove()">
+                                                                <i class="bx bx-trash"></i> Remove
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="bx bx-search me-1"></i>Generate Report
+                                </button>
+                                @if(request()->has('as_of_date'))
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="bx bx-download me-1"></i>Export
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="{{ route('accounting.reports.balance-sheet.export', array_merge(request()->all(), ['export_type' => 'pdf'])) }}">Export as PDF</a></li>
+                                        <li><a class="dropdown-item" href="{{ route('accounting.reports.balance-sheet.export', array_merge(request()->all(), ['export_type' => 'excel'])) }}">Export as Excel</a></li>
+                                    </ul>
+                                </div>
+                                @endif
+                                <a href="{{ route('accounting.reports.balance-sheet') }}" class="btn btn-outline-secondary">
+                                    <i class="bx bx-reset me-1"></i> Reset
+                                </a>
+                            </div>
+                        </form>
+
+                        <!-- Report Display -->
+                        @if(request()->has('as_of_date'))
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card radius-10 border-0 shadow-sm">
+                                    <div class="card-header bg-transparent border-0">
+                                        <div class="d-flex align-items-center">
+                                            <div class="flex-grow-1">
+                                                <h5 class="mb-0 text-dark"><i class="bx bx-balance me-2"></i>BALANCE SHEET</h5>
+                                                <small class="text-muted">
+                                                    As of {{ \Carbon\Carbon::parse($asOfDate)->format('d-m-Y') }} vs {{ $previousYearData['year'] }}
+                                                    @php
+                                                        $currentBranchName = null;
+                                                        if ($branchId && $branchId !== 'all') {
+                                                            $currentBranchName = optional($branches->firstWhere('id', $branchId))->name;
+                                                        }
+                                                    @endphp
+                                                    — {{ $currentBranchName ? ('Branch: ' . $currentBranchName) : 'All Branches' }}
+                                                    — {{ ucfirst($reportingType) }} Basis
+                                                    — {{ ucfirst($reportType) }}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-4">
+                                        <div class="row">
+                                            <!-- Balance Sheet Section -->
+                                            <div class="col-12">
+                                                <div class="financial-section">
+                                                    <div class="section-header bg-light p-3 rounded-top">
+                                                        <h4 class="mb-0 text-dark"><i class="bx bx-balance me-2"></i>BALANCE SHEET</h4>
+                                                        <small class="text-muted">As of {{ \Carbon\Carbon::parse($asOfDate)->format('d-m-Y') }} vs {{ $previousYearData['year'] }}</small>
+                                                    </div>
+
+                                                    <!-- Assets Section -->
+                                                    <div class="section-content border rounded-bottom">
+                                                        <div class="section-title bg-light p-2 border-bottom">
+                                                            <h6 class="mb-0 text-dark"><i class="bx bx-trending-up me-1"></i>ASSETS</h6>
+                                                        </div>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-striped">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th>Account</th>
+                                                                        <th class="text-end">Current ({{ \Carbon\Carbon::parse($asOfDate)->format('d-m-Y') }})</th>
+                                                                        <th class="text-end">Previous Year ({{ $previousYearData['year'] }})</th>
+                                                                        @foreach($comparativeData as $compName => $compInfo)
+                                                                        <th class="text-end">{{ $compName }} ({{ \Carbon\Carbon::parse($compInfo['asOfDate'])->format('d-m-Y') }})</th>
+                                                                        @endforeach
+                                                                        <th class="text-end">Change</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    @php $sumAsset = 0; $sumAssetPrev = 0; @endphp
+                                                                    @foreach($financialReportData['chartAccountsAssets'] as $mainGroupName => $mainGroup)
+                                                                    @if(isset($mainGroup['total']) && $mainGroup['total'] != 0)
+                                                                    @php $colspan = 4 + count($comparativeData); @endphp
+                                                                    <tr class="table-primary">
+                                                                        <td colspan="{{ $colspan }}" class="fw-bold text-dark"><i class="bx bx-folder me-1"></i>{{ $mainGroupName }}</td>
+                                                                    </tr>
+                                                                    @if(isset($mainGroup['fslis']))
+                                                                        @foreach($mainGroup['fslis'] as $fsliName => $fsli)
+                                                                        @if(isset($fsli['total']) && $fsli['total'] != 0)
+                                                                        @php $colspan = 4 + count($comparativeData); @endphp
+                                                                        <tr class="table-light">
+                                                                            <td colspan="{{ $colspan }}" class="ps-4 fw-medium text-dark">{{ $fsliName }}</td>
+                                                                        </tr>
+                                                                        @if($reportType === 'detailed' && isset($fsli['accounts']))
+                                                                            @foreach($fsli['accounts'] as $chartAccountAsset)
+                                                                            @if($chartAccountAsset['sum'] != 0)
+                                                                            @php 
+                                                                                $sumAsset += $chartAccountAsset['sum'] ?? 0;
+                                                                                $prevYearMainGroup = $previousYearData['chartAccountsAssets'][$mainGroupName] ?? [];
+                                                                                $prevYearFslis = $prevYearMainGroup['fslis'] ?? [];
+                                                                                $prevYearFsli = $prevYearFslis[$fsliName] ?? [];
+                                                                                $prevYearAccounts = $prevYearFsli['accounts'] ?? [];
+                                                                                $prevYearAccount = collect($prevYearAccounts)->firstWhere('account_id', $chartAccountAsset['account_id']);
+                                                                                $prevYearAmount = $prevYearAccount['sum'] ?? 0;
+                                                                                $sumAssetPrev += $prevYearAmount;
+                                                                                $change = ($chartAccountAsset['sum'] ?? 0) - $prevYearAmount;
+                                                                                
+                                                                                // Get comparative amounts
+                                                                                $comparativeAmounts = [];
+                                                                                foreach ($comparativeData as $compName => $compInfo) {
+                                                                                    $compMainGroup = $compInfo['data']['chartAccountsAssets'][$mainGroupName] ?? [];
+                                                                                    $compFslis = $compMainGroup['fslis'] ?? [];
+                                                                                    $compFsli = $compFslis[$fsliName] ?? [];
+                                                                                    $compAccounts = $compFsli['accounts'] ?? [];
+                                                                                    $compAccount = collect($compAccounts)->firstWhere('account_id', $chartAccountAsset['account_id']);
+                                                                                    $comparativeAmounts[$compName] = $compAccount['sum'] ?? 0;
+                                                                                }
+                                                                            @endphp
+                                                                            <tr class="account-row">
+                                                                                <td class="ps-5">
+                                                                                    <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountAsset['account_id'])) }}"
+                                                                                        class="text-decoration-none text-dark fw-medium">
+                                                                                        <i class="bx bx-chevron-right me-1 text-dark"></i>
+                                                                                        @if($chartAccountAsset['account_code'] ?? '')<span class="text-muted small">{{ $chartAccountAsset['account_code'] }} - </span>@endif
+                                                                                        {{ $chartAccountAsset['account'] }}
+                                                                                    </a>
+                                                                                </td>
+                                                                                <td class="text-end">
+                                                                                    <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountAsset['account_id'])) }}"
+                                                                                        class="text-decoration-none fw-bold text-dark">
+                                                                                        {{ number_format($chartAccountAsset['sum'] ?? 0,2) }}
+                                                                                    </a>
+                                                                                </td>
+                                                                                <td class="text-end text-dark">
+                                                                                    {{ number_format($prevYearAmount,2) }}
+                                                                                </td>
+                                                                                @foreach($comparativeData as $compName => $compInfo)
+                                                                                <td class="text-end text-dark">
+                                                                                    {{ number_format($comparativeAmounts[$compName] ?? 0,2) }}
+                                                                                </td>
+                                                                                @endforeach
+                                                                                <td class="text-end">
+                                                                                        {{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}
+                                                                                </td>
+                                                                            </tr>
+                                                                            @endif
+                                                                            @endforeach
+                                                                        @else
+                                                                            @php 
+                                                                                // Summary mode - just show FSLI total
+                                                                                $fsliTotal = $fsli['total'] ?? 0;
+                                                                                $sumAsset += $fsliTotal;
+                                                                                $prevYearMainGroup = $previousYearData['chartAccountsAssets'][$mainGroupName] ?? [];
+                                                                                $prevYearFslis = $prevYearMainGroup['fslis'] ?? [];
+                                                                                $prevYearFsli = $prevYearFslis[$fsliName] ?? [];
+                                                                                $prevYearFsliTotal = $prevYearFsli['total'] ?? 0;
+                                                                                $sumAssetPrev += $prevYearFsliTotal;
+                                                                                $change = $fsliTotal - $prevYearFsliTotal;
+                                                                                
+                                                                                // Get comparative totals
+                                                                                $comparativeTotals = [];
+                                                                                foreach ($comparativeData as $compName => $compInfo) {
+                                                                                    $compMainGroup = $compInfo['data']['chartAccountsAssets'][$mainGroupName] ?? [];
+                                                                                    $compFslis = $compMainGroup['fslis'] ?? [];
+                                                                                    $compFsli = $compFslis[$fsliName] ?? [];
+                                                                                    $comparativeTotals[$compName] = $compFsli['total'] ?? 0;
+                                                                                }
+                                                                            @endphp
+                                                                            <tr class="account-row">
+                                                                                <td class="ps-5 fw-medium">{{ $fsliName }}</td>
+                                                                                <td class="text-end fw-bold">{{ number_format($fsliTotal,2) }}</td>
+                                                                                <td class="text-end">{{ number_format($prevYearFsliTotal,2) }}</td>
+                                                                                @foreach($comparativeData as $compName => $compInfo)
+                                                                                <td class="text-end">{{ number_format($comparativeTotals[$compName] ?? 0,2) }}</td>
+                                                                                @endforeach
+                                                                                <td class="text-end">{{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}</td>
+                                                                            </tr>
+                                                                        @endif
+                                                                        @endif
+                                                                        @endforeach
+                                                                    @endif
+                                                                    @endif
+                                                                    @endforeach
+                                                                    @php 
+                                                                        // Calculate comparative totals for assets
+                                                                        $comparativeAssetTotals = [];
+                                                                        foreach ($comparativeData as $compName => $compInfo) {
+                                                                            $compTotal = 0;
+                                                                            foreach ($compInfo['data']['chartAccountsAssets'] as $compMainGroup) {
+                                                                                if (isset($compMainGroup['total'])) {
+                                                                                    $compTotal += $compMainGroup['total'];
+                                                                                }
+                                                                            }
+                                                                            $comparativeAssetTotals[$compName] = $compTotal;
+                                                                        }
+                                                                        $assetChange = $sumAsset - $sumAssetPrev;
+                                                                    @endphp
+                                                                    <tr class="table-secondary fw-bold">
+                                                                        <td>TOTAL ASSETS</td>
+                                                                        <td class="text-end">{{ number_format($sumAsset,2) }}</td>
+                                                                        <td class="text-end">{{ number_format($sumAssetPrev,2) }}</td>
+                                                                        @foreach($comparativeData as $compName => $compInfo)
+                                                                        <td class="text-end">{{ number_format($comparativeAssetTotals[$compName] ?? 0,2) }}</td>
+                                                                        @endforeach
+                                                                        <td class="text-end">{{ $assetChange >= 0 ? '+' : '' }}{{ number_format($assetChange,2) }}</td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+
+                                                        <!-- Equity Section -->
+                                                        <div class="section-title bg-light p-2 border-bottom mt-3">
+                                                            <h6 class="mb-0 text-dark"><i class="bx bx-user me-1"></i>EQUITY</h6>
+                                                        </div>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm mb-0">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th>Account</th>
+                                                                        <th class="text-end">Current ({{ \Carbon\Carbon::parse($asOfDate)->format('d-m-Y') }})</th>
+                                                                        <th class="text-end">Previous Year ({{ $previousYearData['year'] }})</th>
+                                                                        @foreach($comparativeData as $compName => $compInfo)
+                                                                        <th class="text-end">{{ $compName }} ({{ \Carbon\Carbon::parse($compInfo['asOfDate'])->format('d-m-Y') }})</th>
+                                                                        @endforeach
+                                                                        <th class="text-end">Change</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    @php $sumEquity = 0; $sumEquityPrev = 0; @endphp
+                                                                    @foreach($financialReportData['chartAccountsEquitys'] as $mainGroupName => $mainGroup)
+                                                                    @if(isset($mainGroup['total']) && $mainGroup['total'] != 0)
+                                                                    @php $colspan = 4 + count($comparativeData); @endphp
+                                                                    <tr class="table-primary">
+                                                                        <td colspan="{{ $colspan }}" class="fw-bold text-dark"><i class="bx bx-folder me-1"></i>{{ $mainGroupName }}</td>
+                                                                    </tr>
+                                                                    @if(isset($mainGroup['fslis']))
+                                                                        @foreach($mainGroup['fslis'] as $fsliName => $fsli)
+                                                                        @if(isset($fsli['total']) && $fsli['total'] != 0)
+                                                                        @php $colspan = 4 + count($comparativeData); @endphp
+                                                                        <tr class="table-light">
+                                                                            <td colspan="{{ $colspan }}" class="ps-4 fw-medium text-dark">{{ $fsliName }}</td>
+                                                                        </tr>
+                                                                        @if($reportType === 'detailed' && isset($fsli['accounts']))
+                                                                            @foreach($fsli['accounts'] as $chartAccountEquity)
+                                                                            @if($chartAccountEquity['sum'] != 0)
+                                                                            @php 
+                                                                                $sumEquity += ($chartAccountEquity['sum'] ?? 0);
+                                                                                $prevYearMainGroup = $previousYearData['chartAccountsEquitys'][$mainGroupName] ?? [];
+                                                                                $prevYearFslis = $prevYearMainGroup['fslis'] ?? [];
+                                                                                $prevYearFsli = $prevYearFslis[$fsliName] ?? [];
+                                                                                $prevYearAccounts = $prevYearFsli['accounts'] ?? [];
+                                                                                $prevYearAccount = collect($prevYearAccounts)->firstWhere('account_id', $chartAccountEquity['account_id']);
+                                                                                $prevYearAmount = ($prevYearAccount['sum'] ?? 0);
+                                                                                $sumEquityPrev += $prevYearAmount;
+                                                                                $change = ($chartAccountEquity['sum'] ?? 0) - $prevYearAmount;
+                                                                                
+                                                                                // Get comparative amounts
+                                                                                $comparativeEquityAmounts = [];
+                                                                                foreach ($comparativeData as $compName => $compInfo) {
+                                                                                    $compMainGroup = $compInfo['data']['chartAccountsEquitys'][$mainGroupName] ?? [];
+                                                                                    $compFslis = $compMainGroup['fslis'] ?? [];
+                                                                                    $compFsli = $compFslis[$fsliName] ?? [];
+                                                                                    $compAccounts = $compFsli['accounts'] ?? [];
+                                                                                    $compAccount = collect($compAccounts)->firstWhere('account_id', $chartAccountEquity['account_id']);
+                                                                                    $comparativeEquityAmounts[$compName] = $compAccount['sum'] ?? 0;
+                                                                                }
+                                                                            @endphp
+                                                                            <tr class="account-row">
+                                                                                <td class="ps-5">
+                                                                                    <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountEquity['account_id'])) }}"
+                                                                                        class="text-decoration-none text-dark fw-medium">
+                                                                                        <i class="bx bx-chevron-right me-1 text-dark"></i>
+                                                                                        @if($chartAccountEquity['account_code'] ?? '')<span class="text-muted small">{{ $chartAccountEquity['account_code'] }} - </span>@endif
+                                                                                        {{ $chartAccountEquity['account'] }}
+                                                                                    </a>
+                                                                                </td>
+                                                                                <td class="text-end">
+                                                                                    <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountEquity['account_id'])) }}"
+                                                                                        class="text-decoration-none fw-bold text-dark">
+                                                                                        {{ number_format($chartAccountEquity['sum'] ?? 0,2) }}
+                                                                                    </a>
+                                                                                </td>
+                                                                                <td class="text-end text-dark">
+                                                                                    {{ number_format($prevYearAmount,2) }}
+                                                                                </td>
+                                                                                @foreach($comparativeData as $compName => $compInfo)
+                                                                                <td class="text-end text-dark">
+                                                                                    {{ number_format($comparativeEquityAmounts[$compName] ?? 0,2) }}
+                                                                                </td>
+                                                                                @endforeach
+                                                                                <td class="text-end">
+                                                                                        {{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}
+                                                                                </td>
+                                                                            </tr>
+                                                                            @endif
+                                                                            @endforeach
+                                                                        @else
+                                                                            @php 
+                                                                                $fsliTotal = $fsli['total'] ?? 0;
+                                                                                $sumEquity += $fsliTotal;
+                                                                                $prevYearMainGroup = $previousYearData['chartAccountsEquitys'][$mainGroupName] ?? [];
+                                                                                $prevYearFslis = $prevYearMainGroup['fslis'] ?? [];
+                                                                                $prevYearFsli = $prevYearFslis[$fsliName] ?? [];
+                                                                                $prevYearFsliTotal = $prevYearFsli['total'] ?? 0;
+                                                                                $sumEquityPrev += $prevYearFsliTotal;
+                                                                                $change = $fsliTotal - $prevYearFsliTotal;
+                                                                                
+                                                                                // Get comparative totals
+                                                                                $comparativeEquityTotals = [];
+                                                                                foreach ($comparativeData as $compName => $compInfo) {
+                                                                                    $compMainGroup = $compInfo['data']['chartAccountsEquitys'][$mainGroupName] ?? [];
+                                                                                    $compFslis = $compMainGroup['fslis'] ?? [];
+                                                                                    $compFsli = $compFslis[$fsliName] ?? [];
+                                                                                    $comparativeEquityTotals[$compName] = $compFsli['total'] ?? 0;
+                                                                                }
+                                                                            @endphp
+                                                                            <tr class="account-row">
+                                                                                <td class="ps-5 fw-medium">{{ $fsliName }}</td>
+                                                                                <td class="text-end fw-bold">{{ number_format($fsliTotal,2) }}</td>
+                                                                                <td class="text-end">{{ number_format($prevYearFsliTotal,2) }}</td>
+                                                                                @foreach($comparativeData as $compName => $compInfo)
+                                                                                <td class="text-end">{{ number_format($comparativeEquityTotals[$compName] ?? 0,2) }}</td>
+                                                                                @endforeach
+                                                                                <td class="text-end">{{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}</td>
+                                                                            </tr>
+                                                                        @endif
+                                                                        @endif
+                                                                        @endforeach
+                                                                    @endif
+                                                                    @endif
+                                                                    @endforeach
+                                                                    @php 
+                                                                        // Calculate comparative profit/loss and equity totals
+                                                                        $comparativeProfitLoss = [];
+                                                                        $comparativeEquityTotals = [];
+                                                                        foreach ($comparativeData as $compName => $compInfo) {
+                                                                            $comparativeProfitLoss[$compName] = $compInfo['netProfitYtd'] ?? 0;
+                                                                            $compEquityTotal = 0;
+                                                                            foreach ($compInfo['data']['chartAccountsEquitys'] as $compMainGroup) {
+                                                                                if (isset($compMainGroup['total'])) {
+                                                                                    $compEquityTotal += $compMainGroup['total'];
+                                                                                }
+                                                                            }
+                                                                            $comparativeEquityTotals[$compName] = $compEquityTotal + ($compInfo['netProfitYtd'] ?? 0);
+                                                                        }
+                                                                        $profitChange = ($netProfitYtd ?? 0) - $previousYearData['profitLoss'];
+                                                                        $equityChange = ($sumEquity + ($netProfitYtd ?? 0)) - ($sumEquityPrev + $previousYearData['profitLoss']);
+                                                                    @endphp
+                                                                    <tr class="table-info">
+                                                                        <td>Profit And Loss (YTD)</td>
+                                                                        <td class="text-end fw-bold">{{ number_format($netProfitYtd ?? 0,2) }}</td>
+                                                                        <td class="text-end text-dark">{{ number_format($previousYearData['profitLoss'],2) }}</td>
+                                                                        @foreach($comparativeData as $compName => $compInfo)
+                                                                        <td class="text-end text-dark">{{ number_format($comparativeProfitLoss[$compName] ?? 0,2) }}</td>
+                                                                        @endforeach
+                                                                        <td class="text-end">{{ $profitChange >= 0 ? '+' : '' }}{{ number_format($profitChange,2) }}</td>
+                                                                    </tr>
+                                                                    <tr class="table-secondary fw-bold">
+                                                                        <td>TOTAL EQUITY</td>
+                                                                        <td class="text-end">{{ number_format($sumEquity + ($netProfitYtd ?? 0),2) }}</td>
+                                                                        <td class="text-end">{{ number_format($sumEquityPrev + $previousYearData['profitLoss'],2) }}</td>
+                                                                        @foreach($comparativeData as $compName => $compInfo)
+                                                                        <td class="text-end">{{ number_format($comparativeEquityTotals[$compName] ?? 0,2) }}</td>
+                                                                        @endforeach
+                                                                        <td class="text-end">{{ $equityChange >= 0 ? '+' : '' }}{{ number_format($equityChange,2) }}</td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+
+                                                        <!-- Liabilities Section -->
+                                                        <div class="section-title bg-light p-2 border-bottom mt-3">
+                                                            <h6 class="mb-0 text-dark"><i class="bx bx-trending-down me-1"></i>LIABILITIES</h6>
+                                                        </div>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm mb-0">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th>Account</th>
+                                                                        <th class="text-end">Current ({{ \Carbon\Carbon::parse($asOfDate)->format('d-m-Y') }})</th>
+                                                                        <th class="text-end">Previous Year ({{ $previousYearData['year'] }})</th>
+                                                                        @foreach($comparativeData as $compName => $compInfo)
+                                                                        <th class="text-end">{{ $compName }} ({{ \Carbon\Carbon::parse($compInfo['asOfDate'])->format('d-m-Y') }})</th>
+                                                                        @endforeach
+                                                                        <th class="text-end">Change</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    @php $sumLiability = 0; $sumLiabilityPrev = 0; @endphp
+                                                                    @foreach($financialReportData['chartAccountsLiabilities'] as $mainGroupName => $mainGroup)
+                                                                    @if(isset($mainGroup['total']) && $mainGroup['total'] != 0)
+                                                                    @php $colspan = 4 + count($comparativeData); @endphp
+                                                                    <tr class="table-primary">
+                                                                        <td colspan="{{ $colspan }}" class="fw-bold text-dark"><i class="bx bx-folder me-1"></i>{{ $mainGroupName }}</td>
+                                                                    </tr>
+                                                                    @if(isset($mainGroup['fslis']))
+                                                                        @foreach($mainGroup['fslis'] as $fsliName => $fsli)
+                                                                        @if(isset($fsli['total']) && $fsli['total'] != 0)
+                                                                        @php $colspan = 4 + count($comparativeData); @endphp
+                                                                        <tr class="table-light">
+                                                                            <td colspan="{{ $colspan }}" class="ps-4 fw-medium text-dark">{{ $fsliName }}</td>
+                                                                        </tr>
+                                                                        @if($reportType === 'detailed' && isset($fsli['accounts']))
+                                                                            @foreach($fsli['accounts'] as $chartAccountLiability)
+                                                                            @if($chartAccountLiability['sum'] != 0)
+                                                                            @php 
+                                                                                $sumLiability += ($chartAccountLiability['sum'] ?? 0);
+                                                                                $prevYearMainGroup = $previousYearData['chartAccountsLiabilities'][$mainGroupName] ?? [];
+                                                                                $prevYearFslis = $prevYearMainGroup['fslis'] ?? [];
+                                                                                $prevYearFsli = $prevYearFslis[$fsliName] ?? [];
+                                                                                $prevYearAccounts = $prevYearFsli['accounts'] ?? [];
+                                                                                $prevYearAccount = collect($prevYearAccounts)->firstWhere('account_id', $chartAccountLiability['account_id']);
+                                                                                $prevYearAmount = ($prevYearAccount['sum'] ?? 0);
+                                                                                $sumLiabilityPrev += $prevYearAmount;
+                                                                                $change = ($chartAccountLiability['sum'] ?? 0) - $prevYearAmount;
+                                                                                
+                                                                                // Get comparative amounts
+                                                                                $comparativeLiabilityAmounts = [];
+                                                                                foreach ($comparativeData as $compName => $compInfo) {
+                                                                                    $compMainGroup = $compInfo['data']['chartAccountsLiabilities'][$mainGroupName] ?? [];
+                                                                                    $compFslis = $compMainGroup['fslis'] ?? [];
+                                                                                    $compFsli = $compFslis[$fsliName] ?? [];
+                                                                                    $compAccounts = $compFsli['accounts'] ?? [];
+                                                                                    $compAccount = collect($compAccounts)->firstWhere('account_id', $chartAccountLiability['account_id']);
+                                                                                    $comparativeLiabilityAmounts[$compName] = $compAccount['sum'] ?? 0;
+                                                                                }
+                                                                            @endphp
+                                                                            <tr class="account-row">
+                                                                                <td class="ps-5">
+                                                                                    <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountLiability['account_id'])) }}"
+                                                                                        class="text-decoration-none text-dark fw-medium">
+                                                                                        <i class="bx bx-chevron-right me-1 text-dark"></i>
+                                                                                        @if($chartAccountLiability['account_code'] ?? '')<span class="text-muted small">{{ $chartAccountLiability['account_code'] }} - </span>@endif
+                                                                                        {{ $chartAccountLiability['account'] }}
+                                                                                    </a>
+                                                                                </td>
+                                                                                <td class="text-end">
+                                                                                    <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountLiability['account_id'])) }}"
+                                                                                        class="text-decoration-none fw-bold text-dark">
+                                                                                        {{ number_format($chartAccountLiability['sum'] ?? 0,2) }}
+                                                                                    </a>
+                                                                                </td>
+                                                                                <td class="text-end text-dark">
+                                                                                    {{ number_format($prevYearAmount,2) }}
+                                                                                </td>
+                                                                                @foreach($comparativeData as $compName => $compInfo)
+                                                                                <td class="text-end text-dark">
+                                                                                    {{ number_format($comparativeLiabilityAmounts[$compName] ?? 0,2) }}
+                                                                                </td>
+                                                                                @endforeach
+                                                                                <td class="text-end">
+                                                                                        {{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}
+                                                                                </td>
+                                                                            </tr>
+                                                                            @endif
+                                                                            @endforeach
+                                                                        @else
+                                                                            @php 
+                                                                                $fsliTotal = $fsli['total'] ?? 0;
+                                                                                $sumLiability += $fsliTotal;
+                                                                                $prevYearMainGroup = $previousYearData['chartAccountsLiabilities'][$mainGroupName] ?? [];
+                                                                                $prevYearFslis = $prevYearMainGroup['fslis'] ?? [];
+                                                                                $prevYearFsli = $prevYearFslis[$fsliName] ?? [];
+                                                                                $prevYearFsliTotal = $prevYearFsli['total'] ?? 0;
+                                                                                $sumLiabilityPrev += $prevYearFsliTotal;
+                                                                                $change = $fsliTotal - $prevYearFsliTotal;
+                                                                                
+                                                                                // Get comparative totals
+                                                                                $comparativeLiabilityTotals = [];
+                                                                                foreach ($comparativeData as $compName => $compInfo) {
+                                                                                    $compMainGroup = $compInfo['data']['chartAccountsLiabilities'][$mainGroupName] ?? [];
+                                                                                    $compFslis = $compMainGroup['fslis'] ?? [];
+                                                                                    $compFsli = $compFslis[$fsliName] ?? [];
+                                                                                    $comparativeLiabilityTotals[$compName] = $compFsli['total'] ?? 0;
+                                                                                }
+                                                                            @endphp
+                                                                            <tr class="account-row">
+                                                                                <td class="ps-5 fw-medium">{{ $fsliName }}</td>
+                                                                                <td class="text-end fw-bold">{{ number_format($fsliTotal,2) }}</td>
+                                                                                <td class="text-end">{{ number_format($prevYearFsliTotal,2) }}</td>
+                                                                                @foreach($comparativeData as $compName => $compInfo)
+                                                                                <td class="text-end">{{ number_format($comparativeLiabilityTotals[$compName] ?? 0,2) }}</td>
+                                                                                @endforeach
+                                                                                <td class="text-end">{{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}</td>
+                                                                            </tr>
+                                                                        @endif
+                                                                        @endif
+                                                                        @endforeach
+                                                                    @endif
+                                                                    @endif
+                                                                    @endforeach
+                                                                    @php 
+                                                                        // Calculate comparative totals for liabilities
+                                                                        $comparativeLiabilityTotals = [];
+                                                                        foreach ($comparativeData as $compName => $compInfo) {
+                                                                            $compTotal = 0;
+                                                                            foreach ($compInfo['data']['chartAccountsLiabilities'] as $compMainGroup) {
+                                                                                if (isset($compMainGroup['total'])) {
+                                                                                    $compTotal += $compMainGroup['total'];
+                                                                                }
+                                                                            }
+                                                                            $comparativeLiabilityTotals[$compName] = $compTotal;
+                                                                        }
+                                                                        $liabilityChange = $sumLiability - $sumLiabilityPrev;
+                                                                        
+                                                                        // Calculate comparative totals for equity & liability
+                                                                        $comparativeEquityLiabilityTotals = [];
+                                                                        foreach ($comparativeData as $compName => $compInfo) {
+                                                                            $compLiabilityTotal = $comparativeLiabilityTotals[$compName] ?? 0;
+                                                                            // Recalculate equity total for this comparative period
+                                                                            $compEquityTotal = 0;
+                                                                            foreach ($compInfo['data']['chartAccountsEquitys'] as $compMainGroup) {
+                                                                                if (isset($compMainGroup['total'])) {
+                                                                                    $compEquityTotal += $compMainGroup['total'];
+                                                                                }
+                                                                            }
+                                                                            $compEquityTotal += ($compInfo['netProfitYtd'] ?? 0);
+                                                                            $comparativeEquityLiabilityTotals[$compName] = $compLiabilityTotal + $compEquityTotal;
+                                                                        }
+                                                                        $totalChange = ($sumLiability + $sumEquity + ($netProfitYtd ?? 0)) - ($sumLiabilityPrev + $sumEquityPrev + $previousYearData['profitLoss']);
+                                                                    @endphp
+                                                                    <tr class="fw-bold">
+                                                                        <td>TOTAL LIABILITIES</td>
+                                                                        <td class="text-end">{{ number_format($sumLiability,2) }}</td>
+                                                                        <td class="text-end">{{ number_format($sumLiabilityPrev,2) }}</td>
+                                                                        @foreach($comparativeData as $compName => $compInfo)
+                                                                        <td class="text-end">{{ number_format($comparativeLiabilityTotals[$compName] ?? 0,2) }}</td>
+                                                                        @endforeach
+                                                                        <td class="text-end">{{ $liabilityChange >= 0 ? '+' : '' }}{{ number_format($liabilityChange,2) }}</td>
+                                                                    </tr>
+                                                                    <tr class="table-secondary fw-bold">
+                                                                        <td>TOTAL EQUITY & LIABILITY</td>
+                                                                        <td class="text-end">{{ number_format($sumLiability + $sumEquity + ($netProfitYtd ?? 0),2) }}</td>
+                                                                        <td class="text-end">{{ number_format($sumLiabilityPrev + $sumEquityPrev + $previousYearData['profitLoss'],2) }}</td>
+                                                                        @foreach($comparativeData as $compName => $compInfo)
+                                                                        <td class="text-end">{{ number_format($comparativeEquityLiabilityTotals[$compName] ?? 0,2) }}</td>
+                                                                        @endforeach
+                                                                        <td class="text-end">{{ $totalChange >= 0 ? '+' : '' }}{{ number_format($totalChange,2) }}</td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
                     </div>
-                  </div>
-                  @endif
-                @endforeach
-              @endif
-            </div>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Branch</label>
-            <select name="branch_id" class="form-select">
-              <option value="all">All Branches</option>
-              @foreach(auth()->user()->branches as $b)
-                <option value="{{ $b->id }}" {{ $branchId==$b->id ? 'selected' : '' }}>{{ $b->name }}</option>
-              @endforeach
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Method</label>
-            <select name="reporting_type" class="form-select">
-              <option value="accrual" {{ $reportingType==='accrual'?'selected':'' }}>Accrual</option>
-              <option value="cash" {{ $reportingType==='cash'?'selected':'' }}>Cash Basis</option>
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Type</label>
-            <select name="view_type" class="form-select">
-              <option value="summary" {{ $viewType==='summary'?'selected':'' }}>Summary</option>
-              <option value="detailed" {{ $viewType==='detailed'?'selected':'' }}>Detailed</option>
-            </select>
-          </div>
-          <div class="col-12 d-flex justify-content-end gap-2">
-            <button type="submit" class="btn btn-primary"><i class="bx bx-search me-1"></i>Apply</button>
-            <button type="button" class="btn btn-success" onclick="exportReport('pdf')">
-              <i class="fas fa-file-pdf me-1"></i> Export PDF
-            </button>
-            <button type="button" class="btn btn-info" onclick="exportReport('excel')">
-              <i class="fas fa-file-excel me-1"></i> Export Excel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <div class="row">
-      <div class="col-lg-12">
-        <div class="card">
-          <div class="card-body">
-     
-            </div>
-
-          <div class="card-body">
-            
-            {{-- Summary View --}}
-    @if($viewType==='summary')
-    <div class="card mb-4">
-        <div class="card-header">Summary</div>
-        <div class="card-body">
-              <div class="table-responsive">
-              @php
-                $cols = [
-                  ['label' => \Carbon\Carbon::parse($asOf)->format('Y-m-d'), 'assets' => $assetsTotal, 'liabEq' => $liabilitiesTotal + $equityTotal, 'equity' => $equityTotal, 'liab' => $liabilitiesTotal, 'pnl' => $profitLoss],
-                ];
-                if (!empty($comparativesData)) {
-                  foreach ($comparativesData as $row) {
-                    $cols[] = [
-                      'label' => \Carbon\Carbon::parse($row['date'])->format('Y-m-d'),
-                      'assets' => $row['assetsTotal'],
-                      'liabEq' => $row['liabilitiesTotal'] + $row['equityTotal'],
-                      'equity' => $row['equityTotal'],
-                      'liab' => $row['liabilitiesTotal'],
-                      'pnl' => $row['profitLoss'],
-                    ];
-                  }
-                }
-              @endphp
-              <table class="table table-bordered align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>Line</th>
-                    @foreach($cols as $c)
-                      <th class="text-end">{{ $c['label'] }}</th>
-                    @endforeach
-                  </tr>
-                </thead>
-                  <tbody>
-                  {{-- Render classes dynamically from DB-backed data --}}
-                  @php
-                    $classOrder = ['Assets','Liabilities','Equity'];
-                    $classTotals = [
-                      'Assets' => $assetsTotal,
-                      'Liabilities' => $liabilitiesTotal,
-                      'Equity' => $equityTotal,
-                    ];
-                  @endphp
-                  @foreach($classOrder as $className)
-                    <tr>
-                      <td><b>{{ $className }}</b></td>
-                      @foreach($cols as $c)
-                        @php
-                          if ($c['label'] === \Carbon\Carbon::parse($asOf)->format('Y-m-d')) {
-                            $val = $classTotals[$className] ?? 0;
-                          } else {
-                            $cmp = collect($comparativesData)->firstWhere('date', $c['label']);
-                            if ($cmp) {
-                              if ($className==='Assets') $val = $cmp['assetsTotal'];
-                              elseif ($className==='Liabilities') $val = $cmp['liabilitiesTotal'];
-                              else $val = $cmp['equityTotal'];
-                            } else { $val = 0; }
-                          }
-                        @endphp
-                        <td class="text-end"><b>{{ number_format($val, 2) }}</b></td>
-                      @endforeach
-                    </tr>
-                    {{-- Groups under each class --}}
-                    @if(!empty($groupTotals[$className] ?? []))
-                      @foreach(($groupTotals[$className] ?? []) as $groupName => $curTotal)
-                        <tr>
-                          <td class="ps-4">{{ $groupName }}</td>
-                          @foreach($cols as $c)
-                            @php
-                              if ($c['label'] === \Carbon\Carbon::parse($asOf)->format('Y-m-d')) {
-                                $gval = $curTotal;
-                              } else {
-                                $gval = $comparativeGroupTotals[$c['label']][$className][$groupName] ?? 0;
-                              }
-                            @endphp
-                            <td class="text-end">{{ number_format($gval, 2) }}</td>
-                          @endforeach
-                        </tr>
-                      @endforeach
-                    @endif
-                  @endforeach
-                  <tr>
-                    <td>Profit / Loss</td>
-                    @foreach($cols as $c)
-                      <td class="text-end">{{ number_format($c['pnl'], 2) }}</td>
-                    @endforeach
-                  </tr>
-                  <tr class="fw-bold">
-                    <td>Total Liabilities + Equity</td>
-                    @foreach($cols as $c)
-                      <td class="text-end">{{ number_format($c['liabEq'], 2) }}</td>
-                    @endforeach
-                      </tr>
-                  <tr class="table-secondary fw-bold">
-                    <td></td>
-                    @foreach($cols as $c)
-                      <td class="text-end"></td>
-                    @endforeach
-                  </tr>
-                  </tbody>
-                </table>
-              </div>
-              </div>
-              </div>
-              @endif
-
-    {{-- Detailed View --}}
-            @if($viewType==='detailed')
-    <div class="card">
-        <div class="card-header">Detailed</div>
-        <div class="card-body">
-            <div class="row">
-                {{-- Assets --}}
-                <div class="col-md-12">
-                    <h5>Assets</h5>
-                    @php $firstComp = !empty($comparativesData) ? ($comparativesData[0] ?? null) : null; $compCount = !empty($comparativesData) ? count($comparativesData) : 0; @endphp
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Account</th>
-                                <th class="text-end">{{ \Carbon\Carbon::parse($asOf)->format('Y-m-d') }}</th>
-                                @if($compCount > 0)
-                                    @foreach($comparativesData as $col)
-                                        <th class="text-end">{{ \Carbon\Carbon::parse($col['date'])->format('Y-m-d') }}</th>
-                                        <th class="text-end">Variance</th>
-                                    @endforeach
-                                @endif
-                            </tr>
-                        </thead>
-                      <tbody>
-                        @if(isset($detailed['Assets']))
-                            @foreach($detailed['Assets']['groups'] as $groupName => $group)
-                                <tr class="table-secondary"><td colspan="{{ 2 + ($compCount * 2) }}">{{ $groupName }}</td></tr>
-                                @foreach($group['accounts'] as $acc)
-                                <tr>
-                                    <td>{{ $acc['account_name'] }}</td>
-                                    <td class="text-end">{{ number_format($acc['balance'], 2) }}</td>
-                                    @if($compCount > 0)
-                                        @for($i=0;$i<$compCount;$i++)
-                                            <td></td>
-                                            <td></td>
-                                        @endfor
-                                    @endif
-                                </tr>
-                                @endforeach
-                                <tr class="fw-bold">
-                                    <td>Total {{ $groupName }}</td>
-                                    @php $cur = $group['total'] ?? 0; @endphp
-                                    <td class="text-end">{{ number_format($cur, 2) }}</td>
-                                    @if($compCount > 0)
-                                        @foreach($comparativesData as $col)
-                                            @php $cmp = $comparativeGroupTotals[$col['date']]['Assets'][$groupName] ?? 0; @endphp
-                                            <td class="text-end">{{ number_format($cmp, 2) }}</td>
-                                            <td class="text-end">{{ number_format($cur - $cmp, 2) }}</td>
-                                        @endforeach
-                                    @endif
-                                </tr>
-                            @endforeach
-                        @endif
-                        <tr class="fw-bold">
-                            <td>Total Assets</td>
-                            <td class="text-end">{{ number_format($assetsTotal, 2) }}</td>
-                            @if($compCount > 0)
-                                @foreach($comparativesData as $col)
-                                    <td class="text-end">{{ number_format($col['assetsTotal'], 2) }}</td>
-                                    <td class="text-end">{{ number_format($assetsTotal - $col['assetsTotal'], 2) }}</td>
-                                @endforeach
-                            @endif
-                        </tr>
-                        </tbody>
-                    </table>
                 </div>
-
-                    <h5>Liabilities</h5>
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Account</th>
-                                <th class="text-end">{{ \Carbon\Carbon::parse($asOf)->format('Y-m-d') }}</th>
-                                @if($compCount > 0)
-                                    @foreach($comparativesData as $col)
-                                        <th class="text-end">{{ \Carbon\Carbon::parse($col['date'])->format('Y-m-d') }}</th>
-                                        <th class="text-end">Variance</th>
-                                    @endforeach
-                                @endif
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @if(isset($detailed['Liabilities']) && count($detailed['Liabilities']['groups']) > 0)
-                            @foreach($detailed['Liabilities']['groups'] as $groupName => $group)
-                                <tr class="table-secondary"><td colspan="{{ 2 + ($compCount * 2) }}">{{ $groupName }}</td></tr>
-                                @foreach($group['accounts'] as $acc)
-                                    <tr>
-                                        <td>{{ $acc['account_name'] }}</td>
-                                        <td class="text-end">{{ number_format($acc['balance'], 2) }}</td>
-                                        @if($compCount > 0)
-                                            @for($i=0;$i<$compCount;$i++)
-                                                <td></td>
-                                                <td></td>
-                                            @endfor
-                                        @endif
-                                    </tr>
-                                @endforeach
-                                <tr class="fw-bold">
-                                    <td>Total {{ $groupName }}</td>
-                                    @php $cur = $group['total'] ?? 0; @endphp
-                                    <td class="text-end">{{ number_format($cur, 2) }}</td>
-                                    @if($compCount > 0)
-                                        @foreach($comparativesData as $col)
-                                            @php $cmp = $comparativeGroupTotals[$col['date']]['Liabilities'][$groupName] ?? 0; @endphp
-                                            <td class="text-end">{{ number_format($cmp, 2) }}</td>
-                                            <td class="text-end">{{ number_format($cur - $cmp, 2) }}</td>
-                                        @endforeach
-                                    @endif
-                          </tr>
-                        @endforeach
-                        @else
-                            <tr>
-                                <td>No Liabilities</td>
-                                <td class="text-end">0.00</td>
-                                @if($compCount > 0)
-                                    @for($i=0;$i<$compCount;$i++)
-                                        <td></td>
-                                        <td></td>
-                                    @endfor
-                                @endif
-                            </tr>
-                        @endif
-                        <tr class="fw-bold">
-                            <td>Total Liabilities</td>
-                            <td class="text-end">{{ number_format($liabilitiesTotal, 2) }}</td>
-                            @if($compCount > 0)
-                                @foreach($comparativesData as $col)
-                                    <td class="text-end">{{ number_format($col['liabilitiesTotal'], 2) }}</td>
-                                    <td class="text-end">{{ number_format($liabilitiesTotal - $col['liabilitiesTotal'], 2) }}</td>
-                      @endforeach
-                            @endif
-                        </tr>
-                      </tbody>
-                    </table>
-                
-                    <h5>Equity</h5>
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Account</th>
-                                <th class="text-end">{{ \Carbon\Carbon::parse($asOf)->format('Y-m-d') }}</th>
-                                @if($firstComp)
-                                    <th class="text-end">{{ \Carbon\Carbon::parse($firstComp['date'])->format('Y-m-d') }}</th>
-                                    <th class="text-end">Variance</th>
-                                @endif
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @if(isset($detailed['Equity']))
-                            @foreach($detailed['Equity']['groups'] as $groupName => $group)
-                                <tr class="table-secondary"><td colspan="{{ $firstComp ? 4 : 2 }}">{{ $groupName }}</td></tr>
-                                @foreach($group['accounts'] as $acc)
-                                    <tr>
-                                        <td>{{ $acc['account_name'] }}</td>
-                                        <td class="text-end">{{ number_format($acc['balance'], 2) }}</td>
-                                        @if($firstComp)
-                                            <td></td>
-                                            <td></td>
-                                        @endif
-                                    </tr>
-                                @endforeach
-                                <tr class="fw-bold">
-                                    <td>Total {{ $groupName }}</td>
-                                    @php $cur = $group['total'] ?? 0; $cmp = $firstComp ? ($comparativeGroupTotals[$firstComp['date']]['Equity'][$groupName] ?? 0) : null; @endphp
-                                    <td class="text-end">{{ number_format($cur, 2) }}</td>
-                                    @if($firstComp)
-                                        <td class="text-end">{{ number_format($cmp, 2) }}</td>
-                                        <td class="text-end">{{ number_format(($cur - ($cmp ?? 0)), 2) }}</td>
-                @endif
-                                </tr>
-              @endforeach
-            @endif
-                        <tr>
-                            <td>Profit / Loss</td>
-                            <td class="text-end">{{ number_format($profitLoss, 2) }}</td>
-                            @if($firstComp)
-                                <td class="text-end">{{ number_format($firstComp['profitLoss'], 2) }}</td>
-                                <td class="text-end">{{ number_format($profitLoss - $firstComp['profitLoss'], 2) }}</td>
-                            @endif
-                        </tr>
-                        <tr class="fw-bold">
-                            <td>Total Equity</td>
-                            <td class="text-end">{{ number_format($equityTotal, 2) }}</td>
-                            @if($firstComp)
-                                <td class="text-end">{{ number_format($firstComp['equityTotal'], 2) }}</td>
-                                <td class="text-end">{{ number_format($equityTotal - $firstComp['equityTotal'], 2) }}</td>
-                            @endif
-                        </tr>
-                        <tr class="table-secondary fw-bold">
-                            <td>Total Assets</td>
-                            <td class="text-end">{{ number_format($assetsTotal, 2) }}</td>
-                            @if($firstComp)
-                                <td class="text-end">{{ number_format($firstComp['assetsTotal'], 2) }}</td>
-                                <td class="text-end">{{ number_format($assetsTotal - $firstComp['assetsTotal'], 2) }}</td>
-                            @endif
-                        </tr>
-                        <tr class="table-secondary fw-bold">
-                            <td>Total Liabilities + Equity</td>
-                            <td class="text-end">{{ number_format($liabilitiesTotal + $equityTotal, 2) }}</td>
-                            @if($firstComp)
-                                <td class="text-end">{{ number_format($firstComp['liabilitiesTotal'] + $firstComp['equityTotal'], 2) }}</td>
-                                <td class="text-end">{{ number_format(($liabilitiesTotal + $equityTotal) - ($firstComp['liabilitiesTotal'] + $firstComp['equityTotal']), 2) }}</td>
-                            @endif
-                        </tr>
-                        </tbody>
-                    </table>
-      </div>
-    </div>
-
+            </div>
         </div>
-      </div>
-    @endif
-
-    @if(!empty($comparativesData) && $viewType==='summary')
-    <div class="card mb-4">
-      <div class="card-header">Comparatives</div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-sm table-bordered align-middle mb-0">
-            <thead>
-              <tr>
-                <th>As of</th>
-                <th class="text-end">Total Assets</th>
-                <th class="text-end">Total Liabilities + Equity</th>
-                <th class="text-end">Profit / Loss</th>
-              </tr>
-            </thead>
-            <tbody>
-              @foreach($comparativesData as $row)
-                <tr>
-                  <td>{{ \Carbon\Carbon::parse($row['date'])->format('Y-m-d') }}</td>
-                  <td class="text-end">{{ number_format($row['assetsTotal'], 2) }}</td>
-                  <td class="text-end">{{ number_format($row['liabilitiesTotal'] + $row['equityTotal'], 2) }}</td>
-                  <td class="text-end">{{ number_format($row['profitLoss'], 2) }}</td>
-                </tr>
-              @endforeach
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
-    @endif
 </div>
 
+<script>
+function addComparative(){
+    const container = document.getElementById('comparatives_container');
+    const idx = container.querySelectorAll('.comparative-row').length;
+    const row = document.createElement('div');
+    row.className = 'row g-2 align-items-end mb-2 comparative-row';
+    row.innerHTML = `
+        <div class="col-md-4">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-control" name="comparative_dates[${idx}][name]" placeholder="e.g. Previous Quarter">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">As of Date</label>
+            <input type="date" class="form-control" name="comparative_dates[${idx}][as_of_date]" required>
+        </div>
+        <div class="col-md-2 text-end">
+            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.comparative-row').remove()">
+                <i class="bx bx-trash"></i> Remove
+            </button>
+        </div>
+    `;
+    container.appendChild(row);
+}
+</script>
 @endsection
 
-<script>
-  document.addEventListener('DOMContentLoaded', function() {
-    const addBtn = document.getElementById('addComparativeBtn');
-    const container = document.getElementById('comparativesContainer');
-    const form = document.querySelector('form');
-    const viewTypeSelect = form ? form.querySelector('select[name="view_type"]') : null;
-    // If URL has view_type=summary, reflect it in the dropdown (and vice versa)
-    const urlParams = new URLSearchParams(window.location.search);
-    const vtParam = (urlParams.get('view_type') || '').toLowerCase();
-    if (viewTypeSelect && vtParam) {
-      if (vtParam === 'summary' && viewTypeSelect.value !== 'summary') {
-        viewTypeSelect.value = 'summary';
-      } else if (vtParam === 'detailed' && viewTypeSelect.value !== 'detailed') {
-        viewTypeSelect.value = 'detailed';
-      }
-    }
-    if (addBtn && container) {
-      addBtn.addEventListener('click', function() {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'col-md-3 comparative-item';
-        wrapper.innerHTML = '<div class="input-group">\
-          <input type="date" name="comparatives[]" class="form-control" />\
-          <button class="btn btn-outline-danger remove-comparative" type="button"><i class="bx bx-x"></i></button>\
-        </div>';
-        container.appendChild(wrapper);
-      });
-      container.addEventListener('click', function(e) {
-        const btn = e.target.closest('.remove-comparative');
-        if (btn) {
-          const item = btn.closest('.comparative-item');
-          if (item) item.remove();
-        }
-      });
-    }
-    // Keep URL and view selection in sync; submit the form (GET) with updated view_type
-    if (form && viewTypeSelect) {
-      viewTypeSelect.addEventListener('change', function() {
-        // Ensure the form has the current view_type value
-        const hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.name = 'view_type';
-        hidden.value = viewTypeSelect.value;
-        form.appendChild(hidden);
-        form.requestSubmit ? form.requestSubmit() : form.submit();
-      });
-    }
-  });
-
-  function exportReport(type) {
-    const form = document.querySelector('form');
-    const formData = new FormData(form);
-    formData.append('export_type', type);
-    // Ensure current view_type is captured
-    const viewTypeSelect = form.querySelector('select[name="view_type"]');
-    if (viewTypeSelect) {
-      formData.set('view_type', viewTypeSelect.value);
-    }
-    
-    // Create a temporary form for export
-    const tempForm = document.createElement('form');
-    tempForm.method = 'GET';
-    tempForm.action = '{{ route("accounting.reports.balance-sheet.export") }}';
-    tempForm.style.display = 'none';
-    
-    // Add all form data as hidden inputs
-    for (let [key, value] of formData.entries()) {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = key;
-      input.value = value;
-      tempForm.appendChild(input);
-    }
-    
-    document.body.appendChild(tempForm);
-    tempForm.submit();
-    document.body.removeChild(tempForm);
-  }
-</script>

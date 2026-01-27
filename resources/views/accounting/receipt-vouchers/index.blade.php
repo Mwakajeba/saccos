@@ -11,6 +11,7 @@
         <div class="page-content">
             <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
             ['label' => 'Receipt Vouchers', 'url' => '#', 'icon' => 'bx bx-receipt']
         ]" />
 

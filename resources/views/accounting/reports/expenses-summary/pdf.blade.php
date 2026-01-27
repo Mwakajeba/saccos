@@ -162,10 +162,6 @@
                 <div class="summary-label">Account Count</div>
                 <div class="summary-value">{{ number_format($expensesData['summary']['account_count']) }}</div>
             </div>
-            <div class="summary-item">
-                <div class="summary-label">Avg per Transaction</div>
-                <div class="summary-value">{{ number_format($expensesData['summary']['average_per_transaction'], 2) }}</div>
-            </div>
         </div>
     </div>
 
@@ -251,29 +247,6 @@
             </tbody>
         </table>
         @endif
-    </div>
-
-    <!-- Additional Summary -->
-    <div class="additional-summary">
-        <h3>Additional Summary</h3>
-        <table style="width: 50%;">
-            <tr>
-                <td><strong>Average per Account:</strong></td>
-                <td class="text-right">{{ number_format($expensesData['summary']['average_per_account'], 2) }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Transactions:</strong></td>
-                <td class="text-right">{{ number_format($expensesData['summary']['total_transactions']) }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Accounts:</strong></td>
-                <td class="text-right">{{ number_format($expensesData['summary']['account_count']) }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Expenses:</strong></td>
-                <td class="text-right text-danger">{{ number_format($expensesData['summary']['total_expenses'], 2) }}</td>
-            </tr>
-        </table>
     </div>
 
     <div class="footer">

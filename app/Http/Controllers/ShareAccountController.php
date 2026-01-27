@@ -183,82 +183,66 @@ class ShareAccountController extends Controller
      */
     public function store(Request $request)
     {
-        // Validate multiple lines
-        $rules = [];
+        // New validation structure: one share product for multiple members
+        $rules = [
+            'share_product_id' => 'required|exists:share_products,id',
+            'opening_date' => 'required|date',
+            'notes' => 'nullable|string',
+        ];
+        
         $messages = [];
 
-        if ($request->has('lines')) {
-            foreach ($request->lines as $index => $line) {
-                $rules["lines.{$index}.customer_id"] = 'required|exists:customers,id';
-                $rules["lines.{$index}.share_product_id"] = 'required|exists:share_products,id';
-                $rules["lines.{$index}.opening_date"] = 'required|date';
-                $rules["lines.{$index}.notes"] = 'nullable|string';
-
-                $messages["lines.{$index}.customer_id.required"] = "Line " . ($index + 1) . ": Member name is required";
-                $messages["lines.{$index}.share_product_id.required"] = "Line " . ($index + 1) . ": Share product is required";
-                $messages["lines.{$index}.opening_date.required"] = "Line " . ($index + 1) . ": Opening date is required";
+        // Validate members array
+        if ($request->has('members')) {
+            foreach ($request->members as $index => $member) {
+                $rules["members.{$index}.customer_id"] = 'required|exists:customers,id';
+                $messages["members.{$index}.customer_id.required"] = "Member " . ($index + 1) . ": Please select a member";
+                $messages["members.{$index}.customer_id.exists"] = "Member " . ($index + 1) . ": Invalid member selected";
             }
-        } else {
-            // Fallback to single line validation
-            $rules = [
-                'customer_id' => 'required|exists:customers,id',
-                'share_product_id' => 'required|exists:share_products,id',
-                'opening_date' => 'required|date',
-                'notes' => 'nullable|string',
-            ];
         }
 
         $validator = Validator::make($request->all(), $rules, $messages);
 
         // Additional validation: Check for duplicates within the same request
-        $lines = $request->lines ?? [
-            [
-                'customer_id' => $request->customer_id,
-                'share_product_id' => $request->share_product_id,
-                'opening_date' => $request->opening_date,
-                'notes' => $request->notes,
-            ]
-        ];
-
-        // Check for duplicates within the same request (same customer + share product combination)
-        $combinations = [];
-        foreach ($lines as $index => $line) {
-            if (!empty($line['customer_id']) && !empty($line['share_product_id'])) {
-                $combination = $line['customer_id'] . '_' . $line['share_product_id'];
-                if (isset($combinations[$combination])) {
+        $members = $request->members ?? [];
+        $shareProductId = $request->share_product_id;
+        
+        // Check for duplicate members in the request
+        $customerIds = [];
+        foreach ($members as $index => $member) {
+            if (!empty($member['customer_id'])) {
+                if (in_array($member['customer_id'], $customerIds)) {
                     $validator->errors()->add(
-                        "lines.{$index}.customer_id",
-                        "Line " . ($index + 1) . ": This member already has this share product selected in another line."
+                        "members.{$index}.customer_id",
+                        "Member " . ($index + 1) . ": This member has already been selected."
                     );
                 } else {
-                    $combinations[$combination] = $index;
+                    $customerIds[] = $member['customer_id'];
                 }
             }
         }
 
         // Check for duplicates against existing records in database
-        foreach ($lines as $index => $line) {
-            if (!empty($line['customer_id']) && !empty($line['share_product_id'])) {
-                // Check if this combination already exists in the database
-                $exists = ShareAccount::where('customer_id', $line['customer_id'])
-                    ->where('share_product_id', $line['share_product_id'])
+        foreach ($members as $index => $member) {
+            if (!empty($member['customer_id']) && !empty($shareProductId)) {
+                $exists = ShareAccount::where('customer_id', $member['customer_id'])
+                    ->where('share_product_id', $shareProductId)
                     ->exists();
                 
                 if ($exists) {
-                    $customer = Customer::find($line['customer_id']);
-                    $product = ShareProduct::find($line['share_product_id']);
+                    $customer = Customer::find($member['customer_id']);
+                    $product = ShareProduct::find($shareProductId);
                     $customerName = $customer ? $customer->name : 'Unknown';
                     $productName = $product ? $product->share_name : 'Unknown';
                     
                     $validator->errors()->add(
-                        "lines.{$index}.customer_id",
-                        "Line " . ($index + 1) . ": Member \"{$customerName}\" already has a share account for product \"{$productName}\"."
+                        "members.{$index}.customer_id",
+                        "Member " . ($index + 1) . ": \"{$customerName}\" already has a share account for product \"{$productName}\"."
                     );
                 }
             }
         }
 
-        // Validate fails will be true if there are any errors (either from validation rules or manually added)
         if ($validator->fails()) {
             return redirect()->back()
                 ->withErrors($validator)
@@ -266,46 +250,34 @@ class ShareAccountController extends Controller
         }
 
         $createdCount = 0;
-        $createdInBatch = []; // Track what we're creating in this batch to prevent duplicates
+        $shareProduct = ShareProduct::findOrFail($shareProductId);
 
-        foreach ($lines as $lineIndex => $line) {
-            // Skip empty lines
-            if (empty($line['customer_id']) || empty($line['share_product_id'])) {
+        foreach ($members as $member) {
+            // Skip empty members
+            if (empty($member['customer_id'])) {
                 continue;
             }
 
-            $combination = $line['customer_id'] . '_' . $line['share_product_id'];
-            
-            // Final safety check: Skip if we've already created this combination in this batch
-            // This prevents duplicates even if validation somehow passes
-            if (isset($createdInBatch[$combination])) {
-                continue; // Skip duplicate within the same batch - don't save
-            }
-            
             // Final check: Verify this combination doesn't exist in database before creating
-            $exists = ShareAccount::where('customer_id', $line['customer_id'])
-                ->where('share_product_id', $line['share_product_id'])
+            $exists = ShareAccount::where('customer_id', $member['customer_id'])
+                ->where('share_product_id', $shareProductId)
                 ->exists();
             
             if ($exists) {
-                // This should have been caught by validation, but skip just in case
-                continue; // Don't save if duplicate exists
+                continue; // Skip if duplicate exists
             }
 
             // Generate account number
             $accountNumber = $this->generateAccountNumber();
 
-            // Get share product to get nominal price
-            $shareProduct = ShareProduct::findOrFail($line['share_product_id']);
-
             $account = ShareAccount::create([
-                'customer_id' => $line['customer_id'],
-                'share_product_id' => $line['share_product_id'],
+                'customer_id' => $member['customer_id'],
+                'share_product_id' => $shareProductId,
                 'account_number' => $accountNumber,
                 'share_balance' => 0,
                 'nominal_value' => $shareProduct->nominal_price ?? 0,
-                'opening_date' => $line['opening_date'],
-                'notes' => $line['notes'] ?? null,
+                'opening_date' => $request->opening_date,
+                'notes' => $request->notes ?? null,
                 'status' => 'active',
                 'branch_id' => auth()->user()->branch_id ?? null,
                 'company_id' => auth()->user()->company_id ?? null,
@@ -319,8 +291,6 @@ class ShareAccountController extends Controller
                 $account->save();
             }
 
-            // Mark this combination as created in this batch
-            $createdInBatch[$combination] = true;
             $createdCount++;
         }
 

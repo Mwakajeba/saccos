@@ -85,6 +85,10 @@
                                                 data-bs-target="#importModal">
                                                 <i class="bx bx-import"></i> Import Loans
                                             </button>
+                                            <button class="btn btn-outline-info" data-bs-toggle="modal"
+                                                data-bs-target="#bulkRepaymentImportModal">
+                                                <i class="bx bx-upload"></i> Bulk Repayment Import
+                                            </button>
                                             @if(isset($status) && $status === 'applied')
                                                 <a href="{{ route('loans.application.create') }}" class="btn btn-primary">
                                                     <i class="bx bx-plus"></i> Create Loan Application
@@ -286,6 +290,139 @@
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                                 <button type="submit" class="btn btn-success">
                                     <i class="bx bx-import"></i> Import Loans
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bulk Repayment Import Modal -->
+            <div class="modal fade" id="bulkRepaymentImportModal" tabindex="-1" aria-labelledby="bulkRepaymentImportModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="bulkRepaymentImportModalLabel">Bulk Repayment Import</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form action="{{ route('loans.repayments.bulk-import') }}" method="POST" enctype="multipart/form-data"
+                            id="bulkRepaymentImportForm">
+                            @csrf
+                            <div class="modal-body">
+                                <div class="alert alert-info">
+                                    <i class="bx bx-info-circle me-2"></i>
+                                    <strong>Instructions:</strong>
+                                    <ul class="mb-0 mt-2">
+                                        <li>Select due date to generate template with all scheduled payments for that date</li>
+                                        <li>Download template will show: Customer, Schedule ID, Loan ID, and Amount Due</li>
+                                        <li>Only edit the "Amount" column in the Excel file</li>
+                                        <li>Upload the completed Excel file to process repayments</li>
+                                    </ul>
+                                </div>
+
+                                <!-- Template Generation Section -->
+                                <div class="card mb-3 bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title mb-3">Step 1: Generate Template</h6>
+                                        <div class="row">
+                                            <div class="col-md-12 mb-3">
+                                                <label for="template_due_date" class="form-label">Due Date <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control" id="template_due_date" 
+                                                    value="{{ date('Y-m-d') }}" max="{{ date('Y-m-d') }}">
+                                                <div class="form-text">Select the due date to fetch all scheduled payments</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Import Section -->
+                                <div class="card mb-3">
+                                    <div class="card-body">
+                                        <h6 class="card-title mb-3">Step 2: Upload Completed Template</h6>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="repayment_date" class="form-label">Repayment Date <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control" name="repayment_date" id="repayment_date" 
+                                                    value="{{ date('Y-m-d') }}" max="{{ date('Y-m-d') }}" required>
+                                                <div class="form-text">Actual date when payment was received</div>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="bulk_repayment_file" class="form-label">Select Excel File <span class="text-danger">*</span></label>
+                                                <input type="file" class="form-control" id="bulk_repayment_file" name="import_file"
+                                                    accept=".xlsx,.xls" required>
+                                                <div class="form-text">Supported: Excel (Max: 5MB)</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="repayment_branch_id" class="form-label">Branch <span
+                                                class="text-danger">*</span></label>
+                                        <select class="form-select" id="repayment_branch_id" name="branch_id" required>
+                                            <option value="">Select Branch</option>
+                                            @if(isset($branches))
+                                                @foreach($branches as $branch)
+                                                    <option value="{{ $branch->id }}" {{ auth()->user()->branch_id == $branch->id ? 'selected' : '' }}>
+                                                        {{ $branch->name }}
+                                                    </option>
+                                                @endforeach
+                                            @endif
+                                        </select>
+                                        <div class="form-text">Branch for repayment processing</div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="transaction_type" class="form-label">Transaction Type <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="transaction_type" name="transaction_type" required>
+                                            <option value="">Select Transaction Type</option>
+                                            <option value="Receipt" selected>Receipt</option>
+                                            <option value="Journal">Journal</option>
+                                        </select>
+                                        <div class="form-text">Type of transaction to record</div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <label for="repayment_bank_account_id" class="form-label">Bank Account <span
+                                                class="text-danger">*</span></label>
+                                        <select class="form-select" id="repayment_bank_account_id" name="bank_account_id" required>
+                                            <option value="">Select Bank Account</option>
+                                            @if(isset($bankAccounts))
+                                                @foreach($bankAccounts as $bankAccount)
+                                                    <option value="{{ $bankAccount->id }}">
+                                                        {{ $bankAccount->account_number }} - {{ $bankAccount->name }}
+                                                    </option>
+                                                @endforeach
+                                            @endif
+                                        </select>
+                                        <div class="form-text">Bank account for receiving payments</div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="skip_repayment_errors"
+                                                name="skip_errors" checked>
+                                            <label class="form-check-label" for="skip_repayment_errors">
+                                                Skip rows with errors and continue import
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <div class="me-auto">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        id="downloadRepaymentTemplate">
+                                        <i class="bx bx-download"></i> Download Template
+                                    </button>
+                                </div>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-info">
+                                    <i class="bx bx-upload"></i> Import Repayments
                                 </button>
                             </div>
                         </form>
@@ -893,6 +1030,41 @@
                     submitBtn.prop('disabled', false).html(originalText);
                 }
             });
+        });
+
+        // Handle bulk repayment template download
+        $('#downloadRepaymentTemplate').on('click', function(e) {
+            e.preventDefault();
+            const dueDate = $('#template_due_date').val();
+            const branchId = $('#repayment_branch_id').val();
+            
+            if (!dueDate) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error!',
+                    text: 'Please select a due date first',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+            
+            if (!branchId) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error!',
+                    text: 'Please select a branch first',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+            
+            // Build URL with query parameters
+            const url = '{{ route("loans.repayments.import-template") }}' + 
+                        '?due_date=' + encodeURIComponent(dueDate) + 
+                        '&branch_id=' + encodeURIComponent(branchId);
+            
+            // Open in new window to trigger download
+            window.location.href = url;
         });
     </script>
 @endpush

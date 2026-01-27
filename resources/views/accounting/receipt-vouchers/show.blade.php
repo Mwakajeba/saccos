@@ -11,6 +11,7 @@
         <div class="page-content">
             <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
+            ['label' => 'Accounting', 'url' => route('accounting.index'), 'icon' => 'bx bx-calculator'],
             ['label' => 'Receipt Vouchers', 'url' => route('accounting.receipt-vouchers.index'), 'icon' => 'bx bx-receipt'],
             ['label' => 'Voucher Details', 'url' => '#', 'icon' => 'bx bx-info-circle']
         ]" />
@@ -21,6 +22,11 @@
                     <p class="text-muted mb-0">View receipt voucher information</p>
                 </div>
                 <div>
+                    @if($receiptVoucher->payment_method === 'cheque' && !$receiptVoucher->cheque_deposited)
+                    <button type="button" class="btn btn-warning me-2" onclick="showDepositChequeModal()">
+                        <i class="bx bx-money me-2"></i>Deposit Cheque
+                    </button>
+                    @endif
                     @can('edit receipt voucher')
                     <a href="{{ route('accounting.receipt-vouchers.edit', Hashids::encode($receiptVoucher->id)) }}"
                         class="btn btn-primary me-2">
@@ -94,10 +100,41 @@
                                     </p>
                                 </div>
                                 <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">Payment Method</label>
+                                    <p class="form-control-plaintext">
+                                        @if($receiptVoucher->payment_method === 'cheque')
+                                            <span class="badge bg-warning text-dark">
+                                                <i class="bx bx-money me-1"></i>Cheque
+                                                @if($receiptVoucher->cheque_deposited)
+                                                    <span class="badge bg-success ms-2">Deposited</span>
+                                                @else
+                                                    <span class="badge bg-warning ms-2">In Transit</span>
+                                                @endif
+                                            </span>
+                                        @elseif($receiptVoucher->payment_method === 'cash')
+                                            <span class="badge bg-info">Cash</span>
+                                        @else
+                                            <span class="badge bg-primary">Bank Transfer</span>
+                                        @endif
+                                    </p>
+                                </div>
+                                @if($receiptVoucher->payment_method === 'cheque' && $receiptVoucher->cheque_deposited)
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">Cheque Deposited</label>
+                                    <p class="form-control-plaintext">
+                                        <i class="bx bx-check-circle text-success me-1"></i>
+                                        Deposited on {{ $receiptVoucher->cheque_deposited_at ? $receiptVoucher->cheque_deposited_at->format('d M Y') : 'N/A' }}
+                                        @if($receiptVoucher->chequeDepositedBy)
+                                            by {{ $receiptVoucher->chequeDepositedBy->name }}
+                                        @endif
+                                    </p>
+                                </div>
+                                @endif
+                                <div class="col-md-6 mb-3">
                                     <label class="form-label fw-bold">Payee Type</label>
                                     <p class="form-control-plaintext">
                                         <span
-                                            class="badge bg-{{ $receiptVoucher->payee_type === 'customer' ? 'info' : 'secondary' }}">
+                                            class="badge bg-{{ $receiptVoucher->payee_type === 'customer' ? 'info' : ($receiptVoucher->payee_type === 'employee' ? 'primary' : 'secondary') }}">
                                             {{ ucfirst($receiptVoucher->payee_type ?? 'N/A') }}
                                         </span>
                                     </p>
@@ -107,6 +144,8 @@
                                     <p class="form-control-plaintext">
                                         @if($receiptVoucher->payee_type === 'customer' && $receiptVoucher->customer)
                                             {{ $receiptVoucher->customer->name }} ({{ $receiptVoucher->customer->customerNo }})
+                                        @elseif($receiptVoucher->payee_type === 'employee' && $receiptVoucher->employee)
+                                            {{ $receiptVoucher->employee->full_name }}@if($receiptVoucher->employee->employee_number) ({{ $receiptVoucher->employee->employee_number }})@endif
                                         @elseif($receiptVoucher->payee_type === 'other')
                                             {{ $receiptVoucher->payee_name }}
                                         @else
@@ -390,6 +429,110 @@
 
 @push('scripts')
     <script>
+        function showDepositChequeModal() {
+            Swal.fire({
+                title: 'Deposit Cheque',
+                html: `
+                    <form id="depositChequeForm">
+                        <div class="mb-3">
+                            <label for="deposit_date" class="form-label">Deposit Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="deposit_date" name="deposit_date" value="{{ date('Y-m-d') }}" required>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="bx bx-info-circle me-2"></i>
+                            This will move the cheque from "Cheques in Transit" to the bank account.
+                        </div>
+                    </form>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#ffc107',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="bx bx-money me-2"></i>Deposit Cheque',
+                cancelButtonText: 'Cancel',
+                reverseButtons: true,
+                didOpen: () => {
+                    // Set max date to today
+                    const depositDateInput = document.getElementById('deposit_date');
+                    if (depositDateInput) {
+                        depositDateInput.max = new Date().toISOString().split('T')[0];
+                    }
+                },
+                preConfirm: () => {
+                    const depositDate = document.getElementById('deposit_date').value;
+                    if (!depositDate) {
+                        Swal.showValidationMessage('Please select a deposit date');
+                        return false;
+                    }
+                    return depositDate;
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    depositCheque(result.value);
+                }
+            });
+        }
+
+        function depositCheque(depositDate) {
+            // Show loading
+            Swal.fire({
+                title: 'Depositing Cheque...',
+                text: 'Please wait while we process the deposit.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            // Make AJAX request
+            $.ajax({
+                url: '{{ route("accounting.receipt-vouchers.deposit-cheque", Hashids::encode($receiptVoucher->id)) }}',
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    deposit_date: depositDate
+                },
+                success: function(response) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Cheque Deposited!',
+                        text: 'The cheque has been successfully deposited to the bank account.',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        // Reload the page to show updated status
+                        window.location.reload();
+                    });
+                },
+                error: function(xhr) {
+                    let errorMessage = 'Failed to deposit cheque.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMessage = xhr.responseJSON.message;
+                    } else if (xhr.responseText) {
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            if (response.message) {
+                                errorMessage = response.message;
+                            }
+                        } catch (e) {
+                            // If not JSON, use the response text
+                            if (xhr.responseText.includes('error')) {
+                                errorMessage = xhr.responseText;
+                            }
+                        }
+                    }
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Deposit Failed',
+                        text: errorMessage,
+                        confirmButtonText: 'OK'
+                    });
+                }
+            });
+        }
+
         function deleteReceiptVoucher() {
             Swal.fire({
                 title: 'Delete Receipt Voucher',

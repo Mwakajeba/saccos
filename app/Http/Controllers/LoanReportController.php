@@ -3842,4 +3842,336 @@ class LoanReportController extends Controller
         $filename = 'loan_outstanding_balance_' . $asOfDate . '.pdf';
         return $pdf->download($filename);
     }
+
+    /**
+     * CRB (Credit Reference Bureau) Report
+     */
+    public function crbReport(Request $request)
+    {
+        $user = auth()->user();
+        $company = $user->company;
+
+        // Get filter parameters
+        $reportingDate = $request->input('reporting_date', Carbon::now()->toDateString());
+        $branchId = $request->input('branch_id');
+        $loanOfficerId = $request->input('loan_officer_id');
+
+        // Get user's assigned branches
+        $branches = $user->branches()
+            ->where('branches.company_id', $company->id)
+            ->select('branches.id', 'branches.name')
+            ->get();
+
+        // If user has exactly one branch, force-select it
+        if (($branches->count() ?? 0) === 1) {
+            $branchId = $branches->first()->id;
+        }
+
+        // Get user's assigned branch IDs for filtering
+        $assignedBranchIds = $user->branches()
+            ->where('branches.company_id', $company->id)
+            ->pluck('branches.id')
+            ->toArray();
+
+        // Build query for loans
+        $loansQuery = Loan::with(['customer', 'product', 'branch', 'loanOfficer', 'schedule', 'repayments', 'collaterals'])
+            ->whereIn('branch_id', $assignedBranchIds)
+            ->whereIn('status', ['active', 'disbursed', 'defaulted']);
+
+        // Apply branch filter
+        if ($branchId && $branchId !== 'all') {
+            $loansQuery->where('branch_id', $branchId);
+        }
+
+        // Apply loan officer filter
+        if ($loanOfficerId) {
+            $loansQuery->where('loan_officer_id', $loanOfficerId);
+        }
+
+        $loans = $loansQuery->get();
+
+        // Process CRB data
+        $crbData = [];
+        foreach ($loans as $loan) {
+            // Calculate number of installments and outstanding installments
+            $totalInstallments = $loan->period;
+            $scheduleItems = $loan->schedule;
+            $paidSchedules = $scheduleItems->where('status', 'paid')->count();
+            $outstandingInstallments = $totalInstallments - $paidSchedules;
+
+            // Calculate installment amount
+            $installmentAmount = $totalInstallments > 0 ? ($loan->amount_total / $totalInstallments) : 0;
+
+            // Calculate outstanding amount
+            $totalPaid = $loan->repayments->sum(function ($r) {
+                return $r->principal + $r->interest;
+            });
+            $outstandingAmount = $loan->amount_total - $totalPaid;
+
+            // Calculate past due information - use loan's arrears_amount
+            $pastDueAmount = $loan->arrears_amount ?? 0;
+
+            // Calculate past due days
+            $pastDueDays = 0;
+            if ($loan->is_in_arrears && $loan->days_in_arrears) {
+                $pastDueDays = round($loan->days_in_arrears);
+            }
+
+            // Date of last payment
+            $lastPayment = $loan->repayments->sortByDesc('payment_date')->first();
+            $dateOfLastPayment = $lastPayment ? $lastPayment->payment_date : null;
+
+            // Total monthly payment (sum of all repayments in the current month or average monthly)
+            $totalMonthlyPayment = 0;
+            if ($loan->repayments->count() > 0) {
+                $currentMonthPayments = $loan->repayments->filter(function ($repayment) {
+                    return $repayment->payment_date && 
+                           Carbon::parse($repayment->payment_date)->format('Y-m') === Carbon::now()->format('Y-m');
+                });
+                $totalMonthlyPayment = $currentMonthPayments->sum(function ($r) {
+                    return $r->principal + $r->interest;
+                });
+            }
+
+            // Payment Periodicity
+            $paymentPeriodicity = 'Monthly'; // Default
+            if ($loan->product && $loan->product->repayment_cycle) {
+                $repaymentCycle = $loan->product->repayment_cycle;
+                $paymentPeriodicity = ucfirst($repaymentCycle);
+            }
+
+            // Start date (disbursed on)
+            $startDate = $loan->disbursed_on;
+
+            // End Date (expected last repayment date)
+            $endDate = $loan->last_repayment_date;
+
+            // Real end date = End Date
+            $realEndDate = $loan->last_repayment_date;
+
+            // Number of due installments = schedules where principal+interest != principal_paid+interest_paid
+            $numberOfDueInstallments = $scheduleItems->filter(function ($schedule) {
+                $expectedTotal = ($schedule->principal ?? 0) + ($schedule->interest ?? 0);
+                $paidTotal = ($schedule->principal_paid ?? 0) + ($schedule->interest_paid ?? 0);
+                return $expectedTotal != $paidTotal;
+            })->count();
+
+            // Collateral information
+            $collateralType = 'N/A';
+            $collateralValue = 0;
+            if ($loan->collaterals && $loan->collaterals->count() > 0) {
+                $collateralTypes = $loan->collaterals->pluck('type')->filter()->unique()->toArray();
+                $collateralType = implode(', ', $collateralTypes) ?: 'N/A';
+                $collateralValue = $loan->collaterals->sum('value');
+            }
+
+            $crbData[] = [
+                'reporting_date' => $reportingDate,
+                'fullname' => $loan->customer->name ?? 'N/A',
+                'contract_code' => $loan->loanNo ?? $loan->id,
+                'customer_code' => $loan->customer->customerNo ?? $loan->customer->id,
+                'branch' => $loan->branch->name ?? 'N/A',
+                'loan_status' => ucfirst($loan->status),
+                'type_of_contract' => 'Installment',
+                'loan_purpose' => $loan->sector ?? 'N/A',
+                'interest_rate' => number_format($loan->interest ?? 0, 2),
+                'total_loan' => $loan->amount_total,
+                'total_loan_taken' => $loan->amount,
+                'installment_amount' => $installmentAmount,
+                'number_of_installments' => $totalInstallments,
+                'number_of_outstanding_installments' => $outstandingInstallments,
+                'outstanding_amount' => $outstandingAmount,
+                'past_due_amount' => $pastDueAmount,
+                'past_due_days' => $pastDueDays,
+                'number_of_due_installments' => $numberOfDueInstallments,
+                'date_of_last_payment' => $dateOfLastPayment,
+                'total_monthly_payment' => $totalMonthlyPayment,
+                'payment_periodicity' => $paymentPeriodicity,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'real_end_date' => $realEndDate,
+                'collateral_type' => $collateralType,
+                'collateral_value' => $collateralValue,
+                'role_of_customer' => 'Main Debtor',
+                'currency' => 'TZS',
+            ];
+        }
+
+        // Calculate summary
+        $summary = [
+            'total_loans' => count($crbData),
+            'total_loan_amount' => collect($crbData)->sum('total_loan'),
+            'total_outstanding' => collect($crbData)->sum('outstanding_amount'),
+            'total_past_due' => collect($crbData)->sum('past_due_amount'),
+        ];
+
+        // Get loan officers for filter
+        $loanOfficers = User::whereHas('roles', function ($q) {
+            $q->where('name', 'Loan Officer');
+        })->get();
+
+        // Handle export
+        if ($request->has('export')) {
+            $exportType = $request->input('export');
+            if ($exportType === 'excel') {
+                return $this->exportCrbToExcel($crbData, $summary, $reportingDate, $branchId, $loanOfficerId);
+            } elseif ($exportType === 'pdf') {
+                return $this->exportCrbToPdf($crbData, $summary, $reportingDate, $branchId, $loanOfficerId);
+            }
+        }
+
+        return view('loans.reports.crb_report', compact('crbData', 'summary', 'reportingDate', 'branches', 'loanOfficers', 'branchId', 'loanOfficerId'));
+    }
+
+    /**
+     * Export CRB Report to Excel
+     */
+    private function exportCrbToExcel($crbData, $summary, $reportingDate, $branchId = null, $loanOfficerId = null)
+    {
+        return Excel::download(new class($crbData, $summary, $reportingDate, $branchId, $loanOfficerId) implements \Maatwebsite\Excel\Concerns\FromCollection, \Maatwebsite\Excel\Concerns\WithHeadings, \Maatwebsite\Excel\Concerns\WithTitle, \Maatwebsite\Excel\Concerns\WithStyles, \Maatwebsite\Excel\Concerns\ShouldAutoSize {
+            private $crbData;
+            private $summary;
+            private $reportingDate;
+            private $branchId;
+            private $loanOfficerId;
+
+            public function __construct($crbData, $summary, $reportingDate, $branchId, $loanOfficerId)
+            {
+                $this->crbData = $crbData;
+                $this->summary = $summary;
+                $this->reportingDate = $reportingDate;
+                $this->branchId = $branchId;
+                $this->loanOfficerId = $loanOfficerId;
+            }
+
+            public function collection()
+            {
+                return collect($this->crbData)->map(function ($item) {
+                    return [
+                        $item['reporting_date'],
+                        $item['fullname'],
+                        $item['contract_code'],
+                        $item['customer_code'],
+                        $item['branch'],
+                        $item['loan_status'],
+                        $item['type_of_contract'],
+                        $item['loan_purpose'],
+                        $item['interest_rate'] . '%',
+                        number_format($item['total_loan'], 2),
+                        number_format($item['total_loan_taken'], 2),
+                        number_format($item['installment_amount'], 2),
+                        $item['number_of_installments'],
+                        $item['number_of_outstanding_installments'],
+                        number_format($item['outstanding_amount'], 2),
+                        number_format($item['past_due_amount'], 2),
+                        $item['past_due_days'],
+                        $item['number_of_due_installments'],
+                        $item['date_of_last_payment'] ? \Carbon\Carbon::parse($item['date_of_last_payment'])->format('Y-m-d') : 'N/A',
+                        number_format($item['total_monthly_payment'], 2),
+                        $item['payment_periodicity'],
+                        $item['start_date'] ? \Carbon\Carbon::parse($item['start_date'])->format('Y-m-d') : 'N/A',
+                        $item['end_date'] ? \Carbon\Carbon::parse($item['end_date'])->format('Y-m-d') : 'N/A',
+                        $item['real_end_date'] ? \Carbon\Carbon::parse($item['real_end_date'])->format('Y-m-d') : 'N/A',
+                        $item['collateral_type'],
+                        number_format($item['collateral_value'], 2),
+                        $item['role_of_customer'],
+                        $item['currency'],
+                    ];
+                });
+            }
+
+            public function headings(): array
+            {
+                return [
+                    'Reporting Date',
+                    'Full Name',
+                    'Contract Code',
+                    'Customer Code',
+                    'Branch',
+                    'Loan Status',
+                    'Type of Contract',
+                    'Loan Purpose',
+                    'Interest Rate',
+                    'Total Loan',
+                    'Total Loan Taken',
+                    'Installment Amount',
+                    'Number of Installments',
+                    'Number of Outstanding Installments',
+                    'Outstanding Amount',
+                    'Past Due Amount',
+                    'Past Due Days',
+                    'Number of Due Installments',
+                    'Date of Last Payment',
+                    'Total Monthly Payment',
+                    'Payment Periodicity',
+                    'Start Date',
+                    'End Date',
+                    'Real End Date',
+                    'Collateral Type',
+                    'Collateral Value',
+                    'Role of Customer',
+                    'Currency',
+                ];
+            }
+
+            public function title(): string
+            {
+                return 'CRB Report';
+            }
+
+            public function styles(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet)
+            {
+                // Get the highest row and column
+                $highestRow = $sheet->getHighestRow();
+                $highestColumn = $sheet->getHighestColumn();
+                
+                // Style header row (row 1) - blue background, bold, white text
+                $sheet->getStyle('A1:' . $highestColumn . '1')->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => 'FFFFFF'],
+                    ],
+                    'fill' => [
+                        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'startColor' => ['rgb' => '4472C4'],
+                    ],
+                    'borders' => [
+                        'allBorders' => [
+                            'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                            'color' => ['rgb' => '000000'],
+                        ],
+                    ],
+                ]);
+                
+                // Apply borders to all data cells
+                if ($highestRow > 1) {
+                    $sheet->getStyle('A2:' . $highestColumn . $highestRow)->applyFromArray([
+                        'borders' => [
+                            'allBorders' => [
+                                'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                                'color' => ['rgb' => '000000'],
+                            ],
+                        ],
+                    ]);
+                }
+                
+                return [];
+            }
+        }, 'crb_report_' . $reportingDate . '.xlsx');
+    }
+
+    /**
+     * Export CRB Report to PDF
+     */
+    private function exportCrbToPdf($crbData, $summary, $reportingDate, $branchId = null, $loanOfficerId = null)
+    {
+        $branch = $branchId ? Branch::find($branchId) : null;
+        $loanOfficer = $loanOfficerId ? User::find($loanOfficerId) : null;
+        $company = Company::first();
+
+        $pdf = PDF::loadView('loans.reports.crb_report_pdf', compact('crbData', 'summary', 'reportingDate', 'branch', 'loanOfficer', 'company'));
+        $pdf->setPaper('A3', 'landscape');
+        $filename = 'crb_report_' . $reportingDate . '.pdf';
+        return $pdf->download($filename);
+    }
 }
