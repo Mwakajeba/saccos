@@ -3973,7 +3973,12 @@ class LoanController extends Controller
             info("headers of the csv ", [$headers]);
             info("expected headers",[$expectedHeaders]);
 
-            if (array_diff($expectedHeaders, $headers)) {
+            // Normalize csv headers to trim spaces before comparing to expected headers
+            $cleanHeaders = array_map(function($header) {
+                return trim($header);
+            }, $headers);
+
+            if ($expectedHeaders !== $cleanHeaders) {
                 return redirect()->back()->withErrors(['csv_file' => 'Invalid CSV format. Please download the template and use it.']);
             }
 
