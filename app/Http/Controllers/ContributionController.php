@@ -18,8 +18,11 @@ use App\Models\Receipt;
 use App\Models\ReceiptItem;
 use App\Models\Payment;
 use App\Models\PaymentItem;
+use App\Models\InterestOnSaving;
+use App\Models\InterestSavingSummary;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
+use Carbon\Carbon;
 
 class ContributionController extends Controller
 {
@@ -37,6 +40,7 @@ class ContributionController extends Controller
             'withdrawals' => $this->getCount('contribution_withdrawals', $branchId, $companyId),
             'transfers' => $this->getCount('contribution_transfers', $branchId, $companyId),
             'opening_balances' => 0, // Placeholder for opening balance count
+            'interest_on_saving' => $this->getCount('interest_on_saving', $branchId, $companyId),
         ];
 
         return view('contributions.index', compact('stats'));
@@ -332,6 +336,7 @@ class ContributionController extends Controller
         try {
             // Normalize checkbox values before validation (checkboxes don't send value when unchecked)
             $request->merge([
+                'has_interest_on_saving' => $request->has('has_interest_on_saving') ? 1 : 0,
                 'can_withdraw' => $request->has('can_withdraw') ? 1 : 0,
                 'has_charge' => $request->has('has_charge') ? 1 : 0,
             ]);
@@ -339,11 +344,12 @@ class ContributionController extends Controller
             $validated = $request->validate([
                 'product_name' => 'required|string|max:255',
                 'interest' => 'required|numeric|min:0|max:100',
+                'has_interest_on_saving' => 'required|boolean',
                 'category' => 'required|in:Voluntary,Mandatory',
                 'auto_create' => 'required|in:Yes,No',
                 'compound_period' => 'required|in:Daily,Monthly',
                 'interest_posting_period' => 'nullable|in:Monthly,Quarterly,Annually',
-                'interest_calculation_type' => 'required|in:Daily,Monthly,Annually',
+                'interest_calculation_type' => 'nullable|in:Daily,Monthly,Annually',
                 'lockin_period_frequency' => 'required|integer|min:0',
                 'lockin_period_frequency_type' => 'required|in:Days,Months',
                 'automatic_opening_balance' => 'required|numeric|min:0',
@@ -354,23 +360,25 @@ class ContributionController extends Controller
                 'charge_id' => 'nullable|exists:fees,id',
                 'charge_type' => 'nullable|required_if:has_charge,1|in:Fixed,Percentage',
                 'charge_amount' => 'nullable|required_if:has_charge,1|numeric|min:0',
-                'bank_account_id' => 'required|exists:chart_accounts,id',
-                'journal_reference_id' => 'required|exists:journal_references,id',
-                'riba_journal_id' => 'required|exists:journal_references,id',
-                'pay_loan_journal_id' => 'required|exists:journal_references,id',
+                'bank_account_id' => 'nullable|exists:chart_accounts,id',
+                'journal_reference_id' => 'nullable|exists:journal_references,id',
+                'riba_journal_id' => 'nullable|exists:journal_references,id',
+                'pay_loan_journal_id' => 'nullable|exists:journal_references,id',
                 'liability_account_id' => 'required|exists:chart_accounts,id',
                 'expense_account_id' => 'required|exists:chart_accounts,id',
                 'riba_payable_account_id' => 'required|exists:chart_accounts,id',
                 'withholding_account_id' => 'required|exists:chart_accounts,id',
                 'withholding_percentage' => 'nullable|numeric|min:0|max:100',
-                'riba_payable_journal_id' => 'required|exists:journal_references,id',
+                'riba_payable_journal_id' => 'nullable|exists:journal_references,id',
             ]);
 
             // Ensure boolean values are properly cast (already normalized above, but ensure boolean type)
+            $validated['has_interest_on_saving'] = (bool) $validated['has_interest_on_saving'];
             $validated['can_withdraw'] = (bool) $validated['can_withdraw'];
             $validated['has_charge'] = (bool) $validated['has_charge'];
             $validated['company_id'] = auth()->user()->company_id;
             $validated['branch_id'] = auth()->user()->branch_id;
+            $validated['interest_calculation_type'] = $validated['interest_calculation_type'] ?? 'Daily';
 
             ContributionProduct::create($validated);
 
@@ -1524,6 +1532,7 @@ class ContributionController extends Controller
         try {
             // Normalize checkbox values before validation
             $request->merge([
+                'has_interest_on_saving' => $request->has('has_interest_on_saving') ? 1 : 0,
                 'can_withdraw' => $request->has('can_withdraw') ? 1 : 0,
                 'has_charge' => $request->has('has_charge') ? 1 : 0,
             ]);
@@ -1531,11 +1540,12 @@ class ContributionController extends Controller
             $validated = $request->validate([
                 'product_name' => 'required|string|max:255|unique:contribution_products,product_name,' . $product->id,
                 'interest' => 'required|numeric|min:0|max:100',
+                'has_interest_on_saving' => 'required|boolean',
                 'category' => 'required|in:Voluntary,Mandatory',
                 'auto_create' => 'required|in:Yes,No',
                 'compound_period' => 'required|in:Daily,Monthly',
                 'interest_posting_period' => 'nullable|in:Monthly,Quarterly,Annually',
-                'interest_calculation_type' => 'required|in:Daily,Monthly,Annually',
+                'interest_calculation_type' => 'nullable|in:Daily,Monthly,Annually',
                 'lockin_period_frequency' => 'required|integer|min:0',
                 'lockin_period_frequency_type' => 'required|in:Days,Months',
                 'automatic_opening_balance' => 'required|numeric|min:0',
@@ -1546,21 +1556,23 @@ class ContributionController extends Controller
                 'charge_id' => 'nullable|exists:fees,id',
                 'charge_type' => 'nullable|required_if:has_charge,1|in:Fixed,Percentage',
                 'charge_amount' => 'nullable|required_if:has_charge,1|numeric|min:0',
-                'bank_account_id' => 'required|exists:chart_accounts,id',
-                'journal_reference_id' => 'required|exists:journal_references,id',
-                'riba_journal_id' => 'required|exists:journal_references,id',
-                'pay_loan_journal_id' => 'required|exists:journal_references,id',
+                'bank_account_id' => 'nullable|exists:chart_accounts,id',
+                'journal_reference_id' => 'nullable|exists:journal_references,id',
+                'riba_journal_id' => 'nullable|exists:journal_references,id',
+                'pay_loan_journal_id' => 'nullable|exists:journal_references,id',
                 'liability_account_id' => 'required|exists:chart_accounts,id',
                 'expense_account_id' => 'required|exists:chart_accounts,id',
-                'riba_payable_account_id' => 'required|exists:chart_accounts,id',
-                'withholding_account_id' => 'required|exists:chart_accounts,id',
+                'riba_payable_account_id' => 'nullable|exists:chart_accounts,id',
+                'withholding_account_id' => 'nullable|exists:chart_accounts,id',
                 'withholding_percentage' => 'nullable|numeric|min:0|max:100',
-                'riba_payable_journal_id' => 'required|exists:journal_references,id',
+                'riba_payable_journal_id' => 'nullable|exists:journal_references,id',
             ]);
 
             // Ensure boolean values are properly cast
+            $validated['has_interest_on_saving'] = (bool) $validated['has_interest_on_saving'];
             $validated['can_withdraw'] = (bool) $validated['can_withdraw'];
             $validated['has_charge'] = (bool) $validated['has_charge'];
+            $validated['interest_calculation_type'] = $validated['interest_calculation_type'] ?? 'Daily';
 
             $product->update($validated);
 
@@ -1766,5 +1778,121 @@ class ContributionController extends Controller
                 ->with('error', 'Failed to process import: ' . $e->getMessage())
                 ->withInput();
         }
+    }
+
+    /**
+     * Show interest on saving view
+     */
+    public function interestOnSaving()
+    {
+        return view('contributions.interest-on-saving.index');
+    }
+
+    /**
+     * Ajax endpoint for Interest on Saving Summary DataTable
+     */
+    public function getInterestOnSavingData(Request $request)
+    {
+        if ($request->ajax()) {
+            $user = auth()->user();
+            $branchId = $user->branch_id;
+            $companyId = $user->company_id;
+
+            $summaries = InterestSavingSummary::with(['branch', 'company'])
+                ->where('branch_id', $branchId)
+                ->where('company_id', $companyId)
+                ->select('interest_saving_summary.*');
+
+            return DataTables::eloquent($summaries)
+                ->addColumn('calculation_date_formatted', function ($summary) {
+                    return $summary->calculation_date ? $summary->calculation_date->format('Y-m-d') : 'N/A';
+                })
+                ->addColumn('day_of_calculation', function ($summary) {
+                    return $summary->day_of_calculation ?? 'N/A';
+                })
+                ->addColumn('total_accounts_formatted', function ($summary) {
+                    return number_format($summary->total_accounts ?? 0);
+                })
+                ->addColumn('total_customers_formatted', function ($summary) {
+                    return number_format($summary->total_customers ?? 0);
+                })
+                ->addColumn('total_balance_formatted', function ($summary) {
+                    return number_format($summary->total_balance ?? 0, 2);
+                })
+                ->addColumn('total_interest_amount_formatted', function ($summary) {
+                    return number_format($summary->total_interest_amount ?? 0, 2);
+                })
+                ->addColumn('total_withholding_amount_formatted', function ($summary) {
+                    return number_format($summary->total_withholding_amount ?? 0, 2);
+                })
+                ->addColumn('total_net_amount_formatted', function ($summary) {
+                    return number_format($summary->total_net_amount ?? 0, 2);
+                })
+                ->addColumn('stats_badge', function ($summary) {
+                    $stats = [];
+                    if ($summary->processed_count > 0) {
+                        $stats[] = '<span class="badge bg-success">' . $summary->processed_count . ' Processed</span>';
+                    }
+                    if ($summary->skipped_count > 0) {
+                        $stats[] = '<span class="badge bg-secondary">' . $summary->skipped_count . ' Skipped</span>';
+                    }
+                    if ($summary->error_count > 0) {
+                        $stats[] = '<span class="badge bg-danger">' . $summary->error_count . ' Errors</span>';
+                    }
+                    return implode(' ', $stats) ?: '<span class="badge bg-info">No data</span>';
+                })
+                ->addColumn('actions', function ($summary) {
+                    $encodedDate = Hashids::encode($summary->id);
+                    $viewUrl = route('contributions.interest-on-saving.show', $summary->calculation_date->format('Y-m-d'));
+                    return '<a href="' . $viewUrl . '" class="btn btn-sm btn-info" title="View Details"><i class="bx bx-show"></i> View</a>';
+                })
+                ->rawColumns(['stats_badge', 'actions'])
+                ->orderColumn('calculation_date', 'calculation_date DESC')
+                ->make(true);
+        }
+
+        return response()->json(['error' => 'Invalid request'], 400);
+    }
+
+    /**
+     * Show detailed interest records for a specific date
+     */
+    public function interestOnSavingShow($date)
+    {
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        // Validate date format
+        try {
+            $calculationDate = Carbon::parse($date)->format('Y-m-d');
+        } catch (\Exception $e) {
+            abort(404, 'Invalid date format');
+        }
+
+        // Get summary
+        $summary = InterestSavingSummary::where('calculation_date', $calculationDate)
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->first();
+
+        if (!$summary) {
+            abort(404, 'Summary not found for this date');
+        }
+
+        // Get all interest records for this date
+        $interestRecords = InterestOnSaving::with([
+            'contributionAccount',
+            'contributionProduct',
+            'customer'
+        ])
+            ->where('calculation_date', $calculationDate)
+            ->where('branch_id', $branchId)
+            ->where('company_id', $companyId)
+            ->orderBy('customer_id')
+            ->orderBy('contribution_product_id')
+            ->get();
+
+        return view('contributions.interest-on-saving.show', compact('summary', 'interestRecords', 'calculationDate'));
     }
 }

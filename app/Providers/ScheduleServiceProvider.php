@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Jobs\CollectMatureInterestJob;
 use App\Jobs\RepaymentReminderJob;
 use App\Jobs\CheckSubscriptionExpiryJob;
+use App\Jobs\CalculateContributionInterestJob;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
 
@@ -49,6 +50,13 @@ class ScheduleServiceProvider extends ServiceProvider
                 ->withoutOverlapping()
                 ->onOneServer()
                 ->appendOutputTo(storage_path('logs/subscription-expiry-check.log'));
+
+            // Schedule contribution interest calculation to run daily at 9:00 AM
+            $schedule->job(new CalculateContributionInterestJob())
+                ->dailyAt('09:00')
+                ->withoutOverlapping()
+                ->onOneServer()
+                ->appendOutputTo(storage_path('logs/contribution-interest-calculation.log'));
         });
     }
 }
