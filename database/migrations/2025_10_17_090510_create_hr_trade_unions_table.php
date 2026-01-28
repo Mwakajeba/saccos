@@ -11,15 +11,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('hr_file_types', function (Blueprint $table) {
+        if (Schema::hasTable('hr_trade_unions')) {
+            return;
+        }
+
+        Schema::create('hr_trade_unions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('company_id')->constrained('companies');
             $table->string('name');
             $table->string('code')->nullable();
             $table->text('description')->nullable();
-            $table->json('allowed_extensions')->nullable(); // e.g., ['pdf', 'doc', 'docx', 'jpg', 'png']
-            $table->integer('max_file_size')->nullable(); // in KB
-            $table->boolean('is_required')->default(false);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
@@ -30,6 +31,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('hr_file_types');
+        Schema::dropIfExists('hr_trade_unions');
     }
 };
