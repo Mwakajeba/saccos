@@ -41,7 +41,7 @@ return new class extends Migration
             $table->index('contribution_account_id');
             $table->index('calculation_date');
             $table->index('posted');
-            $table->index(['contribution_account_id', 'calculation_date']); // For duplicate prevention
+            $table->index(['contribution_account_id', 'calculation_date'], 'ios_account_date_idx'); // For duplicate prevention
         });
     }
 

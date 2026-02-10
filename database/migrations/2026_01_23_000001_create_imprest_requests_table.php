@@ -11,6 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('imprest_requests')) {
+            return;
+        }
         Schema::create('imprest_requests', function (Blueprint $table) {
             $table->id();
             $table->string('request_number')->unique();
