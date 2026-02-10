@@ -162,6 +162,7 @@ class SystemSetting extends Model
             'login_attempts_limit' => ['value' => 5, 'type' => 'integer', 'group' => 'security', 'label' => 'Login Attempts Limit'],
             'lockout_duration' => ['value' => 15, 'type' => 'integer', 'group' => 'security', 'label' => 'Lockout Duration (minutes)'],
             'two_factor_enabled' => ['value' => false, 'type' => 'boolean', 'group' => 'security', 'label' => 'Enable Two-Factor Authentication'],
+            'otp_attempts' => ['value' => 2, 'type' => 'integer', 'group' => 'security', 'label' => 'OTP Attempts Limit'],
             
             // Backup Settings
             'backup_enabled' => ['value' => true, 'type' => 'boolean', 'group' => 'backup', 'label' => 'Enable Automatic Backups'],

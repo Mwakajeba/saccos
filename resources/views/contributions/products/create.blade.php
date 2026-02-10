@@ -35,7 +35,7 @@
                 <!-- Basic Information -->
                 <div class="col-12">
                     <div class="card">
-                        <div class="card-header bg-primary text-white">
+                        <div class="card-header bg-secondary text-white">
                             <h5 class="mb-0"><i class="bx bx-info-circle me-2"></i>Basic Information</h5>
                         </div>
                         <div class="card-body">
@@ -87,7 +87,7 @@
                 <!-- Interest Settings -->
                 <div class="col-12 mt-3">
                     <div class="card">
-                        <div class="card-header bg-info text-white">
+                        <div class="card-header bg-secondary text-white">
                             <h5 class="mb-0"><i class="bx bx-calculator me-2"></i>Interest Settings</h5>
                         </div>
                         <div class="card-body">
@@ -131,7 +131,7 @@
                 <!-- Lock-in Period Settings -->
                 <div class="col-12 mt-3">
                     <div class="card">
-                        <div class="card-header bg-warning text-dark">
+                        <div class="card-header bg-secondary text-white">
                             <h5 class="mb-0"><i class="bx bx-lock me-2"></i>Lock-in Period Settings</h5>
                         </div>
                         <div class="card-body">
@@ -160,7 +160,7 @@
                 <!-- Balance Settings -->
                 <div class="col-12 mt-3">
                     <div class="card">
-                        <div class="card-header bg-success text-white">
+                        <div class="card-header bg-secondary text-white">
                             <h5 class="mb-0"><i class="bx bx-money me-2"></i>Balance Settings</h5>
                         </div>
                         <div class="card-body">
@@ -250,7 +250,7 @@
                 <!-- Bank Account & Journal Reference -->
                 <div class="col-12 mt-3">
                     <div class="card">
-                        <div class="card-header bg-danger text-white">
+                        <div class="card-header bg-secondary text-white">
                             <h5 class="mb-0"><i class="bx bx-bank me-2"></i>Bank Account & Journal Reference</h5>
                         </div>
                         <div class="card-body">
@@ -314,7 +314,7 @@
                 <!-- Chart Accounts -->
                 <div class="col-12 mt-3">
                     <div class="card">
-                        <div class="card-header bg-dark text-white">
+                        <div class="card-header bg-secondary text-white">
                             <h5 class="mb-0"><i class="bx bx-list-ul me-2"></i>Chart Accounts</h5>
                         </div>
                         <div class="card-body">

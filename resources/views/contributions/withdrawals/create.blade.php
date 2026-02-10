@@ -41,7 +41,7 @@
                             </div>
                         @endif
 
-                        <form action="{{ route('contributions.withdrawals.store') }}" method="POST" id="withdrawalForm" data-has-custom-handler="true">
+                        <form action="{{ route('contributions.withdrawals.store') }}" method="POST" id="withdrawalForm" data-has-custom-handler="true" enctype="multipart/form-data">
                             @csrf
 
                             <div class="row">
@@ -135,6 +135,18 @@
                                               placeholder="Enter description (optional)">{{ old('description') }}</textarea>
                                     @error('description') 
                                         <div class="invalid-feedback">{{ $message }}</div> 
+                                    @enderror
+                                </div>
+
+                                <!-- Document Upload (Optional) -->
+                                <div class="col-md-12 mb-3">
+                                    <label class="form-label">Document Upload (Optional)</label>
+                                    <input type="file" name="document" id="document"
+                                           class="form-control @error('document') is-invalid @enderror"
+                                           accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                                    <div class="form-text">Allowed types: PDF, JPG, PNG, DOC, DOCX.</div>
+                                    @error('document')
+                                        <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
                             </div>

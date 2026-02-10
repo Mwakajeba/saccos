@@ -464,6 +464,10 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     Route::get('/payment-voucher-approval', [SettingsController::class, 'paymentVoucherApprovalSettings'])->name('payment-voucher-approval');
     Route::put('/payment-voucher-approval', [SettingsController::class, 'updatePaymentVoucherApprovalSettings'])->name('payment-voucher-approval.update');
 
+    // Receipt Voucher Approval Settings
+    Route::get('/receipt-voucher-approval', [SettingsController::class, 'receiptVoucherApprovalSettings'])->name('receipt-voucher-approval');
+    Route::put('/receipt-voucher-approval', [SettingsController::class, 'updateReceiptVoucherApprovalSettings'])->name('receipt-voucher-approval.update');
+
     // Opening Balance Accounts Settings
     Route::get('/opening-balance-accounts', [SettingsController::class, 'openingBalanceAccountsSettings'])->name('opening-balance-accounts');
     Route::put('/opening-balance-accounts', [SettingsController::class, 'updateOpeningBalanceAccountsSettings'])->name('opening-balance-accounts.update');

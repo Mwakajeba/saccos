@@ -510,6 +510,27 @@ class AuthController extends Controller
             return back()->withErrors(['phone' => 'Phone number not found.']);
         }
 
+        // Get security settings
+        $securityConfig = SystemSettingService::getSecurityConfig();
+        $otpAttemptsLimit = $securityConfig['otp_attempts'] ?? 2;
+        $lockoutDuration = $securityConfig['lockout_duration'] ?? 15;
+
+        // Get OTP attempts from session
+        $otpAttempts = session('otp_attempts', 0);
+        $otpLockedUntil = session('otp_locked_until');
+
+        // Check if user is locked out due to OTP attempts
+        if ($otpLockedUntil && Carbon::now()->lt(Carbon::parse($otpLockedUntil))) {
+            $remainingTime = Carbon::now()->diffInMinutes(Carbon::parse($otpLockedUntil)) + 1;
+            
+            // Clear session and redirect to login
+            session()->forget(['otp_attempts', 'otp_locked_until', 'phone', 'verified_phone']);
+            
+            return redirect()->route('login')->withErrors([
+                'phone' => "Your account is locked due to too many OTP attempts. Please try again in {$remainingTime} minutes.",
+            ]);
+        }
+
         $otp = OtpCode::where('phone', $user->phone)
             ->where('code', $request->code)
             ->where('expires_at', '>', Carbon::now())
@@ -518,9 +539,30 @@ class AuthController extends Controller
             ->first();
 
         if (!$otp) {
-            return back()->withErrors(['code' => 'Invalid verification code.']);
+            // Increment OTP attempts
+            $otpAttempts++;
+            session(['otp_attempts' => $otpAttempts]);
+
+            // Check if attempts exceeded limit
+            if ($otpAttempts >= $otpAttemptsLimit) {
+                // Lock the account
+                $lockedUntil = Carbon::now()->addMinutes($lockoutDuration);
+                session(['otp_locked_until' => $lockedUntil->toDateTimeString()]);
+                
+                // Clear session and redirect to login
+                session()->forget(['otp_attempts', 'phone', 'verified_phone']);
+                
+                return redirect()->route('login')->withErrors([
+                    'phone' => "Your account is locked due to too many OTP attempts. Please try again in {$lockoutDuration} minutes.",
+                ]);
+            }
+
+            $remainingAttempts = $otpAttemptsLimit - $otpAttempts;
+            return back()->withErrors(['code' => "Invalid verification code. You have {$remainingAttempts} attempt(s) remaining."]);
         }
 
+        // OTP is valid - clear attempts and mark as used
+        session()->forget(['otp_attempts', 'otp_locked_until']);
         $otp->update(['is_used' => 1]);
 
         session(['verified_phone' => $user->phone]);

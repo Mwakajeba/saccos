@@ -356,6 +356,27 @@
                             </div>
                             @endcan
 
+                            <!-- Receipt Voucher Approval Process -->
+                            @can('manage receipt voucher approval')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-success">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-check-shield fs-1 text-success"></i>
+                                        </div>
+                                        <h5 class="card-title">Receipt Voucher Approval</h5>
+                                        <p class="card-text">
+                                            Configure approval workflows for receipt vouchers.
+                                            Set up approval levels, approvers, and approval thresholds.
+                                        </p>
+                                        <a href="{{ route('settings.receipt-voucher-approval') }}" class="btn btn-success">
+                                            <i class="bx bx-check-shield me-1"></i> Configure Approval
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
                             {{-- @role('super-admin')
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-purple">

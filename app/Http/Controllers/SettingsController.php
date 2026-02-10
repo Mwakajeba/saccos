@@ -1310,6 +1310,134 @@ class SettingsController extends Controller
         
         return view('settings.payment-voucher-approval', compact('roles', 'users', 'settings'));
     }
+
+    /**
+     * Receipt Voucher Approval Settings
+     */
+    public function receiptVoucherApprovalSettings()
+    {
+        $user = Auth::user();
+        
+        // Load roles and users for dropdowns
+        $roles = \Spatie\Permission\Models\Role::all();
+        $users = \App\Models\User::where('company_id', $user->company_id)->get();
+        
+        // Load existing approval settings
+        $settings = \App\Models\ReceiptVoucherApprovalSetting::where('company_id', $user->company_id)->first();
+        
+        return view('settings.receipt-voucher-approval', compact('roles', 'users', 'settings'));
+    }
+
+    /**
+     * Update Receipt Voucher Approval Settings
+     */
+    public function updateReceiptVoucherApprovalSettings(Request $request)
+    {
+        $requireAll = $request->has('require_approval_for_all');
+
+        $baseRules = [
+            'require_approval_for_all' => 'boolean',
+        ];
+
+        $approvalRules = [
+            'approval_levels' => 'required|integer|min:1|max:5',
+            'level1_approval_type' => 'required|in:role,user',
+            'level1_approvers' => 'required|array|min:1',
+            'level2_approval_type' => 'nullable|in:role,user',
+            'level2_approvers' => 'nullable|array',
+            'level3_approval_type' => 'nullable|in:role,user',
+            'level3_approvers' => 'nullable|array',
+            'level4_approval_type' => 'nullable|in:role,user',
+            'level4_approvers' => 'nullable|array',
+            'level5_approval_type' => 'nullable|in:role,user',
+            'level5_approvers' => 'nullable|array',
+        ];
+
+        $rules = $requireAll ? array_merge($baseRules, $approvalRules) : $baseRules;
+        $request->validate($rules);
+
+        try {
+            $user = Auth::user();
+            $companyId = $user->company_id;
+
+            // Find or create approval settings for the company
+            $settings = \App\Models\ReceiptVoucherApprovalSetting::firstOrCreate(
+                ['company_id' => $companyId],
+                [
+                    'approval_levels' => 1,
+                    'require_approval_for_all' => false,
+                ]
+            );
+
+            // Update settings
+            $updateData = [
+                'require_approval_for_all' => $requireAll,
+            ];
+            if ($requireAll) {
+                $updateData = array_merge($updateData, [
+                    'approval_levels' => $request->approval_levels,
+                ]);
+            }
+            $settings->update($updateData);
+
+            // Update approval assignments
+            if ($requireAll) {
+                $approvalLevels = (int) $request->approval_levels;
+                
+                for ($level = 1; $level <= $approvalLevels; $level++) {
+                    $approvalType = $request->{"level{$level}_approval_type"};
+                    $approvers = $request->{"level{$level}_approvers"} ?? [];
+
+                    if ($approvalType && !empty($approvers)) {
+                        // Process approver IDs - extract actual IDs from "user_X" or "role_X" format
+                        $processedApprovers = [];
+                        foreach ($approvers as $approver) {
+                            if (str_starts_with($approver, 'user_')) {
+                                $userId = (int) str_replace('user_', '', $approver);
+                                $processedApprovers[] = $userId;
+                            } elseif (str_starts_with($approver, 'role_')) {
+                                $roleName = str_replace('role_', '', $approver);
+                                $processedApprovers[] = $roleName;
+                            }
+                        }
+
+                        $settings->update([
+                            "level{$level}_approval_type" => $approvalType,
+                            "level{$level}_approvers" => $processedApprovers,
+                        ]);
+                    }
+                }
+                
+                // Clear unused levels
+                for ($level = $approvalLevels + 1; $level <= 5; $level++) {
+                    $settings->update([
+                        "level{$level}_approval_type" => null,
+                        "level{$level}_approvers" => null,
+                    ]);
+                }
+            } else {
+                // When approvals disabled, clear approval configuration
+                $settings->update([
+                    'approval_levels' => 0,
+                    'level1_approval_type' => null,
+                    'level1_approvers' => null,
+                    'level2_approval_type' => null,
+                    'level2_approvers' => null,
+                    'level3_approval_type' => null,
+                    'level3_approvers' => null,
+                    'level4_approval_type' => null,
+                    'level4_approvers' => null,
+                    'level5_approval_type' => null,
+                    'level5_approvers' => null,
+                ]);
+            }
+
+            return redirect()->route('settings.receipt-voucher-approval')->with('success', 'Receipt voucher approval settings updated successfully!');
+        } catch (\Exception $e) {
+            return redirect()->route('settings.receipt-voucher-approval')->with('error', 'Failed to update receipt voucher approval settings: ' . $e->getMessage());
+        }
+    }
+
     /**
      * Update Payment Voucher Approval Settings
      */
@@ -2633,167 +2761,5 @@ class SettingsController extends Controller
                 'message' => 'Failed to start queue worker: ' . $e->getMessage()
             ], 500);
         }
-    }
-
-    // Inventory Settings
-    public function inventorySettings()
-    {
-        $settings = SystemSetting::first();
-        
-        return view('settings.inventory', compact('settings'));
-    }
-
-    public function updateInventorySettings(Request $request)
-    {
-        $request->validate([
-            'inventory_cost_method' => 'required|in:FIFO,LIFO,AVCO,Specific Identification',
-            'enable_negative_stock' => 'boolean',
-            'auto_generate_item_codes' => 'boolean',
-        ]);
-
-        $settings = SystemSetting::first();
-        
-        if (!$settings) {
-            $settings = new SystemSetting();
-        }
-
-        $settings->inventory_cost_method = $request->inventory_cost_method;
-        $settings->enable_negative_stock = $request->has('enable_negative_stock');
-        $settings->auto_generate_item_codes = $request->has('auto_generate_item_codes');
-        $settings->save();
-
-        return redirect()->back()->with('success', 'Inventory settings updated successfully.');
-    }
-
-    // Inventory Locations
-    public function inventoryLocations()
-    {
-        $locations = \App\Models\InventoryLocation::where('company_id', current_company_id())
-            ->with(['branch', 'manager'])
-            ->get();
-        
-        return view('settings.inventory-locations.index', compact('locations'));
-    }
-
-    public function createInventoryLocation()
-    {
-        $branches = Branch::forCompany()->active()->get();
-        $users = \App\Models\User::where('company_id', current_company_id())->get();
-        
-        return view('settings.inventory-locations.create', compact('branches', 'users'));
-    }
-
-    public function storeInventoryLocation(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'branch_id' => 'required|exists:branches,id',
-            'manager_id' => 'nullable|exists:users,id',
-            'is_active' => 'boolean',
-        ]);
-
-        $location = new \App\Models\InventoryLocation();
-        $location->name = $request->name;
-        $location->description = $request->description;
-        $location->branch_id = $request->branch_id;
-        $location->manager_id = $request->manager_id;
-        $location->is_active = $request->has('is_active');
-        $location->company_id = current_company_id();
-        $location->created_by = Auth::id();
-        $location->save();
-
-        return redirect()->route('settings.inventory.locations.index')
-            ->with('success', 'Inventory location created successfully.');
-    }
-
-    public function showInventoryLocation($id)
-    {
-        $decoded = Hashids::decode($id);
-        $locationId = !empty($decoded) ? $decoded[0] : null;
-
-        if (!$locationId) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Invalid location ID');
-        }
-
-        $location = \App\Models\InventoryLocation::with(['branch', 'manager'])
-            ->findOrFail($locationId);
-        
-        return view('settings.inventory-locations.show', compact('location'));
-    }
-
-    public function editInventoryLocation($id)
-    {
-        $decoded = Hashids::decode($id);
-        $locationId = !empty($decoded) ? $decoded[0] : null;
-
-        if (!$locationId) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Invalid location ID');
-        }
-
-        $location = \App\Models\InventoryLocation::findOrFail($locationId);
-        $branches = Branch::forCompany()->active()->get();
-        $users = \App\Models\User::where('company_id', current_company_id())->get();
-        
-        return view('settings.inventory-locations.edit', compact('location', 'branches', 'users'));
-    }
-
-    public function updateInventoryLocation(Request $request, $id)
-    {
-        $decoded = Hashids::decode($id);
-        $locationId = !empty($decoded) ? $decoded[0] : null;
-
-        if (!$locationId) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Invalid location ID');
-        }
-
-        $location = \App\Models\InventoryLocation::findOrFail($locationId);
-
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'branch_id' => 'required|exists:branches,id',
-            'manager_id' => 'nullable|exists:users,id',
-            'is_active' => 'boolean',
-        ]);
-
-        $location->name = $request->name;
-        $location->description = $request->description;
-        $location->branch_id = $request->branch_id;
-        $location->manager_id = $request->manager_id;
-        $location->is_active = $request->has('is_active');
-        $location->save();
-
-        return redirect()->route('settings.inventory.locations.index')
-            ->with('success', 'Inventory location updated successfully.');
-    }
-
-    public function destroyInventoryLocation($id)
-    {
-        $decoded = Hashids::decode($id);
-        $locationId = !empty($decoded) ? $decoded[0] : null;
-
-        if (!$locationId) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Invalid location ID');
-        }
-
-        $location = \App\Models\InventoryLocation::findOrFail($locationId);
-        
-        // Check if location has any stock items
-        $hasStock = \App\Models\InventoryStockLevel::where('location_id', $location->id)->exists();
-        
-        if ($hasStock) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Cannot delete location with existing stock.');
-        }
-
-        $location->delete();
-
-        return redirect()->route('settings.inventory.locations.index')
-            ->with('success', 'Inventory location deleted successfully.');
     }
 }
