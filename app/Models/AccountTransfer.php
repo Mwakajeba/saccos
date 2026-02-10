@@ -72,7 +72,7 @@ class AccountTransfer extends Model
             case 'bank':
                 return \App\Models\BankAccount::find($this->from_account_id);
             case 'cash':
-                return \App\Models\CashDepositAccount::find($this->from_account_id);
+                return \App\Models\CashCollateral::find($this->from_account_id);
             case 'petty_cash':
                 return \App\Models\PettyCash\PettyCashUnit::find($this->from_account_id);
             default:
@@ -89,7 +89,7 @@ class AccountTransfer extends Model
             case 'bank':
                 return \App\Models\BankAccount::find($this->to_account_id);
             case 'cash':
-                return \App\Models\CashDepositAccount::find($this->to_account_id);
+                return \App\Models\CashCollateral::find($this->to_account_id);
             case 'petty_cash':
                 return \App\Models\PettyCash\PettyCashUnit::find($this->to_account_id);
             default:
