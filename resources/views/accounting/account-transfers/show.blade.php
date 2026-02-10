@@ -187,7 +187,7 @@
                                             $fromAccount = \App\Models\BankAccount::find($transfer->from_account_id);
                                             break;
                                         case 'cash':
-                                            $fromAccount = \App\Models\CashDepositAccount::find($transfer->from_account_id);
+                                            $fromAccount = \App\Models\CashCollateral::find($transfer->from_account_id);
                                             break;
                                         case 'petty_cash':
                                             $fromAccount = \App\Models\PettyCash\PettyCashUnit::find($transfer->from_account_id);
@@ -209,7 +209,7 @@
                                             $toAccount = \App\Models\BankAccount::find($transfer->to_account_id);
                                             break;
                                         case 'cash':
-                                            $toAccount = \App\Models\CashDepositAccount::find($transfer->to_account_id);
+                                            $toAccount = \App\Models\CashCollateral::find($transfer->to_account_id);
                                             break;
                                         case 'petty_cash':
                                             $toAccount = \App\Models\PettyCash\PettyCashUnit::find($transfer->to_account_id);

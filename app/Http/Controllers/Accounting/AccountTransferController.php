@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Accounting;
 use App\Http\Controllers\Controller;
 use App\Models\AccountTransfer;
 use App\Models\BankAccount;
-use App\Models\CashDepositAccount;
+use App\Models\CashCollateral;
 use App\Models\PettyCash\PettyCashUnit;
 use App\Services\AccountTransferService;
 use Illuminate\Http\Request;
@@ -69,7 +69,7 @@ class AccountTransferController extends Controller
                             $account = \App\Models\BankAccount::find($transfer->from_account_id);
                             break;
                         case 'cash':
-                            $account = \App\Models\CashDepositAccount::find($transfer->from_account_id);
+                            $account = \App\Models\CashCollateral::find($transfer->from_account_id);
                             break;
                         case 'petty_cash':
                             $account = \App\Models\PettyCash\PettyCashUnit::find($transfer->from_account_id);
@@ -88,7 +88,7 @@ class AccountTransferController extends Controller
                             $account = \App\Models\BankAccount::find($transfer->to_account_id);
                             break;
                         case 'cash':
-                            $account = \App\Models\CashDepositAccount::find($transfer->to_account_id);
+                            $account = \App\Models\CashCollateral::find($transfer->to_account_id);
                             break;
                         case 'petty_cash':
                             $account = \App\Models\PettyCash\PettyCashUnit::find($transfer->to_account_id);
@@ -184,9 +184,14 @@ class AccountTransferController extends Controller
             $q->where('company_id', $companyId);
         })->orderBy('name')->get();
         
-        $cashAccounts = CashDepositAccount::whereHas('chartAccount.accountClassGroup', function($q) use ($companyId) {
+        $cashAccounts = CashCollateral::whereHas('customer', function($q) use ($companyId) {
             $q->where('company_id', $companyId);
-        })->orderBy('name')->get();
+        })->get()->map(function($collateral) {
+            return (object)[
+                'id' => $collateral->id,
+                'name' => $collateral->customer->name . ' - ' . ($collateral->type->name ?? 'Collateral') . ' (' . number_format($collateral->amount, 2) . ')'
+            ];
+        });
         
         $pettyCashUnits = PettyCashUnit::forCompany($companyId)->active()->orderBy('name')->get();
         
