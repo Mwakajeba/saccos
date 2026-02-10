@@ -10,6 +10,7 @@ class ContributionProduct extends Model
     protected $fillable = [
         'product_name',
         'interest',
+        'has_interest_on_saving',
         'category',
         'auto_create',
         'compound_period',
@@ -48,6 +49,7 @@ class ContributionProduct extends Model
         'withholding_percentage' => 'decimal:2',
         'can_withdraw' => 'boolean',
         'has_charge' => 'boolean',
+        'has_interest_on_saving' => 'boolean',
         'is_active' => 'boolean',
     ];
 

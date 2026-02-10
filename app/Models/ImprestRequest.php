@@ -114,10 +114,7 @@ class ImprestRequest extends Model
         return $this->hasOne(ImprestLiquidation::class);
     }
 
-    public function retirement(): HasOne
-    {
-        return $this->hasOne(Retirement::class);
-    }
+ 
 
     public function journalEntries(): HasMany
     {

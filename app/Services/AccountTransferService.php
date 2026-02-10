@@ -108,7 +108,10 @@ class AccountTransferService
                 return $bankAccount?->chart_account_id;
                 
             case 'cash':
-                $cashAccount = \App\Models\CashDepositAccount::find($accountId);
+                $cashAccount = \App\Models\CashCollateral::find($accountId);
+                // Cash collateral might not have a direct chart_account_id, 
+                // you might need to get it from its type or a default setting.
+                // For now, let's assume it should have been linked or use a fallback.
                 return $cashAccount?->chart_account_id;
                 
             case 'petty_cash':

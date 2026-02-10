@@ -3969,7 +3969,16 @@ class LoanController extends Controller
 
             // Validate CSV structure
             $expectedHeaders = ['customer_no', 'customer_name', 'group_id', 'group_name', 'amount', 'interest', 'period', 'date_applied', 'sector', 'amount_paid'];
-            if (array_diff($expectedHeaders, $headers)) {
+            
+            info("headers of the csv ", [$headers]);
+            info("expected headers",[$expectedHeaders]);
+
+            // Normalize csv headers to trim spaces before comparing to expected headers
+            $cleanHeaders = array_map(function($header) {
+                return trim($header);
+            }, $headers);
+
+            if ($expectedHeaders !== $cleanHeaders) {
                 return redirect()->back()->withErrors(['csv_file' => 'Invalid CSV format. Please download the template and use it.']);
             }
 

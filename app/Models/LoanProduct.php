@@ -21,8 +21,9 @@ class LoanProduct extends Model
         'maximum_principal',
         'minimum_period',
         'maximum_period',
-        'grace_period', // Added grace period
-        'maximum_number_of_loans', // Added maximum number of loans
+        'grace_period',
+        'maximum_number_of_loans',
+        'has_top_up',
         'top_up_type',
         'top_up_type_value',
         'has_cash_collateral',
@@ -44,6 +45,14 @@ class LoanProduct extends Model
         'penalt_deduction_criteria',
         'allow_push_to_ess',
         'allowed_in_app',
+        'has_contribution',
+        'contribution_product_id',
+        'contribution_value_type',
+        'contribution_value',
+        'has_share',
+        'share_product_id',
+        'share_value_type',
+        'share_value',
     ];
 
     public function incomeProvisionAccount(): BelongsTo
@@ -67,6 +76,7 @@ class LoanProduct extends Model
         'minimum_principal' => 'decimal:15',
         'maximum_principal' => 'decimal:15',
         'top_up_type_value' => 'decimal:15',
+        'has_top_up' => 'boolean',
         'has_cash_collateral' => 'boolean',
         'cash_collateral_value' => 'decimal:15',
         'has_approval_levels' => 'boolean',
@@ -78,6 +88,10 @@ class LoanProduct extends Model
         'is_active' => 'boolean',
         'allow_push_to_ess' => 'boolean',
         'allowed_in_app' => 'boolean',
+        'has_contribution' => 'boolean',
+        'contribution_value' => 'decimal:15',
+        'has_share' => 'boolean',
+        'share_value' => 'decimal:15',
     ];
 
 
