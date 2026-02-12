@@ -246,6 +246,7 @@ class PermissionGroupsSeeder extends Seeder
                 'view accruals prepayments',
                 'view provisions',
             ],
+
               'hr_payroll' => [
                 // HR & Payroll Permissions
                 'view employees',
@@ -269,6 +270,70 @@ class PermissionGroupsSeeder extends Seeder
                 'approve leave application',
                 'reject leave application',
                 'manage leave settings',
+            ],
+                        'purchases' => [
+                // General Purchase Permissions
+                'view purchases',
+                'create purchases',
+                'edit purchases',
+                'delete purchases',
+
+                // Purchase Quotations
+                'view purchase quotations',
+                'create purchase quotations',
+                'edit purchase quotations',
+                'delete purchase quotations',
+                'approve purchase quotations',
+                'reject purchase quotations',
+                'send purchase quotations',
+                'view purchase quotation details',
+                'manage purchase quotations',
+
+                // Purchase Orders
+                'view purchase orders',
+                'create purchase orders',
+                'edit purchase orders',
+                'delete purchase orders',
+                'approve purchase orders',
+                'view purchase order details',
+                'manage purchase orders',
+
+                // Purchase Invoices
+                'view purchase invoices',
+                'create purchase invoices',
+                'edit purchase invoices',
+                'delete purchase invoices',
+                'record purchase payment',
+                'delete purchase payment',
+
+                // Cash Purchases
+                'view cash purchases',
+                'create cash purchases',
+                'edit cash purchases',
+                'delete cash purchases',
+
+                // Debit Notes
+                'view debit notes',
+                'create debit notes',
+                'edit debit notes',
+                'delete debit notes',
+                'approve debit notes',
+                'apply debit notes',
+                'cancel debit notes',
+
+                // Bill Purchases
+                'view bill purchases',
+                'create bill purchase',
+                'edit bill purchase',
+                'delete bill purchase',
+                'view bill purchase details',
+
+                // Suppliers (Purchase-related)
+                'view suppliers',
+                'create supplier',
+                'edit supplier',
+                'delete supplier',
+                'view supplier details',
             ],
             'reports' => [
                 'view reports',
@@ -548,11 +613,6 @@ class PermissionGroupsSeeder extends Seeder
                 'delete bank reconciliation',
                 'view bank reconciliation details',
                 'perform bank reconciliation',
-                'view bill purchases',
-                'create bill purchase',
-                'edit bill purchase',
-                'delete bill purchase',
-                'view bill purchase details',
                 'view budgets',
                 'create budget',
                 'edit budget',

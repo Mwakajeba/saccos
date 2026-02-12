@@ -28,14 +28,6 @@ class DebitNoteController extends Controller
     public function __construct(DebitNoteService $debitNoteService)
     {
         $this->debitNoteService = $debitNoteService;
-        $this->middleware('auth');
-        $this->middleware('permission:view debit notes', ['only' => ['index', 'show']]);
-        $this->middleware('permission:create debit notes', ['only' => ['create', 'store']]);
-        $this->middleware('permission:edit debit notes', ['only' => ['edit', 'update']]);
-        $this->middleware('permission:delete debit notes', ['only' => ['destroy']]);
-        $this->middleware('permission:approve debit notes', ['only' => ['approve']]);
-        $this->middleware('permission:apply debit notes', ['only' => ['apply']]);
-        $this->middleware('permission:cancel debit notes', ['only' => ['cancel']]);
     }
 
     /**

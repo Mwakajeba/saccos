@@ -687,7 +687,7 @@ Route::prefix('inventory')->name('inventory.')->middleware(['auth', 'company.sco
     });
 
     // Inventory Reports Routes
-    Route::prefix('reports')->name('reports.')->group(function () {
+    Route::prefix('reports')->name('reports.')->middleware('permission:view inventory reports')->group(function () {
         Route::get('/', [App\Http\Controllers\Inventory\InventoryReportController::class, 'index'])->name('index');
         Route::get('/stock-on-hand', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockOnHand'])->name('stock-on-hand');
         Route::get('/stock-on-hand/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockOnHandExportExcel'])->name('stock-on-hand.export.excel');
@@ -2716,3 +2716,12 @@ Route::post('/logout', function (\Illuminate\Http\Request $request) {
     $request->session()->regenerateToken();
     return redirect('/')->with('success', 'You have been successfully logged out.');
 })->middleware('auth')->name('logout');
+
+// Exchange Rate API Routes
+Route::prefix('api/exchange-rates')->middleware('throttle.api')->group(function () {
+    Route::get('/rate', [App\Http\Controllers\Api\ExchangeRateController::class, 'getRate'])->name('api.exchange-rates.rate');
+    Route::get('/convert', [App\Http\Controllers\Api\ExchangeRateController::class, 'convertAmount'])->name('api.exchange-rates.convert');
+    Route::get('/history', [App\Http\Controllers\Api\ExchangeRateController::class, 'getHistory'])->name('api.exchange-rates.history');
+    Route::get('/currencies', [App\Http\Controllers\Api\ExchangeRateController::class, 'getSupportedCurrencies'])->name('api.exchange-rates.currencies');
+    Route::post('/clear-cache', [App\Http\Controllers\Api\ExchangeRateController::class, 'clearCache'])->name('api.exchange-rates.clear-cache');
+});

@@ -30,8 +30,6 @@ class InventoryReportController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth');
-        $this->middleware('permission:view inventory reports');
     }
 
     /**

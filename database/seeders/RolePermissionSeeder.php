@@ -225,6 +225,40 @@ class RolePermissionSeeder extends Seeder
             'view fx settings',
             'view accruals prepayments',
 
+            // Purchase Quotations
+            'view purchase quotations',
+            'create purchase quotations',
+            'edit purchase quotations',
+            'delete purchase quotations',
+            'approve purchase quotations',
+            'reject purchase quotations',
+            'send purchase quotations',
+            'view purchase quotation details',
+            'manage purchase quotations',
+
+            // Purchase Orders
+            'view purchase orders',
+            'create purchase orders',
+            'edit purchase orders',
+            'delete purchase orders',
+            'approve purchase orders',
+            'view purchase order details',
+            'manage purchase orders',
+            // Purchases
+            'view purchases',
+            'create purchases',
+            'edit purchases',
+            'delete purchases',
+            'view cash purchases',
+            'create cash purchases',
+            'edit cash purchases',
+            'delete cash purchases',
+            'view purchase invoices',
+            'create purchase invoices',
+            'edit purchase invoices',
+            'delete purchase invoices',
+            'record purchase payment',
+            'delete purchase payment',
 
             // General Accounting
             'view accounting',
