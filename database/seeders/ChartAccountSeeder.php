@@ -66,6 +66,9 @@ class ChartAccountSeeder extends Seeder
             103 => 'Interest Receivables',
             104 => 'Other Receivables',
             109 => 'Interest Income',
+            201 => 'Akiba za wanachama',
+            202 => 'Amana za wanachama',
+            203 => 'Hisa za wanachama',
         ];
 
         $resolvedGroupIds = [];
@@ -114,12 +117,15 @@ class ChartAccountSeeder extends Seeder
             [36, 5, '2107', 'VAT Control Account', 'parent', null, 1, 0, 1, null],
             [37, 5, '2108', 'Withholding Tax Payable', 'parent', null, 1, 0, 1, null],
             [38, 5, '2109', 'Social Security Payable', 'parent', null, 1, 0, 1, null],
+            [900, 201, '2401', 'Akiba za wanachama', 'parent', null, 1, 0, 1, null],
+            [901, 202, '2402', 'Amana za wanachama', 'parent', null, 1, 0, 1, null],
 
             // Reserves / Equity
             [41, 8, '3001', 'Retained Earnings', 'parent', null, 0, 1, null, 3],
             [42, 8, '3002', 'Current Year Earnings', 'parent', null, 0, 1, null, 4],
             [43, 7, '3101', 'Ordinary Share Capital', 'parent', null, 1, 1, null, 1],
             [45, 7, '3103', 'Preference Share Capital', 'parent', null, 1, 1, null, 1],
+            [902, 203, '3201', 'Hisa za wanachama', 'parent', null, 1, 1, null, 1],
 
             // Other Income / Investment Income
             [47, 33, '4008', 'Bank Interest', 'child', 48, 1, 0, 2, null],
@@ -479,12 +485,18 @@ class ChartAccountSeeder extends Seeder
 
             // Other Receivables (Group ID: 104) - Penalty Receivable
             [852, 104, '1003', 'Penalty Receivable', 'parent', null, 1, 0, 1, null],
+            [858, 104, '1305', 'Loan Clearing', 'parent', null, 1, 0, 1, null],
 
             // Interest Income (Group ID: 109)
             [853, 109, '4570', 'Interest income', 'parent', null, 1, 0, 1, null],
 
             // Other Income (Group ID: 11) - Penalty Income
             [854, 11, '4002', 'Penalty Income', 'parent', null, 1, 0, 1, null],
+
+            // Provision Accounts for Loan Write-offs
+            [855, 25, '5308', 'Direct Write Off Expense', 'parent', null, 1, 0, 1, null],
+            [856, 1, '1112', 'Provision for Loan Losses (Asset)', 'parent', null, 0, 0, null, null],
+            [857, 11, '4107', 'Provision Income (Recovery)', 'parent', null, 1, 0, 1, null],
         ];
 
         // Insert parents first (including any accounts with null parent_id),

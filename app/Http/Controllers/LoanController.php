@@ -1117,6 +1117,9 @@ class LoanController extends Controller
         // Generate repayment schedule
         $loan->generateRepaymentSchedule($validated['interest']);
 
+        // Calculate daily interest accruals for backdated loans
+        $loan->calculateBackdatedDailyInterest();
+
         // Post matured interest for past loans
         $loan->postMaturedInterestForPastLoan();
 
@@ -1301,10 +1304,14 @@ class LoanController extends Controller
         $interestCycles = [
             'daily' => 'Daily',
             'weekly' => 'Weekly',
+            'bi_weekly' => 'Bi-Weekly (14 Days)',
+            'semi_monthly' => 'Semi-Monthly (15 Days)',
             'monthly' => 'Monthly',
+            'bi_monthly' => 'Bi-Monthly (2 Months)',
             'quarterly' => 'Quarterly',
             'semi_annually' => 'Semi Annually',
-            'annually' => 'Annually'
+            'annually' => 'Annually',
+            'one_payment_off' => 'Bullet Payment (Single Payment at End)',
         ];
         $bankAccounts = BankAccount::all();
         $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
@@ -1433,7 +1440,11 @@ class LoanController extends Controller
                 // Step 4: Generate repayment schedule
                 $loan->generateRepaymentSchedule($validated['interest']);
 
-                // Step 4.5: Post matured interest for past loans
+                // Step 4.5: Calculate daily interest accruals for backdated loans
+                // This calculates interest for each day from disbursement date to today
+                $loan->calculateBackdatedDailyInterest();
+
+                // Step 4.6: Post matured interest for past loans
                 $loan->postMaturedInterestForPastLoan();
 
                 // Log generated schedule details
@@ -1612,10 +1623,14 @@ class LoanController extends Controller
         $interestCycles = [
             'daily' => 'Daily',
             'weekly' => 'Weekly',
+            'bi_weekly' => 'Bi-Weekly (14 Days)',
+            'semi_monthly' => 'Semi-Monthly (15 Days)',
             'monthly' => 'Monthly',
+            'bi_monthly' => 'Bi-Monthly (2 Months)',
             'quarterly' => 'Quarterly',
             'semi_annually' => 'Semi Annually',
-            'annually' => 'Annually'
+            'annually' => 'Annually',
+            'one_payment_off' => 'Bullet Payment (Single Payment at End)',
         ];
 
         // Fetch supporting data
@@ -1774,6 +1789,9 @@ class LoanController extends Controller
                 $loan->save();
                 $loan->generateRepaymentSchedule($validated['interest']);
 
+                // Calculate daily interest accruals for backdated loans
+                $loan->calculateBackdatedDailyInterest();
+
                 // Post matured interest for past loans
                 $loan->postMaturedInterestForPastLoan();
 
@@ -1858,11 +1876,13 @@ class LoanController extends Controller
     //////PRODUCT LIMITS ////////////////////////////////
     protected function validateProductLimits(array $data, LoanProduct $product)
     {
-        if ($data['period'] < $product->minimum_period || $data['period'] > $product->maximum_period) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'period' => "Period must be between {$product->minimum_period} and {$product->maximum_period} months.",
-            ]);
-        }
+        // Note: Period validation has been removed because the product stores min/max period
+        // in annual terms, but users may select different interest cycles (daily, weekly, monthly, etc.)
+        // which would make the period values incompatible with annual-based validation.
+        // The period entered is now based on the selected interest cycle, not necessarily annual.
+        
+        // Example: A product with min_period=12 (months) and max_period=36 (months)
+        // would incorrectly reject a weekly loan with period=52 (weeks = 1 year)
 
         if ($data['interest'] < $product->minimum_interest_rate || $data['interest'] > $product->maximum_interest_rate) {
             throw \Illuminate\Validation\ValidationException::withMessages([
@@ -4169,6 +4189,144 @@ class LoanController extends Controller
             Log::error('Export loan details failed: ' . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'Failed to export loan details: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Export Daily Interest Accrued for a loan
+     */
+    public function exportDailyInterest($id, $format)
+    {
+        try {
+            $decoded = Hashids::decode($id);
+            if (empty($decoded)) {
+                return redirect()->route('loans.list')->withErrors(['Loan not found.']);
+            }
+
+            $loan = Loan::with(['customer', 'product', 'branch'])->findOrFail($decoded[0]);
+
+            $dailyInterestAccruals = \App\Models\DailyInterestAccrual::where('loan_id', $loan->id)
+                ->with(['branch', 'user'])
+                ->orderBy('accrual_date', 'asc')
+                ->get();
+
+            $totalInterest = $dailyInterestAccruals->sum('daily_interest_amount');
+
+            if ($format === 'excel') {
+                return $this->exportDailyInterestExcel($loan, $dailyInterestAccruals, $totalInterest);
+            } else {
+                return $this->exportDailyInterestPdf($loan, $dailyInterestAccruals, $totalInterest);
+            }
+        } catch (\Exception $e) {
+            Log::error('Export daily interest failed: ' . $e->getMessage());
+            return redirect()->back()->withErrors(['error' => 'Failed to export daily interest: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Export Daily Interest to Excel
+     */
+    private function exportDailyInterestExcel($loan, $dailyInterestAccruals, $totalInterest)
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Daily Interest Accrued');
+
+        // Company Header
+        $company = auth()->user()->company;
+        $sheet->setCellValue('A1', $company->name ?? 'Company');
+        $sheet->mergeCells('A1:G1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+        // Report Title
+        $sheet->setCellValue('A2', 'Daily Interest Accrued Report');
+        $sheet->mergeCells('A2:G2');
+        $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('A2')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+        // Loan Info
+        $sheet->setCellValue('A4', 'Loan Number:');
+        $sheet->setCellValue('B4', $loan->loanNo ?? '#' . $loan->id);
+        $sheet->setCellValue('A5', 'Customer:');
+        $sheet->setCellValue('B5', $loan->customer->name ?? 'N/A');
+        $sheet->setCellValue('A6', 'Product:');
+        $sheet->setCellValue('B6', $loan->product->name ?? 'N/A');
+        $sheet->setCellValue('A7', 'Generated On:');
+        $sheet->setCellValue('B7', now()->format('d-m-Y H:i'));
+
+        $sheet->getStyle('A4:A7')->getFont()->setBold(true);
+
+        // Headers
+        $headers = ['#', 'Accrual Date', 'Principal Balance', 'Interest Rate (Daily)', 'Daily Interest', 'Branch', 'Created At'];
+        $col = 'A';
+        $row = 9;
+        foreach ($headers as $header) {
+            $sheet->setCellValue($col . $row, $header);
+            $col++;
+        }
+        $sheet->getStyle('A9:G9')->getFont()->setBold(true);
+        $sheet->getStyle('A9:G9')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FFD9D9D9');
+
+        // Data
+        $row = 10;
+        $index = 1;
+        foreach ($dailyInterestAccruals as $accrual) {
+            $sheet->setCellValue('A' . $row, $index);
+            $sheet->setCellValue('B' . $row, $accrual->accrual_date->format('d-m-Y'));
+            $sheet->setCellValue('C' . $row, $accrual->principal_balance);
+            $sheet->setCellValue('D' . $row, number_format($accrual->interest_rate * 100, 6) . '%');
+            $sheet->setCellValue('E' . $row, $accrual->daily_interest_amount);
+            $sheet->setCellValue('F' . $row, $accrual->branch->name ?? 'N/A');
+            $sheet->setCellValue('G' . $row, $accrual->created_at->format('d-m-Y H:i'));
+
+            $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+            $row++;
+            $index++;
+        }
+
+        // Total row
+        $sheet->setCellValue('D' . $row, 'TOTAL:');
+        $sheet->setCellValue('E' . $row, $totalInterest);
+        $sheet->getStyle('D' . $row . ':E' . $row)->getFont()->setBold(true);
+        $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+        // Auto-size columns
+        foreach (range('A', 'G') as $columnID) {
+            $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        }
+
+        // Output
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $filename = 'Daily_Interest_' . ($loan->loanNo ?? $loan->id) . '_' . now()->format('Y-m-d') . '.xlsx';
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * Export Daily Interest to PDF
+     */
+    private function exportDailyInterestPdf($loan, $dailyInterestAccruals, $totalInterest)
+    {
+        $data = [
+            'loan' => $loan,
+            'dailyInterestAccruals' => $dailyInterestAccruals,
+            'totalInterest' => $totalInterest,
+            'company' => auth()->user()->company,
+            'exportDate' => now()->format('d-m-Y H:i:s')
+        ];
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('loans.daily-interest-pdf', $data);
+        $pdf->setPaper('A4', 'portrait');
+
+        $filename = 'Daily_Interest_' . ($loan->loanNo ?? $loan->id) . '_' . now()->format('Y-m-d') . '.pdf';
+
+        return $pdf->download($filename);
     }
 
     /**

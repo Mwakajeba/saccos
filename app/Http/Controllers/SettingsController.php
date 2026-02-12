@@ -1310,6 +1310,134 @@ class SettingsController extends Controller
         
         return view('settings.payment-voucher-approval', compact('roles', 'users', 'settings'));
     }
+
+    /**
+     * Receipt Voucher Approval Settings
+     */
+    public function receiptVoucherApprovalSettings()
+    {
+        $user = Auth::user();
+        
+        // Load roles and users for dropdowns
+        $roles = \Spatie\Permission\Models\Role::all();
+        $users = \App\Models\User::where('company_id', $user->company_id)->get();
+        
+        // Load existing approval settings
+        $settings = \App\Models\ReceiptVoucherApprovalSetting::where('company_id', $user->company_id)->first();
+        
+        return view('settings.receipt-voucher-approval', compact('roles', 'users', 'settings'));
+    }
+
+    /**
+     * Update Receipt Voucher Approval Settings
+     */
+    public function updateReceiptVoucherApprovalSettings(Request $request)
+    {
+        $requireAll = $request->has('require_approval_for_all');
+
+        $baseRules = [
+            'require_approval_for_all' => 'boolean',
+        ];
+
+        $approvalRules = [
+            'approval_levels' => 'required|integer|min:1|max:5',
+            'level1_approval_type' => 'required|in:role,user',
+            'level1_approvers' => 'required|array|min:1',
+            'level2_approval_type' => 'nullable|in:role,user',
+            'level2_approvers' => 'nullable|array',
+            'level3_approval_type' => 'nullable|in:role,user',
+            'level3_approvers' => 'nullable|array',
+            'level4_approval_type' => 'nullable|in:role,user',
+            'level4_approvers' => 'nullable|array',
+            'level5_approval_type' => 'nullable|in:role,user',
+            'level5_approvers' => 'nullable|array',
+        ];
+
+        $rules = $requireAll ? array_merge($baseRules, $approvalRules) : $baseRules;
+        $request->validate($rules);
+
+        try {
+            $user = Auth::user();
+            $companyId = $user->company_id;
+
+            // Find or create approval settings for the company
+            $settings = \App\Models\ReceiptVoucherApprovalSetting::firstOrCreate(
+                ['company_id' => $companyId],
+                [
+                    'approval_levels' => 1,
+                    'require_approval_for_all' => false,
+                ]
+            );
+
+            // Update settings
+            $updateData = [
+                'require_approval_for_all' => $requireAll,
+            ];
+            if ($requireAll) {
+                $updateData = array_merge($updateData, [
+                    'approval_levels' => $request->approval_levels,
+                ]);
+            }
+            $settings->update($updateData);
+
+            // Update approval assignments
+            if ($requireAll) {
+                $approvalLevels = (int) $request->approval_levels;
+                
+                for ($level = 1; $level <= $approvalLevels; $level++) {
+                    $approvalType = $request->{"level{$level}_approval_type"};
+                    $approvers = $request->{"level{$level}_approvers"} ?? [];
+
+                    if ($approvalType && !empty($approvers)) {
+                        // Process approver IDs - extract actual IDs from "user_X" or "role_X" format
+                        $processedApprovers = [];
+                        foreach ($approvers as $approver) {
+                            if (str_starts_with($approver, 'user_')) {
+                                $userId = (int) str_replace('user_', '', $approver);
+                                $processedApprovers[] = $userId;
+                            } elseif (str_starts_with($approver, 'role_')) {
+                                $roleName = str_replace('role_', '', $approver);
+                                $processedApprovers[] = $roleName;
+                            }
+                        }
+
+                        $settings->update([
+                            "level{$level}_approval_type" => $approvalType,
+                            "level{$level}_approvers" => $processedApprovers,
+                        ]);
+                    }
+                }
+                
+                // Clear unused levels
+                for ($level = $approvalLevels + 1; $level <= 5; $level++) {
+                    $settings->update([
+                        "level{$level}_approval_type" => null,
+                        "level{$level}_approvers" => null,
+                    ]);
+                }
+            } else {
+                // When approvals disabled, clear approval configuration
+                $settings->update([
+                    'approval_levels' => 0,
+                    'level1_approval_type' => null,
+                    'level1_approvers' => null,
+                    'level2_approval_type' => null,
+                    'level2_approvers' => null,
+                    'level3_approval_type' => null,
+                    'level3_approvers' => null,
+                    'level4_approval_type' => null,
+                    'level4_approvers' => null,
+                    'level5_approval_type' => null,
+                    'level5_approvers' => null,
+                ]);
+            }
+
+            return redirect()->route('settings.receipt-voucher-approval')->with('success', 'Receipt voucher approval settings updated successfully!');
+        } catch (\Exception $e) {
+            return redirect()->route('settings.receipt-voucher-approval')->with('error', 'Failed to update receipt voucher approval settings: ' . $e->getMessage());
+        }
+    }
+
     /**
      * Update Payment Voucher Approval Settings
      */
@@ -2635,165 +2763,258 @@ class SettingsController extends Controller
         }
     }
 
-    // Inventory Settings
-    public function inventorySettings()
+    /**
+     * Job Logs Index
+     */
+    public function jobLogsIndex()
     {
-        $settings = SystemSetting::first();
-        
-        return view('settings.inventory', compact('settings'));
+        return view('settings.job-logs.index');
     }
 
-    public function updateInventorySettings(Request $request)
+    /**
+     * Get Job Logs Data for DataTables
+     */
+    public function jobLogsData(Request $request)
     {
-        $request->validate([
-            'inventory_cost_method' => 'required|in:FIFO,LIFO,AVCO,Specific Identification',
-            'enable_negative_stock' => 'boolean',
-            'auto_generate_item_codes' => 'boolean',
+        $query = \App\Models\JobLog::query()->orderBy('created_at', 'desc');
+
+        // Search filter
+        if ($request->has('search') && !empty($request->search['value'])) {
+            $search = $request->search['value'];
+            $query->where(function ($q) use ($search) {
+                $q->where('job_name', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhere('summary', 'like', "%{$search}%");
+            });
+        }
+
+        // Status filter
+        if ($request->has('status') && !empty($request->status)) {
+            $query->where('status', $request->status);
+        }
+
+        // Job name filter
+        if ($request->has('job_name') && !empty($request->job_name)) {
+            $query->where('job_name', $request->job_name);
+        }
+
+        // Date range filter
+        if ($request->has('date_from') && !empty($request->date_from)) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->has('date_to') && !empty($request->date_to)) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        return datatables()->of($query)
+            ->addIndexColumn()
+            ->addColumn('status_badge', function ($row) {
+                $statusColors = [
+                    'pending' => 'secondary',
+                    'running' => 'info',
+                    'completed' => 'success',
+                    'failed' => 'danger',
+                ];
+                $color = $statusColors[$row->status] ?? 'secondary';
+                return '<span class="badge bg-' . $color . '">' . ucfirst($row->status) . '</span>';
+            })
+            ->addColumn('formatted_duration', function ($row) {
+                return $row->formatted_duration;
+            })
+            ->addColumn('formatted_amount', function ($row) {
+                return $row->total_amount ? 'TZS ' . number_format($row->total_amount, 2) : '-';
+            })
+            ->addColumn('started_at_formatted', function ($row) {
+                return $row->started_at ? $row->started_at->format('d-m-Y H:i:s') : '-';
+            })
+            ->addColumn('actions', function ($row) {
+                $viewUrl = route('settings.job-logs.show', $row->id);
+                return '<a href="' . $viewUrl . '" class="btn btn-sm btn-info"><i class="bx bx-show"></i> View Details</a>';
+            })
+            ->rawColumns(['status_badge', 'actions'])
+            ->make(true);
+    }
+
+    /**
+     * Show Job Log Details
+     */
+    public function jobLogShow($jobLogId)
+    {
+        $jobLog = \App\Models\JobLog::findOrFail($jobLogId);
+        
+        // Get cached details for this job
+        $details = \Illuminate\Support\Facades\Cache::get('daily_interest_job_details_' . $jobLog->id, []);
+
+        return view('settings.job-logs.show', compact('jobLog', 'details'));
+    }
+
+    /**
+     * Get Job Log Details Data for DataTables
+     */
+    public function jobLogDetailsData(Request $request, $jobLogId)
+    {
+        $jobLog = \App\Models\JobLog::findOrFail($jobLogId);
+        
+        // Get cached details for this job
+        $details = \Illuminate\Support\Facades\Cache::get('daily_interest_job_details_' . $jobLog->id, []);
+
+        $collection = collect($details);
+
+        // Apply search filter
+        if ($request->has('search') && !empty($request->search['value'])) {
+            $search = strtolower($request->search['value']);
+            $collection = $collection->filter(function ($item) use ($search) {
+                return str_contains(strtolower($item['loan_no'] ?? ''), $search) ||
+                       str_contains(strtolower($item['customer_name'] ?? ''), $search);
+            });
+        }
+
+        return datatables()->of($collection)
+            ->addIndexColumn()
+            ->addColumn('formatted_principal', function ($row) {
+                return isset($row['principal_balance']) ? 'TZS ' . number_format($row['principal_balance'], 2) : '-';
+            })
+            ->addColumn('formatted_interest', function ($row) {
+                return isset($row['interest_accrued']) ? 'TZS ' . number_format($row['interest_accrued'], 2) : '-';
+            })
+            ->addColumn('status_badge', function ($row) {
+                if (isset($row['error'])) {
+                    return '<span class="badge bg-danger">Failed</span>';
+                }
+                return '<span class="badge bg-success">Success</span>';
+            })
+            ->rawColumns(['status_badge'])
+            ->make(true);
+    }
+
+    /**
+     * Export Job Log Details
+     */
+    public function jobLogExport($jobLogId, $format)
+    {
+        $jobLog = \App\Models\JobLog::findOrFail($jobLogId);
+        $details = \Illuminate\Support\Facades\Cache::get('daily_interest_job_details_' . $jobLog->id, []);
+
+        if ($format === 'excel') {
+            return $this->exportJobLogExcel($jobLog, $details);
+        } else {
+            return $this->exportJobLogPdf($jobLog, $details);
+        }
+    }
+
+    /**
+     * Export Job Log to Excel
+     */
+    private function exportJobLogExcel($jobLog, $details)
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Job Details');
+
+        // Company Header
+        $company = auth()->user()->company;
+        $sheet->setCellValue('A1', $company->name ?? 'Company');
+        $sheet->mergeCells('A1:F1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+        // Report Title
+        $sheet->setCellValue('A2', 'Job Log Details - ' . $jobLog->job_name);
+        $sheet->mergeCells('A2:F2');
+        $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('A2')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+        // Job Info
+        $sheet->setCellValue('A4', 'Job Name:');
+        $sheet->setCellValue('B4', $jobLog->job_name);
+        $sheet->setCellValue('A5', 'Status:');
+        $sheet->setCellValue('B5', ucfirst($jobLog->status));
+        $sheet->setCellValue('A6', 'Started At:');
+        $sheet->setCellValue('B6', $jobLog->started_at ? $jobLog->started_at->format('d-m-Y H:i:s') : 'N/A');
+        $sheet->setCellValue('A7', 'Total Processed:');
+        $sheet->setCellValue('B7', $jobLog->processed);
+        $sheet->setCellValue('D4', 'Successful:');
+        $sheet->setCellValue('E4', $jobLog->successful);
+        $sheet->setCellValue('D5', 'Failed:');
+        $sheet->setCellValue('E5', $jobLog->failed);
+        $sheet->setCellValue('D6', 'Total Amount:');
+        $sheet->setCellValue('E6', $jobLog->total_amount ? 'TZS ' . number_format($jobLog->total_amount, 2) : 'N/A');
+        $sheet->setCellValue('D7', 'Duration:');
+        $sheet->setCellValue('E7', $jobLog->formatted_duration);
+
+        $sheet->getStyle('A4:A7')->getFont()->setBold(true);
+        $sheet->getStyle('D4:D7')->getFont()->setBold(true);
+
+        // Headers
+        $headers = ['#', 'Loan No', 'Customer Name', 'Principal Balance', 'Interest Accrued', 'Status'];
+        $col = 'A';
+        $row = 9;
+        foreach ($headers as $header) {
+            $sheet->setCellValue($col . $row, $header);
+            $col++;
+        }
+        $sheet->getStyle('A9:F9')->getFont()->setBold(true);
+        $sheet->getStyle('A9:F9')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FFD9D9D9');
+
+        // Data
+        $row = 10;
+        $index = 1;
+        $totalInterest = 0;
+        foreach ($details as $detail) {
+            $sheet->setCellValue('A' . $row, $index);
+            $sheet->setCellValue('B' . $row, $detail['loan_no'] ?? 'N/A');
+            $sheet->setCellValue('C' . $row, $detail['customer_name'] ?? 'N/A');
+            $sheet->setCellValue('D' . $row, $detail['principal_balance'] ?? 0);
+            $sheet->setCellValue('E' . $row, $detail['interest_accrued'] ?? 0);
+            $sheet->setCellValue('F' . $row, isset($detail['error']) ? 'Failed' : 'Success');
+
+            $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+            $totalInterest += $detail['interest_accrued'] ?? 0;
+            $row++;
+            $index++;
+        }
+
+        // Total row
+        $sheet->setCellValue('D' . $row, 'TOTAL:');
+        $sheet->setCellValue('E' . $row, $totalInterest);
+        $sheet->getStyle('D' . $row . ':E' . $row)->getFont()->setBold(true);
+        $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+        // Auto-size columns
+        foreach (range('A', 'F') as $columnID) {
+            $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        }
+
+        // Output
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $filename = 'Job_Log_' . $jobLog->id . '_' . now()->format('Y-m-d') . '.xlsx';
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
-
-        $settings = SystemSetting::first();
-        
-        if (!$settings) {
-            $settings = new SystemSetting();
-        }
-
-        $settings->inventory_cost_method = $request->inventory_cost_method;
-        $settings->enable_negative_stock = $request->has('enable_negative_stock');
-        $settings->auto_generate_item_codes = $request->has('auto_generate_item_codes');
-        $settings->save();
-
-        return redirect()->back()->with('success', 'Inventory settings updated successfully.');
     }
 
-    // Inventory Locations
-    public function inventoryLocations()
+    /**
+     * Export Job Log to PDF
+     */
+    private function exportJobLogPdf($jobLog, $details)
     {
-        $locations = \App\Models\InventoryLocation::where('company_id', current_company_id())
-            ->with(['branch', 'manager'])
-            ->get();
-        
-        return view('settings.inventory-locations.index', compact('locations'));
-    }
+        $data = [
+            'jobLog' => $jobLog,
+            'details' => $details,
+            'company' => auth()->user()->company,
+            'exportDate' => now()->format('d-m-Y H:i:s')
+        ];
 
-    public function createInventoryLocation()
-    {
-        $branches = Branch::forCompany()->active()->get();
-        $users = \App\Models\User::where('company_id', current_company_id())->get();
-        
-        return view('settings.inventory-locations.create', compact('branches', 'users'));
-    }
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('settings.job-logs.pdf', $data);
+        $pdf->setPaper('A4', 'portrait');
 
-    public function storeInventoryLocation(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'branch_id' => 'required|exists:branches,id',
-            'manager_id' => 'nullable|exists:users,id',
-            'is_active' => 'boolean',
-        ]);
+        $filename = 'Job_Log_' . $jobLog->id . '_' . now()->format('Y-m-d') . '.pdf';
 
-        $location = new \App\Models\InventoryLocation();
-        $location->name = $request->name;
-        $location->description = $request->description;
-        $location->branch_id = $request->branch_id;
-        $location->manager_id = $request->manager_id;
-        $location->is_active = $request->has('is_active');
-        $location->company_id = current_company_id();
-        $location->created_by = Auth::id();
-        $location->save();
-
-        return redirect()->route('settings.inventory.locations.index')
-            ->with('success', 'Inventory location created successfully.');
-    }
-
-    public function showInventoryLocation($id)
-    {
-        $decoded = Hashids::decode($id);
-        $locationId = !empty($decoded) ? $decoded[0] : null;
-
-        if (!$locationId) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Invalid location ID');
-        }
-
-        $location = \App\Models\InventoryLocation::with(['branch', 'manager'])
-            ->findOrFail($locationId);
-        
-        return view('settings.inventory-locations.show', compact('location'));
-    }
-
-    public function editInventoryLocation($id)
-    {
-        $decoded = Hashids::decode($id);
-        $locationId = !empty($decoded) ? $decoded[0] : null;
-
-        if (!$locationId) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Invalid location ID');
-        }
-
-        $location = \App\Models\InventoryLocation::findOrFail($locationId);
-        $branches = Branch::forCompany()->active()->get();
-        $users = \App\Models\User::where('company_id', current_company_id())->get();
-        
-        return view('settings.inventory-locations.edit', compact('location', 'branches', 'users'));
-    }
-
-    public function updateInventoryLocation(Request $request, $id)
-    {
-        $decoded = Hashids::decode($id);
-        $locationId = !empty($decoded) ? $decoded[0] : null;
-
-        if (!$locationId) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Invalid location ID');
-        }
-
-        $location = \App\Models\InventoryLocation::findOrFail($locationId);
-
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'branch_id' => 'required|exists:branches,id',
-            'manager_id' => 'nullable|exists:users,id',
-            'is_active' => 'boolean',
-        ]);
-
-        $location->name = $request->name;
-        $location->description = $request->description;
-        $location->branch_id = $request->branch_id;
-        $location->manager_id = $request->manager_id;
-        $location->is_active = $request->has('is_active');
-        $location->save();
-
-        return redirect()->route('settings.inventory.locations.index')
-            ->with('success', 'Inventory location updated successfully.');
-    }
-
-    public function destroyInventoryLocation($id)
-    {
-        $decoded = Hashids::decode($id);
-        $locationId = !empty($decoded) ? $decoded[0] : null;
-
-        if (!$locationId) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Invalid location ID');
-        }
-
-        $location = \App\Models\InventoryLocation::findOrFail($locationId);
-        
-        // Check if location has any stock items
-        $hasStock = \App\Models\InventoryStockLevel::where('location_id', $location->id)->exists();
-        
-        if ($hasStock) {
-            return redirect()->route('settings.inventory.locations.index')
-                ->with('error', 'Cannot delete location with existing stock.');
-        }
-
-        $location->delete();
-
-        return redirect()->route('settings.inventory.locations.index')
-            ->with('success', 'Inventory location deleted successfully.');
+        return $pdf->download($filename);
     }
 }

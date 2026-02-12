@@ -359,22 +359,41 @@ class Loan extends Model
     }
 
 
-    public function calculateInterestAmount(?float $rate = null, bool $returnSchedule = false): float|array
+    public function calculateInterestAmount(?float $rate = null, bool $returnSchedule = false, bool $rateAlreadyConverted = false): float|array
     {
         $product = $this->product;
         if (!$product)
             return $returnSchedule ? [] : 0;
 
         $principal = $this->amount;
-        $rate = $rate ?? $this->interest ?? $product->interest ?? 0;
+        $annualRate = $rate ?? $this->interest ?? $product->interest ?? 0;
+        $cycle = $this->interest_cycle ?? $product->interest_cycle ?? 'monthly';
+
+        // Convert annual rate to period rate based on interest cycle
+        // Skip conversion if the rate was already converted by the caller (e.g., LoanCalculatorService)
+        $periodRate = $rateAlreadyConverted ? $annualRate : $this->convertAnnualRateToPeriodRate($annualRate, $cycle);
 
         $period = $this->period;
         $method = $product->interest_method ?? 'flat_rate';
 
-        $ratePerPeriod = $rate / 100;
+        $ratePerPeriod = $periodRate / 100;
 
         $schedule = [];
         $interestAmount = 0;
+
+        // Handle bullet payment (one_payment_off) - single payment at end
+        if (in_array($cycle, ['one_payment_off', 'bullet'])) {
+            // For bullet payment, all principal and interest are due at the end
+            $interestAmount = $principal * ($annualRate / 100) * ($period / 12); // Proportional to period in months
+            if ($returnSchedule) {
+                $schedule[] = [
+                    'principal' => round($principal, 2),
+                    'interest' => round($interestAmount, 2),
+                    'total' => round($principal + $interestAmount, 2),
+                ];
+            }
+            return $returnSchedule ? $schedule : round($interestAmount, 2);
+        }
 
         switch ($method) {
             case 'flat_rate':
@@ -452,15 +471,84 @@ class Loan extends Model
         return $returnSchedule ? $schedule : round($interestAmount, 2);
     }
 
+    /**
+     * Convert annual interest rate to per-period rate based on interest cycle
+     * 
+     * This ensures consistency with the loan calculator service.
+     * The product stores an annual interest rate, and this method converts it
+     * to the appropriate period rate based on the selected interest cycle.
+     */
+    public function convertAnnualRateToPeriodRate(float $annualRate, string $cycle): float
+    {
+        $cycle = strtolower(trim($cycle));
+        
+        switch ($cycle) {
+            case 'annually':
+            case 'yearly':
+                // Annual rate as-is (1 period per year)
+                return $annualRate;
+                
+            case 'semi_annually':
+            case 'semi annually':
+            case 'semi-annually':
+                // Annual rate divided by 2 semi-annual periods
+                return $annualRate / 2;
+                
+            case 'quarterly':
+                // Annual rate divided by 4 quarters
+                return $annualRate / 4;
+                
+            case 'bi_monthly':
+            case 'bi-monthly':
+            case 'bimonthly':
+                // Annual rate divided by 6 bi-monthly periods (2 months each)
+                return $annualRate / 6;
+                
+            case 'monthly':
+                // Annual rate divided by 12 months
+                return $annualRate / 12;
+                
+            case 'semi_monthly':
+            case 'semi-monthly':
+            case 'semimonthly':
+                // Annual rate divided by 24 semi-monthly periods (15 days each, ~2 per month)
+                return $annualRate / 24;
+                
+            case 'bi_weekly':
+            case 'bi-weekly':
+            case 'biweekly':
+                // Annual rate divided by 26 bi-weekly periods (14 days each)
+                return $annualRate / 26;
+                
+            case 'weekly':
+                // Annual rate divided by 52 weeks
+                return $annualRate / 52;
+                
+            case 'daily':
+                // Annual rate divided by 365 days
+                return $annualRate / 365;
+                
+            case 'one_payment_off':
+            case 'one payment off':
+            case 'bullet':
+                // For bullet payment, return annual rate (handled separately in calculation)
+                return $annualRate;
+                
+            default:
+                // Default to monthly if cycle not recognized
+                Log::warning("Unknown interest cycle '{$cycle}' in Loan model. Defaulting to monthly.");
+                return $annualRate / 12;
+        }
+    }
 
 
     public function getRepaymentDates()
     {
-        $cycle = $this->interest_cycle; // e.g., monthly, weekly
+        $cycle = strtolower(trim($this->interest_cycle)); // e.g., monthly, weekly
         $period = $this->period;
         $disbursedOn = Carbon::parse($this->disbursed_on);
 
-        // 1. Get first repayment date
+        // Get first and last repayment dates based on interest cycle
         switch ($cycle) {
             case 'daily':
                 $first = $disbursedOn->copy()->addDay();
@@ -472,9 +560,33 @@ class Loan extends Model
                 $last = $first->copy()->addWeeks($period - 1);
                 break;
 
+            case 'bi_weekly':
+            case 'bi-weekly':
+            case 'biweekly':
+                // Bi-weekly: 14 days (2 weeks) per period
+                $first = $disbursedOn->copy()->addDays(14);
+                $last = $first->copy()->addDays(14 * ($period - 1));
+                break;
+
+            case 'semi_monthly':
+            case 'semi-monthly':
+            case 'semimonthly':
+                // Semi-monthly: 15 days per period (roughly 2 payments per month)
+                $first = $disbursedOn->copy()->addDays(15);
+                $last = $first->copy()->addDays(15 * ($period - 1));
+                break;
+
             case 'monthly':
                 $first = $disbursedOn->copy()->addMonth();
                 $last = $first->copy()->addMonths($period - 1);
+                break;
+
+            case 'bi_monthly':
+            case 'bi-monthly':
+            case 'bimonthly':
+                // Bi-monthly: 2 months per period
+                $first = $disbursedOn->copy()->addMonths(2);
+                $last = $first->copy()->addMonths(2 * ($period - 1));
                 break;
 
             case 'quarterly':
@@ -483,13 +595,26 @@ class Loan extends Model
                 break;
 
             case 'semi_annually':
+            case 'semi-annually':
+            case 'semiannually':
                 $first = $disbursedOn->copy()->addMonths(6);
                 $last = $first->copy()->addMonths(6 * ($period - 1));
                 break;
 
             case 'annually':
+            case 'yearly':
                 $first = $disbursedOn->copy()->addYear();
                 $last = $first->copy()->addYears($period - 1);
+                break;
+
+            case 'one_payment_off':
+            case 'one payment off':
+            case 'bullet':
+                // Bullet payment: single payment at the end of the loan period
+                // Calculate maturity date based on period (which represents total term in days, weeks, or months)
+                // Default to treating period as months for bullet payments
+                $first = $disbursedOn->copy()->addMonths($period);
+                $last = $first->copy(); // Same date for single payment
                 break;
 
             default:
@@ -510,23 +635,42 @@ class Loan extends Model
      */
     public function getDateIncrementMethod(): string
     {
-        $cycle = strtolower($this->interest_cycle);
+        $cycle = strtolower(trim($this->interest_cycle));
 
         switch ($cycle) {
             case 'daily':
-                return 'addDay';
+                return 'addDays';
             case 'weekly':
-                return 'addWeek';
+                return 'addWeeks';
+            case 'bi_weekly':
+            case 'bi-weekly':
+            case 'biweekly':
+                return 'addDays'; // Use addDays with 14 days
+            case 'semi_monthly':
+            case 'semi-monthly':
+            case 'semimonthly':
+                return 'addDays'; // Use addDays with 15 days
             case 'monthly':
-                return 'addMonth';
+                return 'addMonths';
+            case 'bi_monthly':
+            case 'bi-monthly':
+            case 'bimonthly':
+                return 'addMonths'; // Use addMonths with 2 months
             case 'quarterly':
-                return 'addMonths';
+                return 'addMonths'; // Use addMonths with 3 months
             case 'semi_annually':
-                return 'addMonths';
+            case 'semi-annually':
+            case 'semiannually':
+                return 'addMonths'; // Use addMonths with 6 months
             case 'annually':
-                return 'addYear';
+            case 'yearly':
+                return 'addYears';
+            case 'one_payment_off':
+            case 'one payment off':
+            case 'bullet':
+                return 'addMonths'; // Single payment at end of term
             default:
-                return 'addMonth';
+                return 'addMonths';
         }
     }
 
@@ -535,21 +679,40 @@ class Loan extends Model
      */
     public function getDateIncrementValue(int $index): int
     {
-        $cycle = strtolower($this->interest_cycle);
+        $cycle = strtolower(trim($this->interest_cycle));
 
         switch ($cycle) {
             case 'daily':
                 return $index;
             case 'weekly':
                 return $index;
+            case 'bi_weekly':
+            case 'bi-weekly':
+            case 'biweekly':
+                return $index * 14; // 14 days per bi-weekly period
+            case 'semi_monthly':
+            case 'semi-monthly':
+            case 'semimonthly':
+                return $index * 15; // 15 days per semi-monthly period
             case 'monthly':
                 return $index;
+            case 'bi_monthly':
+            case 'bi-monthly':
+            case 'bimonthly':
+                return $index * 2; // 2 months per bi-monthly period
             case 'quarterly':
                 return $index * 3; // 3 months per quarter
             case 'semi_annually':
+            case 'semi-annually':
+            case 'semiannually':
                 return $index * 6; // 6 months per semi-annual period
             case 'annually':
+            case 'yearly':
                 return $index;
+            case 'one_payment_off':
+            case 'one payment off':
+            case 'bullet':
+                return $this->period; // Single payment at end of term (period in months)
             default:
                 return $index;
         }
@@ -567,22 +730,37 @@ class Loan extends Model
         $method = strtolower($product->interest_method ?? 'flat_rate');
         $startDate = Carbon::parse($this->first_repayment_date);
         $gracePeriod = $product->grace_period ?? 0;
+        $cycle = strtolower(trim($this->interest_cycle));
 
         $fees = $product->getFeesAttribute();
         \Log::info('[LoanSchedule] Fees: ' . json_encode($fees));
         $penalty = $product->penalty;
 
-        $isReducing = in_array($method, [
-            'reducing_balance_with_equal_installment',
-            'reducing_balance_with_equal_principal'
-        ]);
-
-        $schedule = $isReducing
-            ? $this->calculateInterestAmount($rate, true)
-            : array_fill(0, $period, [
-                'principal' => round($principal / $period, 2),
-                'interest' => round($interestAmount / $period, 2)
+        // Handle bullet/one_payment_off: Single payment at the end
+        $isBulletPayment = in_array($cycle, ['one_payment_off', 'one payment off', 'bullet']);
+        
+        if ($isBulletPayment) {
+            // Bullet payment: single payment with full principal + interest
+            $period = 1; // Override period for single payment
+            $schedule = [
+                [
+                    'principal' => round($principal, 2),
+                    'interest' => round($interestAmount, 2)
+                ]
+            ];
+        } else {
+            $isReducing = in_array($method, [
+                'reducing_balance_with_equal_installment',
+                'reducing_balance_with_equal_principal'
             ]);
+
+            $schedule = $isReducing
+                ? $this->calculateInterestAmount($rate, true)
+                : array_fill(0, $period, [
+                    'principal' => round($principal / $period, 2),
+                    'interest' => round($interestAmount / $period, 2)
+                ]);
+        }
 
 
         // === Fees on release date ===
@@ -1036,6 +1214,77 @@ class Loan extends Model
             default:
                 return 'Monthly';
         }
+    }
+
+    /**
+     * Calculate daily interest accruals for backdated loans
+     * When a loan is created with a disbursement date in the past,
+     * this method calculates and creates daily interest accruals for each day
+     * from the day after disbursement to today
+     * 
+     * @return int Number of accruals created
+     */
+    public function calculateBackdatedDailyInterest()
+    {
+        // Only process if loan is active and has a disbursement date
+        if ($this->status !== self::STATUS_ACTIVE || !$this->disbursed_on) {
+            return 0;
+        }
+
+        // Ensure relationships are loaded
+        $this->loadMissing(['product', 'customer', 'branch']);
+
+        $disbursementDate = Carbon::parse($this->disbursed_on);
+        $today = Carbon::today();
+        
+        // Interest starts accruing the day after disbursement
+        $startDate = $disbursementDate->copy()->addDay();
+        
+        // If disbursement is today or in the future, no backdated interest to calculate
+        if ($startDate->isFuture() || $startDate->isToday()) {
+            return 0;
+        }
+
+        // Use the services for clean architecture
+        $interestService = app(\App\Services\InterestCalculationService::class);
+        $scheduleService = app(\App\Services\LoanScheduleService::class);
+        $accountingService = app(\App\Services\AccountingService::class);
+
+        $accrualsCreated = 0;
+        $currentDate = $startDate->copy();
+
+        // Process each day from start date to yesterday (today's interest will be calculated by the daily job)
+        while ($currentDate->isBefore($today)) {
+            try {
+                // Calculate and create accrual for this date
+                $result = $interestService->calculateAndCreateAccrual($this, $currentDate);
+                
+                if ($result && isset($result['accrual'])) {
+                    $accrual = $result['accrual'];
+                    $dailyInterestAmount = $result['interest_amount'];
+
+                    // Update schedule accrued interest
+                    $scheduleService->updateAccruedInterest($this, $dailyInterestAmount, $currentDate);
+
+                    // Post accounting transactions
+                    $accountingService->postDailyInterestTransactions($this, $accrual, $currentDate);
+
+                    $accrualsCreated++;
+                }
+            } catch (\Exception $e) {
+                Log::error("Failed to calculate backdated interest for loan {$this->id} on {$currentDate->toDateString()}: " . $e->getMessage());
+                // Continue with next date even if one fails
+            }
+
+            // Move to next day
+            $currentDate->addDay();
+        }
+
+        if ($accrualsCreated > 0) {
+            Log::info("Calculated {$accrualsCreated} days of backdated interest for loan {$this->loanNo} (from {$startDate->toDateString()} to {$today->copy()->subDay()->toDateString()})");
+        }
+
+        return $accrualsCreated;
     }
 
     /**

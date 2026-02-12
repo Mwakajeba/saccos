@@ -120,6 +120,8 @@ class LoanProductController extends Controller
      */
     public function store(Request $request)
     {
+        \Log::info('LoanProduct store method called', ['request_data_keys' => array_keys($request->all())]);
+        
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:loan_products',
             'product_type' => 'required|string|max:100',
@@ -151,6 +153,7 @@ class LoanProductController extends Controller
             'direct_writeoff_account_id' => 'nullable|exists:chart_accounts,id',
             'provision_writeoff_account_id' => 'nullable|exists:chart_accounts,id',
             'income_provision_account_id' => 'nullable|exists:chart_accounts,id',
+            'loan_clearing_account_id' => 'nullable|exists:chart_accounts,id',
             'fees_id' => 'nullable|array',
             'fees_id.*' => 'nullable|exists:fees,id',
             'penalty_id' => 'nullable|array',
@@ -161,10 +164,17 @@ class LoanProductController extends Controller
         ]);
 
         if ($validator->fails()) {
+            \Log::warning('LoanProduct store validation failed', [
+                'errors' => $validator->errors()->toArray(),
+                'request_data' => $request->except(['_token', 'password', 'password_confirmation'])
+            ]);
             return redirect()->back()
                 ->withErrors($validator)
-                ->withInput();
+                ->withInput()
+                ->with('error', 'Please fix the validation errors below.');
         }
+        
+        \Log::info('LoanProduct store validation passed');
 
         // Normalize repayment_order for validation and save
         $repaymentOrderHidden = $request->input('repayment_order_hidden');
@@ -237,18 +247,20 @@ class LoanProductController extends Controller
 
             // Handle fees_ids - map from fees_id array to fees_ids
             if ($request->has('fees_id')) {
-                $data['fees_ids'] = array_filter($request->input('fees_id', []), function ($value) {
+                $filteredFees = array_filter($request->input('fees_id', []), function ($value) {
                     return !empty($value);
                 });
+                $data['fees_ids'] = !empty($filteredFees) ? $filteredFees : null;
             } else {
                 $data['fees_ids'] = null;
             }
 
             // Handle penalty_ids - map from penalty_id array to penalty_ids
             if ($request->has('penalty_id')) {
-                $data['penalty_ids'] = array_filter($request->input('penalty_id', []), function ($value) {
+                $filteredPenalties = array_filter($request->input('penalty_id', []), function ($value) {
                     return !empty($value);
                 });
+                $data['penalty_ids'] = !empty($filteredPenalties) ? $filteredPenalties : null;
             } else {
                 $data['penalty_ids'] = null;
             }
@@ -267,6 +279,8 @@ class LoanProductController extends Controller
                 : null;
 
             $loanProduct = LoanProduct::create($data);
+            
+            \Log::info('LoanProduct created successfully', ['id' => $loanProduct->id, 'name' => $loanProduct->name]);
 
             DB::commit();
 
@@ -275,8 +289,20 @@ class LoanProductController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
+            \Log::error('LoanProduct creation failed', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->except(['_token', 'password', 'password_confirmation'])
+            ]);
+            
+            $errorMessage = config('app.debug') 
+                ? 'Error creating loan product: ' . $e->getMessage() . ' (Line: ' . $e->getLine() . ')'
+                : 'Error creating loan product. Please check the logs for details.';
+            
             return redirect()->back()
-                ->with('error', 'Error creating loan product: ' . $e->getMessage())
+                ->with('error', $errorMessage)
                 ->withInput();
         }
     }
@@ -445,6 +471,7 @@ class LoanProductController extends Controller
             'direct_writeoff_account_id' => 'nullable|exists:chart_accounts,id',
             'provision_writeoff_account_id' => 'nullable|exists:chart_accounts,id',
             'income_provision_account_id' => 'nullable|exists:chart_accounts,id',
+            'loan_clearing_account_id' => 'nullable|exists:chart_accounts,id',
             'fees_id' => 'nullable|array',
             'fees_id.*' => 'nullable|exists:fees,id',
             'penalty_id' => 'nullable|array',

@@ -537,6 +537,13 @@ class RolePermissionSeeder extends Seeder
             'view approval history',
             'manage approval levels',
 
+            // Receipt Voucher Approval Process
+            'manage receipt voucher approval',
+            'view receipt voucher approval',
+            'create receipt voucher approval',
+            'edit receipt voucher approval',
+            'delete receipt voucher approval',
+
             // Inventory Management
             'view inventory categories',
             'manage inventory categories',
@@ -700,7 +707,9 @@ class RolePermissionSeeder extends Seeder
             'configure approval workflow',
             'set approval thresholds',
             'assign approvers',
-            'view approval history'
+            'view approval history',
+            'manage receipt voucher approval',
+            'view receipt voucher approval'
         ];
         $managerRole->syncPermissions($managerPermissions);
 

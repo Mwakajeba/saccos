@@ -28,26 +28,24 @@
                 </div>
             @endif
 
-            <form id="contributionProductForm" action="{{ route('contributions.products.store') }}" method="POST"
-                data-has-custom-handler="true">
-                @csrf
-
-                <div class="row">
-                    <!-- Basic Information -->
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header bg-primary text-white">
-                                <h5 class="mb-0"><i class="bx bx-info-circle me-2"></i>Basic Information</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Product Name <span class="text-danger">*</span></label>
-                                        <input type="text" name="product_name"
-                                            class="form-control @error('product_name') is-invalid @enderror"
-                                            value="{{ old('product_name') }}" required>
-                                        @error('product_name') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                    </div>
+        <form id="contributionProductForm" action="{{ route('contributions.products.store') }}" method="POST" data-has-custom-handler="true">
+            @csrf
+            
+            <div class="row">
+                <!-- Basic Information -->
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="bx bx-info-circle me-2"></i>Basic Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Product Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="product_name" class="form-control @error('product_name') is-invalid @enderror"
+                                        value="{{ old('product_name') }}" required>
+                                    @error('product_name') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Interest (%) <span class="text-danger">*</span></label>
@@ -104,26 +102,23 @@
                         </div>
                     </div>
 
-                    <!-- Interest Settings -->
-                    <div class="col-12 mt-3">
-                        <div class="card">
-                            <div class="card-header bg-info text-white">
-                                <h5 class="mb-0"><i class="bx bx-calculator me-2"></i>Interest Settings</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">Compound Period <span class="text-danger">*</span></label>
-                                        <select name="compound_period"
-                                            class="form-select @error('compound_period') is-invalid @enderror" required>
-                                            <option value="">Select</option>
-                                            <option value="Daily" {{ old('compound_period') == 'Daily' ? 'selected' : '' }}>
-                                                Daily</option>
-                                            <option value="Monthly" {{ old('compound_period') == 'Monthly' ? 'selected' : '' }}>Monthly</option>
-                                        </select>
-                                        @error('compound_period') <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
+                <!-- Interest Settings -->
+                <div class="col-12 mt-3">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="bx bx-calculator me-2"></i>Interest Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">Compound Period <span class="text-danger">*</span></label>
+                                    <select name="compound_period" class="form-select @error('compound_period') is-invalid @enderror" required>
+                                        <option value="">Select</option>
+                                        <option value="Daily" {{ old('compound_period') == 'Daily' ? 'selected' : '' }}>Daily</option>
+                                        <option value="Monthly" {{ old('compound_period') == 'Monthly' ? 'selected' : '' }}>Monthly</option>
+                                    </select>
+                                    @error('compound_period') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
                                     <div class="col-md-4 mb-3">
                                         <label class="form-label">Interest Posting Period</label>
@@ -160,23 +155,20 @@
                         </div>
                     </div>
 
-                    <!-- Lock-in Period Settings -->
-                    <div class="col-12 mt-3">
-                        <div class="card">
-                            <div class="card-header bg-warning text-dark">
-                                <h5 class="mb-0"><i class="bx bx-lock me-2"></i>Lock-in Period Settings</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Lockin Period Frequency <span
-                                                class="text-danger">*</span></label>
-                                        <input type="number" name="lockin_period_frequency"
-                                            class="form-control @error('lockin_period_frequency') is-invalid @enderror"
-                                            value="{{ old('lockin_period_frequency') }}" required>
-                                        @error('lockin_period_frequency') <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
+                <!-- Lock-in Period Settings -->
+                <div class="col-12 mt-3">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="bx bx-lock me-2"></i>Lock-in Period Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Lockin Period Frequency <span class="text-danger">*</span></label>
+                                    <input type="number" name="lockin_period_frequency" class="form-control @error('lockin_period_frequency') is-invalid @enderror"
+                                        value="{{ old('lockin_period_frequency') }}" required>
+                                    @error('lockin_period_frequency') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Lockin Period Frequency Type <span
@@ -196,23 +188,20 @@
                         </div>
                     </div>
 
-                    <!-- Balance Settings -->
-                    <div class="col-12 mt-3">
-                        <div class="card">
-                            <div class="card-header bg-success text-white">
-                                <h5 class="mb-0"><i class="bx bx-money me-2"></i>Balance Settings</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Automatic Opening Balance <span
-                                                class="text-danger">*</span></label>
-                                        <input type="number" step="0.01" name="automatic_opening_balance"
-                                            class="form-control @error('automatic_opening_balance') is-invalid @enderror"
-                                            value="{{ old('automatic_opening_balance', 0) }}" required>
-                                        @error('automatic_opening_balance') <div class="invalid-feedback">{{ $message }}
-                                        </div> @enderror
-                                    </div>
+                <!-- Balance Settings -->
+                <div class="col-12 mt-3">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="bx bx-money me-2"></i>Balance Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Automatic Opening Balance <span class="text-danger">*</span></label>
+                                    <input type="number" step="0.01" name="automatic_opening_balance" class="form-control @error('automatic_opening_balance') is-invalid @enderror"
+                                        value="{{ old('automatic_opening_balance', 0) }}" required>
+                                    @error('automatic_opening_balance') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Minimum Balance for Interest Calculations <span
@@ -299,28 +288,26 @@
                         </div>
                     </div>
 
-                    <!-- Bank Account & Journal Reference -->
-                    <div class="col-12 mt-3">
-                        <div class="card">
-                            <div class="card-header bg-danger text-white">
-                                <h5 class="mb-0"><i class="bx bx-bank me-2"></i>Bank Account & Journal Reference</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Bank Account <span class="text-danger">*</span></label>
-                                        <select name="bank_account_id"
-                                            class="form-select chart-account-select @error('bank_account_id') is-invalid @enderror">
-                                            <option value="">Select Bank Account</option>
-                                            @foreach($chartAccounts as $account)
-                                                <option value="{{ $account->id }}" {{ old('bank_account_id') == $account->id ? 'selected' : '' }}>
-                                                    {{ $account->account_name }} ({{ $account->account_code }})
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        @error('bank_account_id') <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
+                <!-- Bank Account & Journal Reference -->
+                <div class="col-12 mt-3">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="bx bx-bank me-2"></i>Bank Account & Journal Reference</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Bank Account <span class="text-danger">*</span></label>
+                                    <select name="bank_account_id" class="form-select chart-account-select @error('bank_account_id') is-invalid @enderror" required>
+                                        <option value="">Select Bank Account</option>
+                                        @foreach($chartAccounts as $account)
+                                        <option value="{{ $account->id }}" {{ old('bank_account_id') == $account->id ? 'selected' : '' }}>
+                                            {{ $account->account_name }} ({{ $account->account_code }})
+                                        </option>
+                                        @endforeach
+                                    </select>
+                                    @error('bank_account_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Journal Reference (Contribution Transfer) <span
@@ -374,30 +361,26 @@
                         </div>
                     </div>
 
-                    <!-- Chart Accounts -->
-                    <div class="col-12 mt-3">
-                        <div class="card">
-                            <div class="card-header bg-dark text-white">
-                                <h5 class="mb-0"><i class="bx bx-list-ul me-2"></i>Chart Accounts</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Liability Account <span
-                                                class="text-danger">*</span></label>
-                                        <select name="liability_account_id"
-                                            class="form-select chart-account-select @error('liability_account_id') is-invalid @enderror"
-                                            required>
-                                            <option value="">Select Liability Account</option>
-                                            @foreach($chartAccounts as $account)
-                                                <option value="{{ $account->id }}" {{ old('liability_account_id') == $account->id ? 'selected' : '' }}>
-                                                    {{ $account->account_name }} ({{ $account->account_code }})
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        @error('liability_account_id') <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
+                <!-- Chart Accounts -->
+                <div class="col-12 mt-3">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="bx bx-list-ul me-2"></i>Chart Accounts</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Liability Account <span class="text-danger">*</span></label>
+                                    <select name="liability_account_id" class="form-select chart-account-select @error('liability_account_id') is-invalid @enderror" required>
+                                        <option value="">Select Liability Account</option>
+                                        @foreach($chartAccounts as $account)
+                                        <option value="{{ $account->id }}" {{ old('liability_account_id') == $account->id ? 'selected' : '' }}>
+                                            {{ $account->account_name }} ({{ $account->account_code }})
+                                        </option>
+                                        @endforeach
+                                    </select>
+                                    @error('liability_account_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Expense Account <span class="text-danger">*</span></label>

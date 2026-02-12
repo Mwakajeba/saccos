@@ -515,6 +515,7 @@ class ContributionController extends Controller
             'bank_account_id' => 'required|exists:bank_accounts,id',
             'date' => 'required|date',
             'description' => 'nullable|string|max:1000',
+            'document' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
         ]);
 
         $user = auth()->user();
@@ -539,6 +540,12 @@ class ContributionController extends Controller
                 return back()->withErrors(['contribution_product_id' => 'Contribution product does not have a liability account configured.'])->withInput();
             }
 
+            // Handle document upload if provided
+            $documentPath = null;
+            if ($request->hasFile('document')) {
+                $documentPath = $request->file('document')->store('contributions/deposits', 'private');
+            }
+
             // Create receipt (for deposit - money coming in)
             $receipt = Receipt::create([
                 'reference' => 'CD-' . strtoupper(uniqid()),
@@ -555,6 +562,7 @@ class ContributionController extends Controller
                 'approved' => true, // Auto-approve contribution deposits
                 'approved_by' => $user->id,
                 'approved_at' => now(),
+                'document_path' => $documentPath,
             ]);
 
             // Create receipt item (liability account)
@@ -598,6 +606,17 @@ class ContributionController extends Controller
 
             // Update contribution account balance
             $contributionAccount->increment('balance', $request->amount);
+
+            // Send SMS notification
+            try {
+                $customer = Customer::findOrFail($request->customer_id);
+                $companyName = $user->company->name ?? (current_company()->name ?? 'SMARTFINANCE');
+                $smsMessage = "Kiasi cha TZS " . number_format($request->amount, 0) . " kimewekwa kwenye akaunti yako ya " . $product->product_name . " - namba ya akaunti " . $contributionAccount->account_number . " tarehe " . date('d-m-Y', strtotime($request->date)) . ". Ujumbe kutoka " . $companyName;
+                \App\Helpers\SmsHelper::send($customer->phone1, $smsMessage);
+            } catch (\Exception $smsException) {
+                \Log::warning('Failed to send SMS for deposit: ' . $smsException->getMessage());
+                // Don't fail the transaction if SMS fails
+            }
 
             DB::commit();
 
@@ -911,6 +930,7 @@ class ContributionController extends Controller
             'bank_account_id' => 'required|exists:bank_accounts,id',
             'date' => 'required|date',
             'description' => 'nullable|string|max:1000',
+            'document' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
         ]);
 
         $user = auth()->user();
@@ -945,6 +965,12 @@ class ContributionController extends Controller
                 return back()->withErrors(['contribution_product_id' => 'Contribution product does not have a liability account configured.'])->withInput();
             }
 
+            // Handle document upload if provided
+            $documentPath = null;
+            if ($request->hasFile('document')) {
+                $documentPath = $request->file('document')->store('contributions/withdrawals', 'private');
+            }
+
             // Create payment (for withdrawal - money going out)
             $payment = Payment::create([
                 'reference' => 'CW-' . strtoupper(uniqid()),
@@ -961,6 +987,7 @@ class ContributionController extends Controller
                 'approved' => true, // Auto-approve contribution withdrawals
                 'approved_by' => $user->id,
                 'approved_at' => now(),
+                'document_path' => $documentPath,
             ]);
 
             // Create payment item (liability account)
@@ -1004,6 +1031,17 @@ class ContributionController extends Controller
 
             // Update contribution account balance (decrease)
             $contributionAccount->decrement('balance', $request->amount);
+
+            // Send SMS notification
+            try {
+                $customer = Customer::findOrFail($request->customer_id);
+                $companyName = $user->company->name ?? (current_company()->name ?? 'SMARTFINANCE');
+                $smsMessage = "Kiasi cha TZS " . number_format($request->amount, 0) . " kimetolewa kwenye akaunti yako ya " . $product->product_name . " - namba ya akaunti " . $contributionAccount->account_number . " tarehe " . date('d-m-Y', strtotime($request->date)) . ". Ujumbe kutoka " . $companyName;
+                \App\Helpers\SmsHelper::send($customer->phone1, $smsMessage);
+            } catch (\Exception $smsException) {
+                \Log::warning('Failed to send SMS for withdrawal: ' . $smsException->getMessage());
+                // Don't fail the transaction if SMS fails
+            }
 
             DB::commit();
 

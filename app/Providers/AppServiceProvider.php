@@ -5,9 +5,12 @@ namespace App\Providers;
 use App\Jobs\CollectMatureInterestJob;
 use Carbon\Carbon;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -25,6 +28,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Configure rate limiters
+        $this->configureRateLimiters();
+
         // Run mature interest collection once per day on first user login
         Event::listen(Login::class, function () {
             Log::info('Login event triggered - checking mature interest job');
@@ -44,6 +50,32 @@ class AppServiceProvider extends ServiceProvider
             } catch (\Throwable $e) {
                 Log::error('Failed dispatching CollectMatureInterestJob on login: ' . $e->getMessage());
             }
+        });
+    }
+
+    /**
+     * Configure the rate limiters for the application.
+     */
+    protected function configureRateLimiters(): void
+    {
+        // Rate limiter for password reset requests
+        RateLimiter::for('password_reset', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        // Rate limiter for OTP verification
+        RateLimiter::for('otp', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        // Rate limiter for login attempts
+        RateLimiter::for('login', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        // Rate limiter for API requests
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
     }
 }
