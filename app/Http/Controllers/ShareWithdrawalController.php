@@ -176,26 +176,9 @@ class ShareWithdrawalController extends Controller
             $nominalPrice = $shareProduct->nominal_price ?? 0;
             $withdrawalAmount = $request->number_of_shares * $nominalPrice;
 
-            // Validate withdrawal amount against product constraints
-            if ($shareProduct->minimum_withdrawal_amount && $withdrawalAmount < $shareProduct->minimum_withdrawal_amount) {
-                $validator->errors()->add('number_of_shares', 'Withdrawal amount must be at least ' . number_format($shareProduct->minimum_withdrawal_amount, 2));
-                return redirect()->back()->withErrors($validator)->withInput();
-            }
-
-            if ($shareProduct->maximum_withdrawal_amount && $withdrawalAmount > $shareProduct->maximum_withdrawal_amount) {
-                $validator->errors()->add('number_of_shares', 'Withdrawal amount must not exceed ' . number_format($shareProduct->maximum_withdrawal_amount, 2));
-                return redirect()->back()->withErrors($validator)->withInput();
-            }
-
             // Check if account has sufficient balance
             if ($shareAccount->share_balance < $request->number_of_shares) {
                 $validator->errors()->add('number_of_shares', 'Insufficient share balance. Available: ' . number_format($shareAccount->share_balance, 4));
-                return redirect()->back()->withErrors($validator)->withInput();
-            }
-
-            // Check if partial withdrawal is allowed
-            if (!$shareProduct->allow_partial_withdrawal && $request->number_of_shares != $shareAccount->share_balance) {
-                $validator->errors()->add('number_of_shares', 'Partial withdrawal is not allowed. You must withdraw all shares (' . number_format($shareAccount->share_balance, 4) . ')');
                 return redirect()->back()->withErrors($validator)->withInput();
             }
 
@@ -578,9 +561,6 @@ class ShareWithdrawalController extends Controller
             'share_product_name' => $account->shareProduct->share_name ?? 'N/A',
             'nominal_price' => $account->shareProduct->nominal_price ?? 0,
             'current_balance' => $account->share_balance ?? 0,
-            'minimum_withdrawal_amount' => $account->shareProduct->minimum_withdrawal_amount,
-            'maximum_withdrawal_amount' => $account->shareProduct->maximum_withdrawal_amount,
-            'allow_partial_withdrawal' => $account->shareProduct->allow_partial_withdrawal ?? false,
             'withdrawal_fee' => $account->shareProduct->withdrawal_fee,
             'withdrawal_fee_type' => $account->shareProduct->withdrawal_fee_type,
         ]);

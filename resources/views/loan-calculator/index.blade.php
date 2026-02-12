@@ -18,10 +18,10 @@
     <div class="row">
         <!-- Calculator Form -->
         <div class="col-lg-4">
-            <div class="card">
+            <div class="card" style="border-color: #006400 !important;">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
-                        <i class="bx bx-calculator me-2"></i>Loan Calculator
+                        <i class="bx bx-calculator me-2" style="color: #006400 !important;"></i>Loan Calculator
                     </h5>
                 </div>
                 <div class="card-body">
@@ -64,21 +64,44 @@
 
                         <!-- Loan Period -->
                         <div class="mb-3">
-                            <label for="period" class="form-label">Loan Period <span class="text-danger">*</span></label>
+                            <label for="period" class="form-label">
+                                <span id="periodLabelText">Loan Period</span> <span class="text-danger">*</span>
+                            </label>
                             <div class="input-group">
                                 <input type="number" class="form-control" id="period" name="period" 
                                        placeholder="Enter period" required min="1">
                                 <select class="form-select" id="interest_cycle" name="interest_cycle" style="max-width: 180px;">
                                     <option value="daily">Daily</option>
                                     <option value="weekly">Weekly</option>
+                                    <option value="bi_weekly">Bi-weekly</option>
+                                    <option value="semi_monthly">Semi-monthly</option>
                                     <option value="monthly" selected>Monthly</option>
+                                    <option value="bi_monthly">Bi-monthly</option>
                                     <option value="quarterly">Quarterly</option>
                                     <option value="semi_annually">Semi Annually</option>
                                     <option value="annually">Annually</option>
+                                    <option value="one_payment_off">One Payment Off (Bullet)</option>
                                 </select>
                             </div>
                             <div class="invalid-feedback"></div>
                             <small class="form-text text-muted" id="period-range"></small>
+                        </div>
+
+                        <!-- Bullet Payment Months (for One Payment Off) -->
+                        <div class="mb-3" id="bullet_payment_months_container" style="display: none;">
+                            <label for="bullet_payment_months" class="form-label">
+                                Months for Bullet Payment <span class="text-danger">*</span>
+                            </label>
+                            <input type="number"
+                                   class="form-control"
+                                   id="bullet_payment_months"
+                                   name="bullet_payment_months"
+                                   placeholder="Enter number of months"
+                                   min="1">
+                            <div class="invalid-feedback"></div>
+                            <small class="form-text text-muted">
+                                Specify the total number of months for the bullet (one-off) payment period.
+                            </small>
                         </div>
 
                         <!-- Interest Rate -->
@@ -103,13 +126,13 @@
 
                         <!-- Action Buttons -->
                         <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary" id="calculateBtn">
+                            <button type="submit" class="btn btn-primary" id="calculateBtn" style="background-color: #006400 !important; border-color: #006400 !important;">
                                 <i class="bx bx-calculator me-1"></i>Calculate Loan
                             </button>
-                            <button type="button" class="btn btn-outline-secondary" id="compareBtn" disabled>
+                            <button type="button" class="btn btn-outline-secondary" id="compareBtn" disabled style="color: #006400 !important; border-color: #006400 !important;">
                                 <i class="bx bx-git-compare me-1"></i>Compare Scenarios
                             </button>
-                            <button type="button" class="btn btn-outline-info" id="resetBtn">
+                            <button type="button" class="btn btn-outline-info" id="resetBtn" style="color: #006400 !important; border-color: #006400 !important;">
                                 <i class="bx bx-reset me-1"></i>Reset Form
                             </button>
                         </div>
@@ -118,7 +141,7 @@
             </div>
 
             <!-- Product Details -->
-            <div class="card mt-3" id="productDetailsCard" style="display: none;">
+            <div class="card mt-3" id="productDetailsCard" style="display: none; border-color: #006400 !important;">
                 <div class="card-header">
                     <h6 class="card-title mb-0">Product Details</h6>
                 </div>
@@ -131,7 +154,7 @@
         <!-- Results -->
         <div class="col-lg-8">
             <!-- Loading State -->
-            <div class="card" id="loadingCard" style="display: none;">
+            <div class="card" id="loadingCard" style="display: none; border-color: #006400 !important;">
                 <div class="card-body text-center py-5">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Calculating...</span>
@@ -141,7 +164,7 @@
             </div>
 
             <!-- Error State -->
-            <div class="card" id="errorCard" style="display: none;">
+            <div class="card" id="errorCard" style="display: none; border-color: #006400 !important;">
                 <div class="card-body">
                     <div class="alert alert-danger mb-0" id="errorMessage">
                         <!-- Error message will be displayed here -->
@@ -150,15 +173,15 @@
             </div>
 
             <!-- Results -->
-            <div class="card" id="resultsCard" style="display: none;">
+            <div class="card" id="resultsCard" style="display: none; border-color: #006400 !important;">
                 <div class="card-header">
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="card-title mb-0">Calculation Results</h5>
                         <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="exportPdfBtn">
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="exportPdfBtn" style="color: #006400 !important; border-color: #006400 !important;">
                                 <i class="bx bx-file-pdf me-1"></i>PDF
                             </button>
-                            <button type="button" class="btn btn-outline-success btn-sm" id="exportExcelBtn">
+                            <button type="button" class="btn btn-outline-success btn-sm" id="exportExcelBtn" style="color: #006400 !important; border-color: #006400 !important;">
                                 <i class="bx bx-file-excel me-1"></i>Excel
                             </button>
                         </div>
@@ -170,7 +193,7 @@
             </div>
 
             <!-- Comparison Results -->
-            <div class="card" id="comparisonCard" style="display: none;">
+            <div class="card" id="comparisonCard" style="display: none; border-color: #006400 !important;">
                 <div class="card-header">
                     <h5 class="card-title mb-0">Comparison Results</h5>
                 </div>
@@ -197,7 +220,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="compareScenariosBtn">Compare</button>
+                <button type="button" class="btn btn-primary" id="compareScenariosBtn" style="background-color: #006400 !important; border-color: #006400 !important;">Compare</button>
             </div>
         </div>
     </div>
@@ -243,6 +266,70 @@ $(document).ready(function() {
             calculateLoan();
         }, 1000); // Wait for product details to load
     }
+    
+    // Map interest cycles to period units and descriptions
+    // Based on annual interest rate conversion:
+    // Annually: 12% per period, Semi-annually: 6% per semi-annual period
+    // Quarterly: 4% per quarter, Monthly: 1% per month
+    // Bi-monthly: 2% per bi-monthly period, Semi-monthly: 0.5% per semi-monthly period
+    // Bi-weekly: ~0.46% per bi-weekly period, Weekly: ~0.23% per week
+    const interestCyclePeriods = {
+        'daily': { unit: 'Days', placeholder: 'Enter period in days', description: 'Daily periods' },
+        'weekly': { unit: 'Weeks', placeholder: 'Enter period in weeks', description: 'Weekly periods (~0.23% per week)' },
+        'bi_weekly': { unit: 'Bi-weeks', placeholder: 'Enter period in bi-weeks', description: 'Bi-weekly periods (~0.46% per bi-week)' },
+        'semi_monthly': { unit: 'Semi-months', placeholder: 'Enter period in semi-months', description: 'Semi-monthly periods (0.5% per semi-month)' },
+        'monthly': { unit: 'Months', placeholder: 'Enter period in months', description: 'Monthly periods (1% per month)' },
+        'bi_monthly': { unit: 'Bi-months', placeholder: 'Enter period in bi-months', description: 'Bi-monthly periods (2% per bi-month)' },
+        'quarterly': { unit: 'Quarters', placeholder: 'Enter period in quarters', description: 'Quarterly periods (4% per quarter)' },
+        'semi_annually': { unit: 'Semi-annual periods', placeholder: 'Enter period in semi-annual periods', description: 'Semi-annual periods (6% per semi-annual period)' },
+        'annually': { unit: 'Years', placeholder: 'Enter period in years', description: 'Annual periods (12% per period)' },
+        'one_payment_off': { unit: 'Months', placeholder: 'Enter period in months', description: 'One payment off (bullet payment)' }
+    };
+    
+    // Function to update period label based on interest cycle
+    function updatePeriodLabel() {
+        const interestCycleSelect = $('#interest_cycle');
+        const periodLabelText = $('#periodLabelText');
+        const periodInput = $('#period');
+        
+        if (!interestCycleSelect.length || !periodLabelText.length || !periodInput.length) return;
+        
+        const selectedCycle = interestCycleSelect.val();
+        const cycleInfo = interestCyclePeriods[selectedCycle];
+        
+        if (cycleInfo) {
+            periodLabelText.text(`Loan Period (${cycleInfo.unit})`);
+            periodInput.attr('placeholder', cycleInfo.placeholder);
+        } else {
+            periodLabelText.text('Loan Period');
+            periodInput.attr('placeholder', 'Enter period');
+        }
+    }
+
+    // Show/hide bullet payment months field based on interest cycle
+    function toggleBulletPaymentMonths() {
+        const cycle = $('#interest_cycle').val();
+        const container = $('#bullet_payment_months_container');
+        const input = $('#bullet_payment_months');
+
+        if (cycle === 'one_payment_off') {
+            container.show();
+            input.prop('required', true);
+        } else {
+            container.hide();
+            input.prop('required', false).val('');
+        }
+    }
+
+    // Update period label & bullet months when interest cycle changes
+    $('#interest_cycle').on('change', function() {
+        updatePeriodLabel();
+        toggleBulletPaymentMonths();
+    });
+    
+    // Initialize period label and bullet field on page load
+    updatePeriodLabel();
+    toggleBulletPaymentMonths();
     
     // Product selection change
     $('#product_id').on('change', function() {
@@ -397,8 +484,14 @@ $(document).ready(function() {
         
         // Update period field
         $('#period').attr('min', minPeriod).attr('max', maxPeriod);
-        $('#period-range').text(`Range: ${minPeriod} - ${maxPeriod} ${cycle}`);
+        
+        // Get cycle info for proper unit display
+        const cycleInfo = interestCyclePeriods[cycle] || interestCyclePeriods['monthly'];
+        $('#period-range').text(`Range: ${minPeriod} - ${maxPeriod} ${cycleInfo.unit.toLowerCase()}`);
+        
+        // Set interest cycle and update label
         $('#interest_cycle').val(cycle);
+        updatePeriodLabel();
         
         // Update interest rate field
         $('#interest_rate').attr('min', minRate).attr('max', maxRate);
@@ -497,15 +590,15 @@ $(document).ready(function() {
             
             <div class="row mb-4">
                 <div class="col-md-6">
-                    <div class="card border-0 bg-primary text-white">
+                    <div class="card border-0 bg-primary text-white" style="background-color: #006400 !important;">
                         <div class="card-body text-center">
                             <h3 class="mb-1">${formatCurrency(totals.monthly_payment)}</h3>
-                            <p class="mb-0">Monthly Payment</p>
+                            <p class="mb-0">${getPaymentLabel()}</p>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <div class="card border-0 bg-info text-white">
+                    <div class="card border-0 bg-info text-white" style="background-color: #23A036 !important;">
                         <div class="card-body text-center">
                             <h3 class="mb-1">${summary.interest_percentage}%</h3>
                             <p class="mb-0">Interest Percentage</p>
@@ -516,7 +609,7 @@ $(document).ready(function() {
 
             <div class="row mb-4">
                 <div class="col-md-12">
-                    <div class="card border-0 bg-success text-white">
+                    <div class="card border-0 bg-success text-white" style="background-color: #006400 !important;">
                         <div class="card-body text-center">
                             <h4 class="mb-1">${formatCurrency(totals.principal - totals.total_fees)}</h4>
                             <p class="mb-0">Net Amount After Fees (Disbursed)</p>
@@ -603,11 +696,11 @@ $(document).ready(function() {
                                 <div class="col-6">
                                     <strong>Product:</strong> ${currentCalculation.product.name}<br>
                                     <strong>Amount:</strong> ${formatCurrency(currentCalculation.totals.principal)}<br>
-                                    <strong>Period:</strong> ${$('#period').val()} months
+                                    <strong>Period:</strong> ${$('#period').val()} ${getPeriodUnit()}
                                 </div>
                                 <div class="col-6">
                                     <strong>Rate:</strong> ${$('#interest_rate').val()}%<br>
-                                    <strong>Monthly Payment:</strong> ${formatCurrency(currentCalculation.totals.monthly_payment)}<br>
+                                    <strong>${getPaymentLabel()}:</strong> ${formatCurrency(currentCalculation.totals.monthly_payment)}<br>
                                     <strong>Total Amount:</strong> ${formatCurrency(currentCalculation.totals.total_amount)}
                                 </div>
                             </div>
@@ -622,7 +715,7 @@ $(document).ready(function() {
                     <div id="comparisonScenarios">
                         <!-- Comparison scenarios will be added here -->
                     </div>
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="addScenarioBtn">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="addScenarioBtn" style="color: #006400 !important; border-color: #006400 !important;">
                         <i class="bx bx-plus me-1"></i>Add Scenario
                     </button>
                 </div>
@@ -666,15 +759,26 @@ $(document).ready(function() {
                         </div>
                     </div>
                     <div class="row mt-2">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Period</label>
                             <input type="number" class="form-control scenario-period" data-scenario="${scenarioIndex}" placeholder="Period">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
+                            <label class="form-label">Interest Cycle</label>
+                            <select class="form-select scenario-cycle" data-scenario="${scenarioIndex}">
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly" selected>Monthly</option>
+                                <option value="quarterly">Quarterly</option>
+                                <option value="semi_annually">Semi Annually</option>
+                                <option value="annually">Annually</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
                             <label class="form-label">Interest Rate</label>
                             <input type="number" class="form-control scenario-rate" data-scenario="${scenarioIndex}" placeholder="Rate">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Start Date</label>
                             <input type="date" class="form-control scenario-date" data-scenario="${scenarioIndex}" value="{{ date('Y-m-d') }}">
                         </div>
@@ -719,6 +823,7 @@ $(document).ready(function() {
             amount: parseFloat($('#amount').val()),
             period: parseInt($('#period').val()),
             interest_rate: parseFloat($('#interest_rate').val()),
+            interest_cycle: $('#interest_cycle').val(),
             start_date: $('#start_date').val(),
             name: 'Current Scenario'
         });
@@ -729,6 +834,7 @@ $(document).ready(function() {
             const productId = $(this).find('.scenario-product').val();
             const amount = parseFloat($(this).find('.scenario-amount').val());
             const period = parseInt($(this).find('.scenario-period').val());
+            const cycle = $(this).find('.scenario-cycle').val() || 'monthly';
             const rate = parseFloat($(this).find('.scenario-rate').val());
             const date = $(this).find('.scenario-date').val();
             
@@ -738,6 +844,7 @@ $(document).ready(function() {
                     amount: amount,
                     period: period,
                     interest_rate: rate,
+                    interest_cycle: cycle,
                     start_date: date,
                     name: `Scenario ${scenarioIndex + 1}`
                 });
@@ -830,7 +937,7 @@ $(document).ready(function() {
                         <td><strong>${comparison.name}</strong></td>
                         <td>${product.name}</td>
                         <td>${formatCurrency(totals.principal)}</td>
-                        <td>${comparison.result.summary.period} months</td>
+                        <td>${comparison.result.summary.period} ${getPeriodUnit()}</td>
                         <td>${comparison.result.summary.interest_rate}%</td>
                         <td><strong>${formatCurrency(totals.monthly_payment)}</strong></td>
                         <td>${formatCurrency(totals.total_interest)}</td>
@@ -940,6 +1047,32 @@ $(document).ready(function() {
     
     function formatDate(dateString) {
         return new Date(dateString).toLocaleDateString('en-TZ');
+    }
+    
+    function getPaymentLabel() {
+        const cycle = $('#interest_cycle').val();
+        const labels = {
+            'daily': 'Daily Payment',
+            'weekly': 'Weekly Payment',
+            'monthly': 'Monthly Payment',
+            'quarterly': 'Quarterly Payment',
+            'semi_annually': 'Semi-Annual Payment',
+            'annually': 'Annual Payment'
+        };
+        return labels[cycle] || 'Payment';
+    }
+    
+    function getPeriodUnit() {
+        const cycle = $('#interest_cycle').val();
+        const units = {
+            'daily': 'days',
+            'weekly': 'weeks',
+            'monthly': 'months',
+            'quarterly': 'quarters',
+            'semi_annually': 'semi-annual periods',
+            'annually': 'years'
+        };
+        return units[cycle] || 'periods';
     }
 });
 </script>

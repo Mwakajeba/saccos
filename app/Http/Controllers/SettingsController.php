@@ -2762,4 +2762,259 @@ class SettingsController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Job Logs Index
+     */
+    public function jobLogsIndex()
+    {
+        return view('settings.job-logs.index');
+    }
+
+    /**
+     * Get Job Logs Data for DataTables
+     */
+    public function jobLogsData(Request $request)
+    {
+        $query = \App\Models\JobLog::query()->orderBy('created_at', 'desc');
+
+        // Search filter
+        if ($request->has('search') && !empty($request->search['value'])) {
+            $search = $request->search['value'];
+            $query->where(function ($q) use ($search) {
+                $q->where('job_name', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhere('summary', 'like', "%{$search}%");
+            });
+        }
+
+        // Status filter
+        if ($request->has('status') && !empty($request->status)) {
+            $query->where('status', $request->status);
+        }
+
+        // Job name filter
+        if ($request->has('job_name') && !empty($request->job_name)) {
+            $query->where('job_name', $request->job_name);
+        }
+
+        // Date range filter
+        if ($request->has('date_from') && !empty($request->date_from)) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->has('date_to') && !empty($request->date_to)) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        return datatables()->of($query)
+            ->addIndexColumn()
+            ->addColumn('status_badge', function ($row) {
+                $statusColors = [
+                    'pending' => 'secondary',
+                    'running' => 'info',
+                    'completed' => 'success',
+                    'failed' => 'danger',
+                ];
+                $color = $statusColors[$row->status] ?? 'secondary';
+                return '<span class="badge bg-' . $color . '">' . ucfirst($row->status) . '</span>';
+            })
+            ->addColumn('formatted_duration', function ($row) {
+                return $row->formatted_duration;
+            })
+            ->addColumn('formatted_amount', function ($row) {
+                return $row->total_amount ? 'TZS ' . number_format($row->total_amount, 2) : '-';
+            })
+            ->addColumn('started_at_formatted', function ($row) {
+                return $row->started_at ? $row->started_at->format('d-m-Y H:i:s') : '-';
+            })
+            ->addColumn('actions', function ($row) {
+                $viewUrl = route('settings.job-logs.show', $row->id);
+                return '<a href="' . $viewUrl . '" class="btn btn-sm btn-info"><i class="bx bx-show"></i> View Details</a>';
+            })
+            ->rawColumns(['status_badge', 'actions'])
+            ->make(true);
+    }
+
+    /**
+     * Show Job Log Details
+     */
+    public function jobLogShow($jobLogId)
+    {
+        $jobLog = \App\Models\JobLog::findOrFail($jobLogId);
+        
+        // Get cached details for this job
+        $details = \Illuminate\Support\Facades\Cache::get('daily_interest_job_details_' . $jobLog->id, []);
+
+        return view('settings.job-logs.show', compact('jobLog', 'details'));
+    }
+
+    /**
+     * Get Job Log Details Data for DataTables
+     */
+    public function jobLogDetailsData(Request $request, $jobLogId)
+    {
+        $jobLog = \App\Models\JobLog::findOrFail($jobLogId);
+        
+        // Get cached details for this job
+        $details = \Illuminate\Support\Facades\Cache::get('daily_interest_job_details_' . $jobLog->id, []);
+
+        $collection = collect($details);
+
+        // Apply search filter
+        if ($request->has('search') && !empty($request->search['value'])) {
+            $search = strtolower($request->search['value']);
+            $collection = $collection->filter(function ($item) use ($search) {
+                return str_contains(strtolower($item['loan_no'] ?? ''), $search) ||
+                       str_contains(strtolower($item['customer_name'] ?? ''), $search);
+            });
+        }
+
+        return datatables()->of($collection)
+            ->addIndexColumn()
+            ->addColumn('formatted_principal', function ($row) {
+                return isset($row['principal_balance']) ? 'TZS ' . number_format($row['principal_balance'], 2) : '-';
+            })
+            ->addColumn('formatted_interest', function ($row) {
+                return isset($row['interest_accrued']) ? 'TZS ' . number_format($row['interest_accrued'], 2) : '-';
+            })
+            ->addColumn('status_badge', function ($row) {
+                if (isset($row['error'])) {
+                    return '<span class="badge bg-danger">Failed</span>';
+                }
+                return '<span class="badge bg-success">Success</span>';
+            })
+            ->rawColumns(['status_badge'])
+            ->make(true);
+    }
+
+    /**
+     * Export Job Log Details
+     */
+    public function jobLogExport($jobLogId, $format)
+    {
+        $jobLog = \App\Models\JobLog::findOrFail($jobLogId);
+        $details = \Illuminate\Support\Facades\Cache::get('daily_interest_job_details_' . $jobLog->id, []);
+
+        if ($format === 'excel') {
+            return $this->exportJobLogExcel($jobLog, $details);
+        } else {
+            return $this->exportJobLogPdf($jobLog, $details);
+        }
+    }
+
+    /**
+     * Export Job Log to Excel
+     */
+    private function exportJobLogExcel($jobLog, $details)
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Job Details');
+
+        // Company Header
+        $company = auth()->user()->company;
+        $sheet->setCellValue('A1', $company->name ?? 'Company');
+        $sheet->mergeCells('A1:F1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+        // Report Title
+        $sheet->setCellValue('A2', 'Job Log Details - ' . $jobLog->job_name);
+        $sheet->mergeCells('A2:F2');
+        $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('A2')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+        // Job Info
+        $sheet->setCellValue('A4', 'Job Name:');
+        $sheet->setCellValue('B4', $jobLog->job_name);
+        $sheet->setCellValue('A5', 'Status:');
+        $sheet->setCellValue('B5', ucfirst($jobLog->status));
+        $sheet->setCellValue('A6', 'Started At:');
+        $sheet->setCellValue('B6', $jobLog->started_at ? $jobLog->started_at->format('d-m-Y H:i:s') : 'N/A');
+        $sheet->setCellValue('A7', 'Total Processed:');
+        $sheet->setCellValue('B7', $jobLog->processed);
+        $sheet->setCellValue('D4', 'Successful:');
+        $sheet->setCellValue('E4', $jobLog->successful);
+        $sheet->setCellValue('D5', 'Failed:');
+        $sheet->setCellValue('E5', $jobLog->failed);
+        $sheet->setCellValue('D6', 'Total Amount:');
+        $sheet->setCellValue('E6', $jobLog->total_amount ? 'TZS ' . number_format($jobLog->total_amount, 2) : 'N/A');
+        $sheet->setCellValue('D7', 'Duration:');
+        $sheet->setCellValue('E7', $jobLog->formatted_duration);
+
+        $sheet->getStyle('A4:A7')->getFont()->setBold(true);
+        $sheet->getStyle('D4:D7')->getFont()->setBold(true);
+
+        // Headers
+        $headers = ['#', 'Loan No', 'Customer Name', 'Principal Balance', 'Interest Accrued', 'Status'];
+        $col = 'A';
+        $row = 9;
+        foreach ($headers as $header) {
+            $sheet->setCellValue($col . $row, $header);
+            $col++;
+        }
+        $sheet->getStyle('A9:F9')->getFont()->setBold(true);
+        $sheet->getStyle('A9:F9')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FFD9D9D9');
+
+        // Data
+        $row = 10;
+        $index = 1;
+        $totalInterest = 0;
+        foreach ($details as $detail) {
+            $sheet->setCellValue('A' . $row, $index);
+            $sheet->setCellValue('B' . $row, $detail['loan_no'] ?? 'N/A');
+            $sheet->setCellValue('C' . $row, $detail['customer_name'] ?? 'N/A');
+            $sheet->setCellValue('D' . $row, $detail['principal_balance'] ?? 0);
+            $sheet->setCellValue('E' . $row, $detail['interest_accrued'] ?? 0);
+            $sheet->setCellValue('F' . $row, isset($detail['error']) ? 'Failed' : 'Success');
+
+            $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+            $totalInterest += $detail['interest_accrued'] ?? 0;
+            $row++;
+            $index++;
+        }
+
+        // Total row
+        $sheet->setCellValue('D' . $row, 'TOTAL:');
+        $sheet->setCellValue('E' . $row, $totalInterest);
+        $sheet->getStyle('D' . $row . ':E' . $row)->getFont()->setBold(true);
+        $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+
+        // Auto-size columns
+        foreach (range('A', 'F') as $columnID) {
+            $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        }
+
+        // Output
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $filename = 'Job_Log_' . $jobLog->id . '_' . now()->format('Y-m-d') . '.xlsx';
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * Export Job Log to PDF
+     */
+    private function exportJobLogPdf($jobLog, $details)
+    {
+        $data = [
+            'jobLog' => $jobLog,
+            'details' => $details,
+            'company' => auth()->user()->company,
+            'exportDate' => now()->format('d-m-Y H:i:s')
+        ];
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('settings.job-logs.pdf', $data);
+        $pdf->setPaper('A4', 'portrait');
+
+        $filename = 'Job_Log_' . $jobLog->id . '_' . now()->format('Y-m-d') . '.pdf';
+
+        return $pdf->download($filename);
+    }
 }

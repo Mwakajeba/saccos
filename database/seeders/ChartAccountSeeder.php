@@ -485,6 +485,7 @@ class ChartAccountSeeder extends Seeder
 
             // Other Receivables (Group ID: 104) - Penalty Receivable
             [852, 104, '1003', 'Penalty Receivable', 'parent', null, 1, 0, 1, null],
+            [858, 104, '1305', 'Loan Clearing', 'parent', null, 1, 0, 1, null],
 
             // Interest Income (Group ID: 109)
             [853, 109, '4570', 'Interest income', 'parent', null, 1, 0, 1, null],

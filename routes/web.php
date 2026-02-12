@@ -510,6 +510,13 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
         Route::post('/bulk-email/send', [\App\Http\Controllers\BulkEmailController::class, 'send'])->name('bulk-email.send');
         Route::get('/bulk-email/recipients', [\App\Http\Controllers\BulkEmailController::class, 'getRecipients'])->name('bulk-email.recipients');
     });
+
+    // Job Logs Settings
+    Route::get('/job-logs', [SettingsController::class, 'jobLogsIndex'])->name('job-logs.index');
+    Route::get('/job-logs/data', [SettingsController::class, 'jobLogsData'])->name('job-logs.data');
+    Route::get('/job-logs/{jobLog}', [SettingsController::class, 'jobLogShow'])->name('job-logs.show');
+    Route::get('/job-logs/{jobLog}/details-data', [SettingsController::class, 'jobLogDetailsData'])->name('job-logs.details-data');
+    Route::get('/job-logs/{jobLog}/export/{format}', [SettingsController::class, 'jobLogExport'])->name('job-logs.export');
 });
 // Account Transfer Approval Settings
 Route::get('/account-transfer-approval', [SettingsController::class, 'accountTransferApprovalSettings'])->name('settings.account-transfer-approval');
@@ -2295,6 +2302,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/loans/{loan}/guarantors', [LoanController::class, 'addGuarantor'])->name('loans.addGuarantor');
     Route::delete('/loans/{loan}/guarantors/{guarantor}', [LoanController::class, 'removeGuarantor'])->name('loans.removeGuarantor');
     Route::get('/loans/{encodedId}/export-details', [LoanController::class, 'exportLoanDetails'])->name('loans.export-details');
+    Route::get('/loans/{id}/daily-interest-export/{format}', [LoanController::class, 'exportDailyInterest'])->name('loans.daily-interest-export');
 
     // Loan Restructuring Routes
     Route::get('/loans/{encodedId}/restructure', [LoanController::class, 'restructure'])->name('loans.restructure');

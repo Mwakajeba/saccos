@@ -299,6 +299,11 @@
                         <i class="bx bx-book-open me-2 font-18"></i>Double Entry
                     </a>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="tab" href="#daily_interest_accrued" role="tab">
+                        <i class="bx bx-trending-up me-2 font-18"></i>Daily Interest Accrued
+                    </a>
+                </li>
             </ul>
 
             <div class="tab-content py-3">
@@ -1429,6 +1434,111 @@
                                     <i class="bx bx-book-open fs-1 text-muted mb-3"></i>
                                     <h6 class="text-muted">No double entry transactions found</h6>
                                     <p class="text-muted">Double entry accounting transactions will appear here once the loan is disbursed or has repayments.</p>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Daily Interest Accrued Tab -->
+                <div class="tab-pane fade" id="daily_interest_accrued" role="tabpanel">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bx bx-trending-up me-2"></i>DAILY INTEREST ACCRUED</h6>
+                            <div class="btn-group">
+                                <a href="{{ route('loans.daily-interest-export', ['id' => Vinkla\Hashids\Facades\Hashids::encode($loan->id), 'format' => 'excel']) }}" 
+                                   class="btn btn-sm btn-success">
+                                    <i class="bx bx-file me-1"></i>Export Excel
+                                </a>
+                                <a href="{{ route('loans.daily-interest-export', ['id' => Vinkla\Hashids\Facades\Hashids::encode($loan->id), 'format' => 'pdf']) }}" 
+                                   class="btn btn-sm btn-danger">
+                                    <i class="bx bx-file-blank me-1"></i>Export PDF
+                                </a>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            @php
+                                // Get all daily interest accruals for this loan
+                                $dailyInterestAccruals = \App\Models\DailyInterestAccrual::where('loan_id', $loan->id)
+                                    ->with(['branch', 'user'])
+                                    ->orderBy('accrual_date', 'desc')
+                                    ->get();
+
+                                $totalDailyInterest = $dailyInterestAccruals->sum('daily_interest_amount');
+                            @endphp
+
+                            @if($dailyInterestAccruals->count())
+                                <!-- Summary Cards -->
+                                <div class="row mb-4">
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light-primary">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Total Accrual Days</h6>
+                                                <h4 class="mb-0 text-primary">{{ $dailyInterestAccruals->count() }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light-success">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Total Interest Accrued</h6>
+                                                <h4 class="mb-0 text-success">TZS {{ number_format($totalDailyInterest, 2) }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light-info">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Average Daily Interest</h6>
+                                                <h4 class="mb-0 text-info">TZS {{ $dailyInterestAccruals->count() > 0 ? number_format($totalDailyInterest / $dailyInterestAccruals->count(), 2) : '0.00' }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Transactions Table -->
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-striped mb-0" id="dailyInterestTable">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Accrual Date</th>
+                                                <th class="text-end">Principal Balance</th>
+                                                <th class="text-end">Interest Rate (Daily)</th>
+                                                <th class="text-end">Daily Interest</th>
+                                                <th>Branch</th>
+                                                <th>Created At</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($dailyInterestAccruals as $index => $accrual)
+                                                <tr>
+                                                    <td>{{ $index + 1 }}</td>
+                                                    <td>{{ $accrual->accrual_date->format('d-m-Y') }}</td>
+                                                    <td class="text-end">TZS {{ number_format($accrual->principal_balance, 2) }}</td>
+                                                    <td class="text-end">{{ number_format($accrual->interest_rate * 100, 6) }}%</td>
+                                                    <td class="text-end">
+                                                        <strong class="text-success">TZS {{ number_format($accrual->daily_interest_amount, 2) }}</strong>
+                                                    </td>
+                                                    <td>{{ $accrual->branch->name ?? 'N/A' }}</td>
+                                                    <td>{{ $accrual->created_at->format('d-m-Y H:i') }}</td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                        <tfoot class="table-secondary">
+                                            <tr>
+                                                <th colspan="4" class="text-end">TOTAL INTEREST ACCRUED:</th>
+                                                <th class="text-end text-success">TZS {{ number_format($totalDailyInterest, 2) }}</th>
+                                                <th colspan="2"></th>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            @else
+                                <div class="text-center py-4">
+                                    <i class="bx bx-trending-up fs-1 text-muted mb-3"></i>
+                                    <h6 class="text-muted">No daily interest accruals found</h6>
+                                    <p class="text-muted">Daily interest accruals will appear here once the interest calculation job runs for this loan.</p>
                                 </div>
                             @endif
                         </div>

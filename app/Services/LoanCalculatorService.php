@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\Fee;
 use App\Models\Penalty;
@@ -155,165 +156,86 @@ class LoanCalculatorService
     }
     
     /**
-     * Calculate interest based on method
+     * Calculate interest using the same core logic as direct loans.
+     *
+     * This now delegates to the `Loan` model's `calculateInterestAmount`
+     * so the calculator shares the exact same function as direct loans
+     * for periods, frequency handling and principal/interest breakdown.
      */
     private function calculateInterest(array $params, LoanProduct $product): array
     {
-        $principal = $params['amount'];
-        $rate = $params['interest_rate'];
-        $period = $params['period'];
-        $method = $product->interest_method;
-        
-        // Validate against product limits
+        // Validate against product limits first
         $this->validateProductLimits($params, $product);
-        
+
+        $principal = (float) $params['amount'];
+        $annualRate = (float) $params['interest_rate']; // Annual interest rate from product
+        $period = (int) $params['period'];
+        $method = $product->interest_method;
+        $cycle = $params['interest_cycle'] ?? $product->interest_cycle;
+        $bulletMonths = ($cycle === 'one_payment_off') ? ($params['bullet_payment_months'] ?? null) : null;
+
+        // Convert annual interest rate to period rate based on interest cycle
+        $rate = $this->convertAnnualRateToPeriodRate($annualRate, $cycle, $bulletMonths);
+
+        // Build an in-memory Loan instance to reuse the core calculation logic
+        $loan = new Loan();
+        $loan->amount = $principal;
+        $loan->period = $period;
+        $loan->interest_cycle = $cycle;
+        // Attach the already-loaded product so the relation is available
+        $loan->setRelation('product', $product);
+
+        // Use the same function as direct loans to get schedule rows
+        // Pass true for rateAlreadyConverted since we already converted the rate above
+        $scheduleRows = $loan->calculateInterestAmount($rate, true, true);
+
+        if (!is_array($scheduleRows) || empty($scheduleRows)) {
+            throw new \InvalidArgumentException('Unable to calculate interest schedule for the given parameters.');
+        }
+
+        $totalInterest = array_sum(array_column($scheduleRows, 'interest'));
+        $totalPayment = array_sum(array_column($scheduleRows, 'total'));
+        $installmentCount = count($scheduleRows);
+
+        $monthlyPayment = $installmentCount > 0 ? $totalPayment / $installmentCount : 0;
+        $firstRow = $scheduleRows[0];
+        $monthlyPrincipal = $firstRow['principal'] ?? 0;
+        $monthlyInterest = $firstRow['interest'] ?? 0;
+
+        $base = [
+            'method' => $method,
+            'total_interest' => round($totalInterest, 2),
+            'annual_rate' => $annualRate, // Store original annual rate
+            'period_rate' => $rate, // Store converted period rate
+            'rate_per_period' => $rate / 100, // Decimal rate per period
+            'interest_cycle' => $cycle, // Store the cycle used
+            // raw schedule rows returned by Loan::calculateInterestAmount
+            'schedule_rows' => $scheduleRows,
+        ];
+
+        // Add method-specific summary fields expected by other parts of the service
         switch ($method) {
             case 'flat_rate':
-                return $this->calculateFlatRate($principal, $rate, $period);
-                
+                $base['monthly_interest'] = round($monthlyInterest, 2);
+                $base['monthly_principal'] = round($monthlyPrincipal, 2);
+                $base['monthly_payment'] = round($monthlyPayment, 2);
+                break;
+
             case 'reducing_balance_with_equal_installment':
-                return $this->calculateReducingBalanceEqualInstallment($principal, $rate, $period);
-                
+                $base['monthly_payment'] = round($monthlyPayment, 2);
+                $base['total_payment'] = round($totalPayment, 2);
+                break;
+
             case 'reducing_balance_with_equal_principal':
-                return $this->calculateReducingBalanceEqualPrincipal($principal, $rate, $period);
-                
+                $base['monthly_principal'] = round($monthlyPrincipal, 2);
+                break;
+
             default:
-                throw new \InvalidArgumentException("Unsupported interest method: {$method}");
+                // leave base as-is for any other/custom methods
+                break;
         }
-    }
-    
-    /**
-     * Calculate flat rate interest
-     */
-    private function calculateFlatRate(float $principal, float $rate, int $period): array
-    {
-        $ratePerPeriod = $rate / 100;
-        $totalInterest = $principal * $ratePerPeriod * $period;
-        $monthlyInterest = $totalInterest / $period;
-        $monthlyPrincipal = $principal / $period;
-        
-        return [
-            'method' => 'flat_rate',
-            'total_interest' => round($totalInterest, 2),
-            'monthly_interest' => round($monthlyInterest, 2),
-            'monthly_principal' => round($monthlyPrincipal, 2),
-            'monthly_payment' => round($monthlyPrincipal + $monthlyInterest, 2),
-            'rate_per_period' => $ratePerPeriod
-        ];
-    }
-    
-    /**
-     * Calculate reducing balance with equal installments
-     */
-    private function calculateReducingBalanceEqualInstallment(float $principal, float $rate, int $period): array
-    {
-        $ratePerPeriod = $rate / 100;
-        
-        // PMT formula: PMT = P * [r(1+r)^n] / [(1+r)^n - 1]
-        $monthlyPayment = $principal * ($ratePerPeriod * pow(1 + $ratePerPeriod, $period)) / (pow(1 + $ratePerPeriod, $period) - 1);
-        $totalPayment = $monthlyPayment * $period;
-        $totalInterest = $totalPayment - $principal;
-        
-        // Generate schedule for equal installments
-        $schedule = [];
-        $remainingBalance = $principal;
-        $startDate = Carbon::now(); // This will be overridden by the actual start date from params
-        
-        for ($i = 1; $i <= $period; $i++) {
-            $interest = $remainingBalance * $ratePerPeriod;
-            $principalPayment = $monthlyPayment - $interest;
-            
-            // Round components
-            $interest = round($interest, 2);
-            $principalPayment = round($principalPayment, 2);
 
-            // On final installment, adjust principal to clear remaining balance to zero
-            if ($i === $period) {
-                $principalPayment = round($remainingBalance, 2);
-                // Recompute interest to keep total payment aligned
-                $interest = round($monthlyPayment - $principalPayment, 2);
-            }
-
-            $newRemaining = round($remainingBalance - $principalPayment, 2);
-            if (abs($newRemaining) < 0.05) { // clamp tiny rounding drift
-                $newRemaining = 0.0;
-            }
-
-            $schedule[] = [
-                'installment_number' => $i,
-                'due_date' => $startDate->copy()->addMonths($i)->format('Y-m-d'),
-                'principal' => $principalPayment,
-                'interest' => $interest,
-                'fee_amount' => 0, // Will be calculated separately
-                'total_amount' => round($principalPayment + $interest, 2),
-                'remaining_balance' => max(0, $newRemaining)
-            ];
-            
-            $remainingBalance = $newRemaining;
-        }
-        
-        return [
-            'method' => 'reducing_balance_with_equal_installment',
-            'total_interest' => round($totalInterest, 2),
-            'monthly_payment' => round($monthlyPayment, 2),
-            'total_payment' => round($totalPayment, 2),
-            'rate_per_period' => $ratePerPeriod,
-            'schedule' => $schedule
-        ];
-    }
-    
-    /**
-     * Calculate reducing balance with equal principal
-     */
-    private function calculateReducingBalanceEqualPrincipal(float $principal, float $rate, int $period): array
-    {
-        $ratePerPeriod = $rate / 100;
-        $monthlyPrincipal = $principal / $period;
-        $totalInterest = 0;
-        $schedule = [];
-        $remainingBalance = $principal;
-        
-        $startDate = Carbon::now(); // This will be overridden by the actual start date from params
-        
-        for ($i = 1; $i <= $period; $i++) {
-            $interest = $remainingBalance * $ratePerPeriod;
-            $principalForRow = $monthlyPrincipal;
-
-            // On final installment, adjust principal to remaining
-            if ($i === $period) {
-                $principalForRow = round($remainingBalance, 2);
-            }
-
-            $interest = round($interest, 2);
-            $principalForRow = round($principalForRow, 2);
-            $totalPayment = $principalForRow + $interest;
-
-            $newRemaining = round($remainingBalance - $principalForRow, 2);
-            if (abs($newRemaining) < 0.05) {
-                $newRemaining = 0.0;
-            }
-
-            $schedule[] = [
-                'installment_number' => $i,
-                'due_date' => $startDate->copy()->addMonths($i)->format('Y-m-d'),
-                'principal' => $principalForRow,
-                'interest' => $interest,
-                'fee_amount' => 0, // Will be calculated separately
-                'total_amount' => round($totalPayment, 2),
-                'remaining_balance' => max(0, $newRemaining)
-            ];
-            
-            $remainingBalance = $newRemaining;
-            $totalInterest += $interest;
-        }
-        
-        return [
-            'method' => 'reducing_balance_with_equal_principal',
-            'total_interest' => round($totalInterest, 2),
-            'monthly_principal' => round($monthlyPrincipal, 2),
-            'schedule' => $schedule,
-            'rate_per_period' => $ratePerPeriod
-        ];
+        return $base;
     }
     
     /**
@@ -447,61 +369,41 @@ class LoanCalculatorService
         $gracePeriod = $product->grace_period ?? 0;
         $method = $product->interest_method;
         $selectedCycle = $params['interest_cycle'] ?? $product->interest_cycle;
+        $bulletMonths = ($selectedCycle === 'one_payment_off')
+            ? ($params['bullet_payment_months'] ?? null)
+            : null;
         
-        // Handle different interest methods
-        if ($method === 'reducing_balance_with_equal_principal' || $method === 'reducing_balance_with_equal_installment') {
-            $baseSchedule = $interestCalculation['schedule'] ?? [];
-            
-            // Add fees to the schedule
-            $scheduleWithFees = [];
-            foreach ($baseSchedule as $index => $installment) {
-                $installmentFees = $this->calculateInstallmentFees($index, $period, $fees, $params['amount']);
-                
-                $scheduleWithFees[] = [
-                    'installment_number' => $installment['installment_number'],
-                    'due_date' => $installment['due_date'],
-                    'principal' => $installment['principal'],
-                    'interest' => $installment['interest'],
-                    'fee_amount' => round($installmentFees, 2),
-                    'total_amount' => round($installment['total_amount'] + $installmentFees, 2),
-                    'remaining_balance' => $installment['remaining_balance']
-                ];
-            }
-            
-            return $scheduleWithFees;
-        }
-        
+        // Base schedule rows from direct-loan logic (principal/interest/total per installment)
+        $baseRows = $interestCalculation['schedule_rows'] ?? [];
+
         $remainingBalance = $params['amount'];
-        
-        for ($i = 0; $i < $period; $i++) {
-            $dueDate = $this->calculateDueDate($startDate, $i, $selectedCycle);
+
+        foreach ($baseRows as $index => $row) {
+            $installmentNumber = $index + 1;
+
+            $dueDate = $this->calculateDueDate($startDate, $installmentNumber, $selectedCycle, $bulletMonths);
             $endDate = $dueDate->copy()->addDays(5);
             $endGraceDate = $dueDate->copy()->addDays($gracePeriod);
-            
-            // Calculate installment amounts
-            $principal = $interestCalculation['monthly_principal'] ?? ($params['amount'] / $period);
-            $interest = $interestCalculation['monthly_interest'] ?? ($interestCalculation['monthly_payment'] - $principal);
 
-            // Round
-            $principal = round($principal, 2);
-            $interest = round($interest, 2);
+            $principal = round($row['principal'] ?? 0, 2);
+            $interest = round($row['interest'] ?? 0, 2);
 
-            // On final installment, adjust principal to clear remaining
-            if ($i === $period - 1) {
+            // On final installment, adjust principal to clear remaining (protect against rounding drift)
+            if ($installmentNumber === $period) {
                 $principal = round($remainingBalance, 2);
             }
-            
+
             // Calculate fees for this installment
-            $installmentFees = $this->calculateInstallmentFees($i, $period, $fees, $params['amount']);
-            
+            $installmentFees = $this->calculateInstallmentFees($index, $period, $fees, $params['amount']);
+
             // Update remaining balance
             $newRemaining = round($remainingBalance - $principal, 2);
             if (abs($newRemaining) < 0.05) {
                 $newRemaining = 0.0;
             }
-            
+
             $schedule[] = [
-                'installment_number' => $i + 1,
+                'installment_number' => $installmentNumber,
                 'due_date' => $dueDate->format('Y-m-d'),
                 'end_date' => $endDate->format('Y-m-d'),
                 'end_grace_date' => $endGraceDate->format('Y-m-d'),
@@ -515,7 +417,7 @@ class LoanCalculatorService
 
             $remainingBalance = $newRemaining;
         }
-        
+
         return $schedule;
     }
     
@@ -563,24 +465,157 @@ class LoanCalculatorService
     }
     
     /**
-     * Calculate due date for installment
+     * Convert annual interest rate to per-period rate based on cycle
+     * 
+     * If the product has an annual interest rate, this converts it to the period rate
+     * based on the interest cycle:
+     * - Annually: interest = interest (no change)
+     * - Semi-annually: interest = interest/2
+     * - Quarterly: interest = interest/4
+     * - Monthly: interest = interest/12
+     * - Bi-monthly: interest = interest/6
+     * - Semi-monthly: interest = interest/24
+     * - Bi-weekly: interest = interest/26
+     * - Weekly: interest = interest/52
      */
-    private function calculateDueDate(Carbon $startDate, int $installmentIndex, string $cycle): Carbon
+    private function convertAnnualRateToPeriodRate(float $annualRate, string $cycle, ?int $bulletMonths = null): float
     {
+        $cycle = strtolower(trim($cycle));
+        
+        switch ($cycle) {
+            case 'annually':
+            case 'yearly':
+                // Annual rate as-is (1 period per year)
+                return $annualRate;
+                
+            case 'semi_annually':
+            case 'semi annually':
+            case 'semi-annually':
+                // Annual rate divided by 2 semi-annual periods
+                return $annualRate / 2;
+                
+            case 'quarterly':
+                // Annual rate divided by 4 quarters
+                return $annualRate / 4;
+                
+            case 'bi_monthly':
+            case 'bi-monthly':
+            case 'bimonthly':
+                // Annual rate divided by 6 bi-monthly periods (2 months each)
+                return $annualRate / 6;
+                
+            case 'monthly':
+                // Annual rate divided by 12 months
+                return $annualRate / 12;
+                
+            case 'semi_monthly':
+            case 'semi-monthly':
+            case 'semimonthly':
+                // Annual rate divided by 24 semi-monthly periods (15 days each, ~2 per month)
+                return $annualRate / 24;
+                
+            case 'bi_weekly':
+            case 'bi-weekly':
+            case 'biweekly':
+                // Annual rate divided by 26 bi-weekly periods (14 days each)
+                return $annualRate / 26;
+                
+            case 'weekly':
+                // Annual rate divided by 52 weeks
+                return $annualRate / 52;
+                
+            case 'daily':
+                // Annual rate divided by 365 days
+                return $annualRate / 365;
+                
+            case 'one_payment_off':
+            case 'one payment off':
+            case 'bullet':
+                // Annual rate divided by specified months for bullet payment
+                if ($bulletMonths && $bulletMonths > 0) {
+                    return $annualRate / $bulletMonths;
+                }
+                Log::warning("One payment off cycle selected but no months specified. Defaulting to 12 months.");
+                return $annualRate / 12;
+                
+            default:
+                // Default to monthly if cycle not recognized
+                Log::warning("Unknown interest cycle '{$cycle}' in loan calculator. Defaulting to monthly.");
+                return $annualRate / 12;
+        }
+    }
+    
+    /**
+     * Calculate due date for installment based on interest cycle.
+     *
+     * This mirrors the behaviour of actual loans and respects all
+     * cycles exposed in the calculator UI (daily, weekly, bi-weekly,
+     * semi-monthly, monthly, bi-monthly, quarterly, semi-annually,
+     * annually and one-payment-off).
+     */
+    private function calculateDueDate(
+        Carbon $startDate,
+        int $installmentIndex,
+        string $cycle,
+        ?int $bulletMonths = null
+    ): Carbon {
+        $cycle = strtolower(trim($cycle));
+
         switch ($cycle) {
             case 'daily':
                 return $startDate->copy()->addDays($installmentIndex);
+
             case 'weekly':
                 return $startDate->copy()->addWeeks($installmentIndex);
+
+            case 'bi_weekly':
+            case 'bi-weekly':
+            case 'biweekly':
+                // Every 2 weeks
+                return $startDate->copy()->addWeeks($installmentIndex * 2);
+
+            case 'semi_monthly':
+            case 'semi-monthly':
+            case 'semimonthly':
+                // Roughly every half month (~15 days)
+                return $startDate->copy()->addDays($installmentIndex * 15);
+
             case 'monthly':
                 return $startDate->copy()->addMonths($installmentIndex);
+
+            case 'bi_monthly':
+            case 'bi-monthly':
+            case 'bimonthly':
+                // Every 2 months
+                return $startDate->copy()->addMonths($installmentIndex * 2);
+
             case 'quarterly':
+                // Every 3 months
                 return $startDate->copy()->addMonths($installmentIndex * 3);
+
             case 'semi_annually':
+            case 'semi annually':
+            case 'semi-annually':
+                // Every 6 months
                 return $startDate->copy()->addMonths($installmentIndex * 6);
+
             case 'annually':
+            case 'yearly':
                 return $startDate->copy()->addYears($installmentIndex);
+
+            case 'one_payment_off':
+            case 'one payment off':
+            case 'bullet':
+                // Bullet repayment: move by the specified bullet-month interval
+                // for each installment (usually there is only one installment).
+                if ($bulletMonths && $bulletMonths > 0) {
+                    return $startDate->copy()->addMonths($bulletMonths * $installmentIndex);
+                }
+                // Fallback: treat like a monthly schedule if months not provided
+                return $startDate->copy()->addMonths($installmentIndex);
+
             default:
+                // Default to monthly progression
                 return $startDate->copy()->addMonths($installmentIndex);
         }
     }

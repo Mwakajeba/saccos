@@ -554,6 +554,27 @@
                                 </div>
                             </div>
 
+                            <!-- Job Logs -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-info">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-list-check fs-1 text-info"></i>
+                                        </div>
+                                        <h5 class="card-title">Job Logs</h5>
+                                        <p class="card-text">
+                                            View scheduled job execution logs including daily interest calculation,
+                                            penalty calculation, and other automated jobs.
+                                        </p>
+                                        <a href="{{ route('settings.job-logs.index') }}" class="btn btn-info">
+                                            <i class="bx bx-list-ul me-1"></i> View Job Logs
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
                             <!-- Complain Categories -->
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-orange">

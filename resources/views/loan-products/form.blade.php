@@ -18,7 +18,7 @@
 
 <form
     action="{{ $isEdit ? route('loan-products.update', Hashids::encode($loanProduct->id)) : route('loan-products.store') }}"
-    onsubmit="return handleSubmit(this)" method="POST">
+    onsubmit="return handleSubmit(this)" method="POST" data-has-custom-handler="true" class="no-global-submit-guard">
     @csrf
     @if($isEdit) @method('PUT') @endif
 
@@ -552,6 +552,24 @@
                 @endforeach
             </select>
         </div>
+
+        <!-- Loan Top-Up Accounts Configuration -->
+        <div class="col-12">
+            <h5 class="mb-3 text-primary mt-4">Loan Top-Up Accounts</h5>
+        </div>
+        <div class="col-md-4 mb-3">
+            <label class="form-label">Loan Clearing Account</label>
+            <select name="loan_clearing_account_id" class="form-select select2-single">
+                <option value="">-- Select Account --</option>
+                @foreach($chartAccounts as $account)
+                    <option value="{{ $account->id }}" {{ old('loan_clearing_account_id', $loanProduct->loan_clearing_account_id ?? '') == $account->id ? 'selected' : '' }}>
+                        {{ $account->account_code }} - {{ $account->account_name }}
+                    </option>
+                @endforeach
+            </select>
+            <small class="text-muted">Account used for loan top-up clearing/refinancing transactions</small>
+        </div>
+
         <!-- Fees and Penalties Configuration -->
         <div class="col-12">
             <h5 class="mb-3 text-primary mt-4">Fees and Penalties Configuration</h5>
@@ -870,66 +888,82 @@
 @push('scripts')
     <script>
         function handleSubmit(form) {
-            // Force checkbox values to be submitted reliably.
-            // Some browsers / UI layers can result in only the hidden "0" arriving.
-            // We always submit hidden "0" in HTML, and on submit we append an override "1" when checked.
+            console.log('handleSubmit called');
+            
+            // Get submit button
+            const submitBtn = form.querySelector('button[type="submit"]');
+            
+            // Check if already submitting (button disabled)
+            if (submitBtn && submitBtn.disabled) {
+                console.log('Form already submitting');
+                return false;
+            }
+            
+            // Validate Select2 fields with required attribute before submission
+            let hasError = false;
+            const requiredSelect2Fields = form.querySelectorAll('select.select2-single[required]');
+            
+            requiredSelect2Fields.forEach(function(select) {
+                const value = select.value;
+                const label = select.closest('.mb-3')?.querySelector('.form-label')?.textContent?.trim() || select.name;
+                
+                // Clear previous error styling
+                const select2Container = select.nextElementSibling;
+                if (select2Container && select2Container.classList.contains('select2-container')) {
+                    select2Container.style.border = '';
+                    select2Container.style.borderRadius = '';
+                }
+                
+                if (!value || value === '') {
+                    hasError = true;
+                    // Add error styling to Select2 container
+                    if (select2Container && select2Container.classList.contains('select2-container')) {
+                        select2Container.style.border = '1px solid #dc3545';
+                        select2Container.style.borderRadius = '0.375rem';
+                    }
+                    console.error('Required field empty:', label);
+                }
+            });
+            
+            if (hasError) {
+                alert('Please fill in all required fields marked with *');
+                return false;
+            }
+            
+            // Force checkbox values - simplified approach
             const checkboxNames = ['allowed_in_app', 'allow_push_to_ess', 'has_cash_collateral', 'has_approval_levels', 'has_top_up', 'has_contribution', 'has_share'];
             checkboxNames.forEach((name) => {
-                // Remove any previous overrides
-                form.querySelectorAll(`input[type="hidden"][data-checkbox-override="1"][name="${name}"]`).forEach(el => el.remove());
-
                 const cb = form.querySelector(`input[type="checkbox"][name="${name}"]`);
-                if (cb && cb.checked) {
-                    const override = document.createElement('input');
-                    override.type = 'hidden';
-                    override.name = name;
-                    override.value = '1';
-                    override.setAttribute('data-checkbox-override', '1');
-                    // Append at the end so PHP/Laravel receives "1" as the last value
-                    form.appendChild(override);
+                const hidden = form.querySelector(`input[type="hidden"][name="${name}"]`);
+                if (cb && hidden) {
+                    hidden.value = cb.checked ? '1' : '0';
                 }
             });
 
-            // Debug: Log what we're sending
-            const formData = new FormData(form);
-            console.log('Form submission - checkbox values:', {
-                allowed_in_app: formData.get('allowed_in_app') || 'NOT SET',
-                allow_push_to_ess: formData.get('allow_push_to_ess') || 'NOT SET',
-                all_allowed_in_app: formData.getAll('allowed_in_app'),
-                all_allow_push_to_ess: formData.getAll('allow_push_to_ess')
-            });
+            // Show loading state on button
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                const originalText = submitBtn.innerHTML;
+                submitBtn.dataset.originalText = originalText;
+                submitBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> Processing...';
+            }
 
-            // Prevent multiple submissions
-            if (form.dataset.submitted === "true") return false;
-            form.dataset.submitted = "true";
-
-            // Disable ALL submit buttons in this form
-            form.querySelectorAll('button[type="submit"]').forEach(btn => {
-                btn.disabled = true;
-                btn.classList.add('opacity-50', 'cursor-not-allowed');
-                btn.setAttribute('aria-disabled', 'true');
-
-                const label = btn.querySelector('.label');
-                const spinner = btn.querySelector('.spinner');
-                if (label) label.textContent = 'Processing...';
-                if (spinner) spinner.classList.remove('hidden');
-            });
-
-            // Optional: block whole page clicks while submitting
-            const ov = document.getElementById('pageOverlay');
-            if (ov) ov.classList.remove('hidden');
-
-            // Allow the submit to proceed
+            console.log('Form submitting...');
+            
+            // Allow the native form submit - return true to proceed
             return true;
         }
 
-        // Optional safety: prevent Enter-key spamming multiple submits in some browsers
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                const active = document.activeElement;
-                // Only submit on Enter when focused on a button or inside a textarea (adjust to your UX)
-                if (active && active.tagName !== 'TEXTAREA' && active.type !== 'submit') {
-                    // e.preventDefault(); // uncomment if Enter should NOT submit forms
+        // Reset form state on page load (in case of validation errors)
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('form[data-has-custom-handler="true"]');
+            if (form) {
+                // Re-enable submit button if it was disabled
+                const submitBtn = form.querySelector('button[type="submit"]');
+                if (submitBtn && submitBtn.dataset.originalText) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = submitBtn.dataset.originalText;
+                    delete submitBtn.dataset.originalText;
                 }
             }
         });
@@ -950,6 +984,17 @@
         }
                 ensureSelect2(function () {
             jQuery('.select2-single').select2({ width: '100%' });
+            
+            // Clear error styling when a value is selected
+            jQuery('.select2-single').on('select2:select', function(e) {
+                var select2Container = jQuery(this).next('.select2-container');
+                if (select2Container.length) {
+                    select2Container.css({
+                        'border': '',
+                        'border-radius': ''
+                    });
+                }
+            });
         });
     })();
     </script>

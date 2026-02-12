@@ -214,6 +214,9 @@ class BulkLoanCreationJob implements ShouldQueue
             // Generate repayment schedule
             $loan->generateRepaymentSchedule($loanData['interest']);
 
+            // Calculate daily interest accruals for backdated loans
+            $loan->calculateBackdatedDailyInterest();
+
             // Post matured interest for past loans
             $loan->postMaturedInterestForPastLoan();
 
