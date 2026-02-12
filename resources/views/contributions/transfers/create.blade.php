@@ -54,7 +54,7 @@
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label">Source Customer <span class="text-danger">*</span></label>
                                             <select name="source_customer_id" id="source_customer_id"
-                                                    class="form-select @error('source_customer_id') is-invalid @enderror" required>
+                                                    class="form-select select2-single @error('source_customer_id') is-invalid @enderror" required>
                                                 <option value="">Select Source Customer</option>
                                                 @foreach($customers as $customer)
                                                     <option value="{{ $customer->id }}" 
@@ -74,7 +74,7 @@
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label">Source Product <span class="text-danger">*</span></label>
                                             <select name="source_product_id" id="source_product_id"
-                                                    class="form-select @error('source_product_id') is-invalid @enderror" required>
+                                                    class="form-select select2-single @error('source_product_id') is-invalid @enderror" required>
                                                 <option value="">Select Source Product</option>
                                                 @foreach($products as $product)
                                                     <option value="{{ $product->id }}" 
@@ -101,7 +101,7 @@
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label">Destination Customer <span class="text-danger">*</span></label>
                                             <select name="destination_customer_id" id="destination_customer_id"
-                                                    class="form-select @error('destination_customer_id') is-invalid @enderror" required>
+                                                    class="form-select select2-single @error('destination_customer_id') is-invalid @enderror" required>
                                                 <option value="">Select Destination Customer</option>
                                                 @foreach($customers as $customer)
                                                     <option value="{{ $customer->id }}" 
@@ -118,7 +118,7 @@
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label">Destination Product <span class="text-danger">*</span></label>
                                             <select name="destination_product_id" id="destination_product_id"
-                                                    class="form-select @error('destination_product_id') is-invalid @enderror" required>
+                                                    class="form-select select2-single @error('destination_product_id') is-invalid @enderror" required>
                                                 <option value="">Select Destination Product</option>
                                                 @foreach($products as $product)
                                                     <option value="{{ $product->id }}" 

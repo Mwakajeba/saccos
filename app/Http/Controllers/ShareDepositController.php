@@ -185,8 +185,8 @@ class ShareDepositController extends Controller
             ->orderBy('account_number')
             ->get();
 
-        // Get bank accounts for payment method
-        $bankAccounts = BankAccount::orderBy('name')->get();
+        // Get bank accounts for payment method (branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         return view('shares.deposits.create', compact('shareAccounts', 'bankAccounts'));
     }
@@ -376,8 +376,8 @@ class ShareDepositController extends Controller
             ->orderBy('account_number')
             ->get();
 
-        // Get bank accounts for payment method
-        $bankAccounts = BankAccount::orderBy('name')->get();
+        // Get bank accounts for payment method (branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         return view('shares.deposits.edit', compact('deposit', 'shareAccounts', 'bankAccounts'));
     }

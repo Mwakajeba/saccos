@@ -202,6 +202,7 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::post('opening-balance/import', [\App\Http\Controllers\ShareAccountController::class, 'importOpeningBalance'])->name('opening-balance.import');
 
     // Share Deposits Routes (data route must come BEFORE resource to avoid route conflicts)
+    Route::get('deposits/get-account-details', [\App\Http\Controllers\ShareDepositController::class, 'getAccountDetails'])->name('deposits.getAccountDetails');
     Route::get('deposits/data', [\App\Http\Controllers\ShareDepositController::class, 'getShareDepositsData'])->name('deposits.data');
     Route::get('deposits/export', [\App\Http\Controllers\ShareDepositController::class, 'export'])->name('deposits.export');
     Route::get('deposits/import', [\App\Http\Controllers\ShareDepositController::class, 'import'])->name('deposits.import');
@@ -212,13 +213,16 @@ Route::middleware(['auth'])->prefix('shares')->name('shares.')->group(function (
     Route::post('deposits/{id}/change-status', [\App\Http\Controllers\ShareDepositController::class, 'changeStatus'])->name('deposits.change-status');
     Route::resource('deposits', \App\Http\Controllers\ShareDepositController::class);
 
-    Route::get('/withdrawals', function () {
-        return view('shares.withdrawals.index');
-    })->name('withdrawals.index');
+    // Share Withdrawals Routes (data and getAccountDetails must come BEFORE resource)
+    Route::get('withdrawals/data', [\App\Http\Controllers\ShareWithdrawalController::class, 'getShareWithdrawalsData'])->name('withdrawals.data');
+    Route::get('withdrawals/get-account-details', [\App\Http\Controllers\ShareWithdrawalController::class, 'getAccountDetails'])->name('withdrawals.getAccountDetails');
+    Route::resource('withdrawals', \App\Http\Controllers\ShareWithdrawalController::class);
 
-    Route::get('/transfers', function () {
-        return view('shares.transfers.index');
-    })->name('transfers.index');
+    // Share Transfers Routes (data and getAccountDetails must come BEFORE resource)
+    Route::get('transfers/data', [\App\Http\Controllers\ShareTransferController::class, 'getShareTransfersData'])->name('transfers.data');
+    Route::get('transfers/get-account-details', [\App\Http\Controllers\ShareTransferController::class, 'getAccountDetails'])->name('transfers.getAccountDetails');
+    Route::post('transfers/{id}/change-status', [\App\Http\Controllers\ShareTransferController::class, 'changeStatus'])->name('transfers.change-status');
+    Route::resource('transfers', \App\Http\Controllers\ShareTransferController::class);
 });
 
 // Dividends Management Routes
@@ -448,8 +452,12 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     // Penalty Settings
     Route::get('/penalty', [SettingsController::class, 'penaltySettings'])->name('penalty');
     Route::put('/penalty', [SettingsController::class, 'updatePenaltySettings'])->name('penalty.update');
-    //////logs route///
+
+        //////logs route///
     Route::get('/logs', [ActivityLogsController::class, 'index'])->name('logs.index');
+    Route::get('/logs/data', [ActivityLogsController::class, 'getData'])->name('logs.data');
+    Route::get('/logs/export/excel', [ActivityLogsController::class, 'exportExcel'])->name('logs.export.excel');
+    Route::get('/logs/export/pdf', [ActivityLogsController::class, 'exportPdf'])->name('logs.export.pdf');
 
     // Fees Settings
     Route::get('/fees', [SettingsController::class, 'feesSettings'])->name('fees');
@@ -708,7 +716,7 @@ Route::prefix('inventory')->name('inventory.')->middleware(['auth', 'company.sco
     });
 
     // Inventory Reports Routes
-    Route::prefix('reports')->name('reports.')->group(function () {
+    Route::prefix('reports')->name('reports.')->middleware('permission:view inventory reports')->group(function () {
         Route::get('/', [App\Http\Controllers\Inventory\InventoryReportController::class, 'index'])->name('index');
         Route::get('/stock-on-hand', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockOnHand'])->name('stock-on-hand');
         Route::get('/stock-on-hand/export/excel', [App\Http\Controllers\Inventory\InventoryReportController::class, 'stockOnHandExportExcel'])->name('stock-on-hand.export.excel');
@@ -2745,3 +2753,12 @@ Route::post('/logout', function (\Illuminate\Http\Request $request) {
     $request->session()->regenerateToken();
     return redirect('/')->with('success', 'You have been successfully logged out.');
 })->middleware('auth')->name('logout');
+
+// Exchange Rate API Routes
+Route::prefix('api/exchange-rates')->middleware('throttle.api')->group(function () {
+    Route::get('/rate', [App\Http\Controllers\Api\ExchangeRateController::class, 'getRate'])->name('api.exchange-rates.rate');
+    Route::get('/convert', [App\Http\Controllers\Api\ExchangeRateController::class, 'convertAmount'])->name('api.exchange-rates.convert');
+    Route::get('/history', [App\Http\Controllers\Api\ExchangeRateController::class, 'getHistory'])->name('api.exchange-rates.history');
+    Route::get('/currencies', [App\Http\Controllers\Api\ExchangeRateController::class, 'getSupportedCurrencies'])->name('api.exchange-rates.currencies');
+    Route::post('/clear-cache', [App\Http\Controllers\Api\ExchangeRateController::class, 'clearCache'])->name('api.exchange-rates.clear-cache');
+});

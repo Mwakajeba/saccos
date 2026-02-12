@@ -932,11 +932,18 @@ class SettingsController extends Controller
                     // Handle different input types
                     if ($setting->type === 'boolean') {
                         $value = $value === '1' || $value === 'true' || $value === 'on';
+                        $currentValue = (bool) $setting->value || $setting->value === '1' || $setting->value === 'true';
                     } elseif ($setting->type === 'integer') {
                         $value = (int) $value;
+                        $currentValue = (int) $setting->value;
+                    } else {
+                        $currentValue = $setting->value;
                     }
 
-                    $setting->update(['value' => $value]);
+                    // Only update if value actually changed (avoids duplicate activity logs)
+                    if ($currentValue != $value) {
+                        $setting->update(['value' => $value]);
+                    }
                 }
             }
 

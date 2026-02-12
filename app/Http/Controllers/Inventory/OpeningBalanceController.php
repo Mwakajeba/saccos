@@ -591,7 +591,16 @@ class OpeningBalanceController extends Controller
 
     public function downloadTemplate()
     {
-        $this->authorize('viewAny', Item::class);
+        $user = Auth::user();
+        if (!(
+            $user->hasPermissionTo('view inventory items') ||
+            $user->hasPermissionTo('manage inventory items') ||
+            $user->hasPermissionTo('manage inventory opening balances') ||
+            $user->hasPermissionTo('manage inventory movements') ||
+            $user->hasPermissionTo('create inventory adjustments')
+        )) {
+            abort(403, 'Unauthorized access.');
+        }
 
         $filename = 'opening_balance_template.csv';
         $headers = [
@@ -604,7 +613,6 @@ class OpeningBalanceController extends Controller
         $rows[] = ['item_name','item_code', 'quantity', 'unit_cost', 'has_expiry_date', 'expiry_date'];
 
         // List only items without an opening balance at the current login location
-        $user = Auth::user();
         $loginLocationId = session('location_id');
         $itemsQuery = Item::where('company_id', $user->company_id);
         if ($loginLocationId) {

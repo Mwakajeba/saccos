@@ -15,7 +15,6 @@ class PurchaseRequisitionController extends Controller
     public function __construct(
         protected PurchaseRequisitionService $service
     ) {
-        $this->middleware('auth');
     }
 
     public function index(Request $request)

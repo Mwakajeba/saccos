@@ -55,6 +55,30 @@ class BankAccount extends Model
     }
 
     /**
+     * Scope bank accounts by current branch context (session or user's branch).
+     * Shows accounts that are either for all branches or assigned to the current branch.
+     */
+    public function scopeForCurrentBranch($query)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return $query;
+        }
+
+        $query->where('company_id', $user->company_id);
+
+        $branchId = session('branch_id') ?? $user->branch_id ?? null;
+        if ($branchId) {
+            $query->where(function ($q) use ($branchId) {
+                $q->where('is_all_branches', true)
+                    ->orWhere('branch_id', $branchId);
+            });
+        }
+
+        return $query;
+    }
+
+    /**
      * Get the GL transactions for this bank account.
      */
     public function glTransactions(): HasMany

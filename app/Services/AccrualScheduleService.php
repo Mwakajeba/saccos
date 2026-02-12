@@ -69,9 +69,11 @@ class AccrualScheduleService
 
     /**
      * Calculate amortisation periods and amounts
-     * 
-     * For ACCRUALS: Recognizes FULL amount in the period incurred (no proration)
-     * For PREPAYMENTS: Prorates amount across periods based on days
+     *
+     * Both ACCRUALS and PREPAYMENTS are amortised across the full
+     * schedule period using day‑based proration. The difference
+     * between the two is handled in the double‑entry logic when
+     * journals are created (see createJournalItems()).
      */
     public function calculateAmortisationSchedule(AccrualSchedule $schedule)
     {
@@ -81,37 +83,14 @@ class AccrualScheduleService
         
         $periods = [];
         $currentDate = $startDate->copy();
-        
-        // For ACCRUALS: Recognize FULL amount in the period incurred (IFRS compliant)
-        if ($schedule->schedule_type === 'accrual') {
-            // Accruals recognize the full amount in the period they are incurred
-            // No monthly allocation - full amount in one period
-            $periodEnd = $this->getPeriodEnd($currentDate, $schedule->frequency);
-            
-            // Don't exceed the schedule end date
-            if ($periodEnd->gt($endDate)) {
-                $periodEnd = $endDate->copy();
-            }
-            
-            $periodStart = $currentDate->copy()->startOfDay();
-            $periodEndDate = $periodEnd->copy()->startOfDay();
-            $daysInPeriod = (int)$periodStart->diffInDays($periodEndDate) + 1;
-            
-            // Full amount recognized in this period
-            $periods[] = [
-                'period' => $currentDate->format('Y-m'),
-                'period_start_date' => $currentDate->copy(),
-                'period_end_date' => $periodEnd->copy(),
-                'days_in_period' => $daysInPeriod,
-                'amortisation_amount' => round($totalAmount, 2),
-            ];
-            
+
+        // Pre‑compute schedule span in days (inclusive) for day‑based proration
+        $scheduleStart = $startDate->copy()->startOfDay();
+        $scheduleEnd = $endDate->copy()->startOfDay();
+        $totalDays = (int) $scheduleStart->diffInDays($scheduleEnd) + 1;
+        if ($totalDays <= 0) {
             return $periods;
         }
-        
-        // For PREPAYMENTS: Prorate amount across periods (existing logic)
-        // Determine period length based on frequency
-        $periodLength = $this->getPeriodLength($schedule->frequency);
         
         while ($currentDate->lte($endDate)) {
             $periodEnd = $this->getPeriodEnd($currentDate, $schedule->frequency);
@@ -125,14 +104,13 @@ class AccrualScheduleService
             // Use startOfDay() to ensure we're working with dates only, avoiding time component issues
             $periodStart = $currentDate->copy()->startOfDay();
             $periodEndDate = $periodEnd->copy()->startOfDay();
-            $scheduleStart = $startDate->copy()->startOfDay();
-            $scheduleEnd = $endDate->copy()->startOfDay();
             
             // Calculate calendar days (inclusive) - always a whole number
-            $daysInPeriod = (int)$periodStart->diffInDays($periodEndDate) + 1;
-            $totalDays = (int)$scheduleStart->diffInDays($scheduleEnd) + 1;
+            $daysInPeriod = (int) $periodStart->diffInDays($periodEndDate) + 1;
             
-            // Calculate prorated amount (IFRS compliant - exact days)
+            // Calculate prorated amount (IFRS compliant - exact days) for both
+            // accruals and prepayments. The difference in treatment is in the
+            // ledger accounts, not the timing pattern.
             $amount = ($totalAmount / $totalDays) * $daysInPeriod;
             
             $periods[] = [

@@ -17,15 +17,36 @@ class BankAccountController extends Controller
 {
     use GetsCurrenciesFromFxRates;
     /**
+     * Build base query for bank accounts scoped by company and branch.
+     */
+    private function getBankAccountQuery()
+    {
+        $user = Auth::user();
+        $query = BankAccount::where('company_id', $user->company_id);
+
+        $branchId = session('branch_id') ?? $user->branch_id ?? null;
+        if ($branchId) {
+            $query->where(function ($q) use ($branchId) {
+                $q->where('is_all_branches', true)
+                    ->orWhere('branch_id', $branchId);
+            });
+        }
+
+        return $query;
+    }
+
+    /**
      * Display a listing of the resource.
      */
     public function index()
     {
+        $query = $this->getBankAccountQuery();
+
         // Calculate statistics
-        $totalAccounts = BankAccount::count();
+        $totalAccounts = $query->count();
 
         // Calculate balances from GL transactions for statistics
-        $allBankAccounts = BankAccount::with('chartAccount')->get()->map(function ($bankAccount) {
+        $allBankAccounts = $query->with('chartAccount')->get()->map(function ($bankAccount) {
             $debits = GlTransaction::where('chart_account_id', $bankAccount->chart_account_id)
                 ->where('nature', 'debit')
                 ->sum('amount');
@@ -48,7 +69,8 @@ class BankAccountController extends Controller
      */
     public function getData(Request $request)
     {
-        $query = BankAccount::with('chartAccount.accountClassGroup.accountClass')
+        $query = $this->getBankAccountQuery()
+            ->with('chartAccount.accountClassGroup.accountClass')
             ->orderBy('created_at', 'desc');
 
         // Apply search filter
@@ -63,8 +85,8 @@ class BankAccountController extends Controller
             });
         }
 
-        // Get total count before pagination
-        $totalRecords = BankAccount::count();
+        // Get total count before pagination (branch-scoped, total before search)
+        $totalRecords = $this->getBankAccountQuery()->count();
         $filteredRecords = $query->count();
 
         // Apply pagination
