@@ -517,6 +517,16 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     Route::get('/job-logs/{jobLog}', [SettingsController::class, 'jobLogShow'])->name('job-logs.show');
     Route::get('/job-logs/{jobLog}/details-data', [SettingsController::class, 'jobLogDetailsData'])->name('job-logs.details-data');
     Route::get('/job-logs/{jobLog}/export/{format}', [SettingsController::class, 'jobLogExport'])->name('job-logs.export');
+
+    // Run Accrued Interest Job Manually
+    Route::post('/run-accrued-interest-job', [SettingsController::class, 'runAccruedInterestJob'])->name('run-accrued-interest-job');
+
+    // Arrears Classifications
+    Route::get('/arrears-classifications', [SettingsController::class, 'arrearsClassificationsIndex'])->name('arrears-classifications.index');
+    Route::post('/arrears-classifications', [SettingsController::class, 'arrearsClassificationsStore'])->name('arrears-classifications.store');
+    Route::put('/arrears-classifications/{id}', [SettingsController::class, 'arrearsClassificationsUpdate'])->name('arrears-classifications.update');
+    Route::delete('/arrears-classifications/{id}', [SettingsController::class, 'arrearsClassificationsDestroy'])->name('arrears-classifications.destroy');
+    Route::post('/arrears-classifications/seed-defaults', [SettingsController::class, 'arrearsClassificationsSeedDefaults'])->name('arrears-classifications.seed-defaults');
 });
 // Account Transfer Approval Settings
 Route::get('/account-transfer-approval', [SettingsController::class, 'accountTransferApprovalSettings'])->name('settings.account-transfer-approval');
@@ -2266,6 +2276,13 @@ Route::middleware(['auth'])->group(function () {
     // Opening Balance Routes for loans
     Route::get('loans/opening-balance/template', [LoanController::class, 'downloadOpeningBalanceTemplate'])->name('loans.opening-balance.template');
     Route::post('loans/opening-balance', [LoanController::class, 'storeOpeningBalance'])->name('loans.opening-balance.store');
+    Route::get('loans/opening-balance/progress', [LoanController::class, 'getBulkLoanProgress'])->name('loans.opening-balance.progress');
+    Route::get('loans/opening-balance/failed', [LoanController::class, 'downloadFailedLoans'])->name('loans.opening-balance.failed');
+
+    // NPL Report Routes
+    Route::get('loans/npl-report', [LoanController::class, 'nplReport'])->name('loans.npl-report');
+    Route::get('loans/npl-report/export-excel', [LoanController::class, 'exportNplExcel'])->name('loans.npl-report.export-excel');
+    Route::get('loans/npl-report/export-pdf', [LoanController::class, 'exportNplPdf'])->name('loans.npl-report.export-pdf');
 
     // New Loan Application Routes (must come BEFORE general loan routes)
     Route::get('loans/application', [LoanController::class, 'applicationIndex'])->name('loans.application.index');

@@ -510,6 +510,103 @@
                                                     class="badge {{ $badgeClass }} fs-6">{{ ucfirst($loan->status) }}</span>
                                             </td>
                                         </tr>
+                                        @if(in_array($loan->status, ['active', 'disbursed', 'defaulted']))
+                                        <tr>
+                                            <td class="fw-bold text-muted ps-4">Arrears Classification</td>
+                                            <td>
+                                                @php
+                                                    // Calculate days in arrears
+                                                    // Get all schedules that are due before today
+                                                    $overdueSchedules = $loan->schedule()
+                                                        ->with('repayments')
+                                                        ->where('due_date', '<', now())
+                                                        ->orderBy('due_date', 'asc')
+                                                        ->get();
+                                                    
+                                                    // Find the oldest unpaid schedule
+                                                    $oldestUnpaidSchedule = null;
+                                                    foreach ($overdueSchedules as $schedule) {
+                                                        // Calculate total paid from repayments
+                                                        $principalPaid = $schedule->repayments->sum('principal');
+                                                        $interestPaid = $schedule->repayments->sum('interest');
+                                                        $totalPaid = $principalPaid + $interestPaid;
+                                                        
+                                                        // Calculate total due (use accrued_interest if available, otherwise use interest)
+                                                        $totalDue = $schedule->principal + ($schedule->accrued_interest ?? $schedule->interest);
+                                                        
+                                                        // If not fully paid, this is the oldest unpaid schedule
+                                                        if ($totalPaid < $totalDue) {
+                                                            $oldestUnpaidSchedule = $schedule;
+                                                            break;
+                                                        }
+                                                    }
+                                                    
+                                                    $daysInArrears = 0;
+                                                    if ($oldestUnpaidSchedule) {
+                                                        $daysInArrears = round(\Carbon\Carbon::parse($oldestUnpaidSchedule->due_date)->diffInDays(now()));
+                                                    }
+                                                    
+                                                    // Get classification from settings
+                                                    // Try to get company_id from loan->branch->company_id, or use current_company_id() as fallback
+                                                    $companyId = null;
+                                                    if ($loan->branch && $loan->branch->company_id) {
+                                                        $companyId = $loan->branch->company_id;
+                                                    } elseif (function_exists('current_company_id')) {
+                                                        $companyId = current_company_id();
+                                                    }
+                                                    
+                                                    $arrearsClassification = null;
+                                                    if ($companyId) {
+                                                        $arrearsClassification = \App\Models\ArrearsClassification::getClassificationForDays($daysInArrears, $companyId);
+                                                    }
+                                                    
+                                                    // Calculate provision amount
+                                                    $outstandingBalance = $loan->amount_due ?? ($loan->amount_total - ($loan->repayments?->sum(fn($r) => $r->principal + $r->interest) ?? 0));
+                                                    $provisionPercentage = $arrearsClassification ? (float) $arrearsClassification->provision_percentage : 0;
+                                                    $provisionAmount = $outstandingBalance * ($provisionPercentage / 100);
+                                                    
+                                                    // Status badge colors
+                                                    $arrearsStatusColors = [
+                                                        'Current' => 'success',
+                                                        'Past Due' => 'info',
+                                                        'Substandard' => 'warning',
+                                                        'Doubtful' => 'danger',
+                                                        'Loss/NPL' => 'dark'
+                                                    ];
+                                                    $arrearsColor = $arrearsClassification ? ($arrearsStatusColors[$arrearsClassification->status] ?? 'secondary') : 'secondary';
+                                                @endphp
+                                                <div class="d-flex flex-column">
+                                                    <div class="mb-2">
+                                                        <span class="badge bg-{{ $arrearsColor }} fs-6">
+                                                            {{ $arrearsClassification ? $arrearsClassification->status : 'Not Configured' }}
+                                                        </span>
+                                                        @if($arrearsClassification)
+                                                            <span class="badge bg-secondary ms-1">
+                                                                {{ $arrearsClassification->bucket_label }} days
+                                                            </span>
+                                                        @endif
+                                                    </div>
+                                                    <small class="text-muted">
+                                                        <i class="bx bx-calendar-exclamation me-1"></i>
+                                                        <strong>{{ $daysInArrears }}</strong> days in arrears
+                                                    </small>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td class="fw-bold text-muted ps-4">Provision Amount</td>
+                                            <td>
+                                                <div class="d-flex flex-column">
+                                                    <span class="fw-bold text-danger fs-5">
+                                                        TSHS {{ number_format($provisionAmount, 2) }}
+                                                    </span>
+                                                    <small class="text-muted">
+                                                        {{ number_format($provisionPercentage, 2) }}% of outstanding balance (TSHS {{ number_format($outstandingBalance, 2) }})
+                                                    </small>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        @endif
                                         <tr>
                                             <td class="fw-bold text-muted ps-4">Payment Progress</td>
                                             <td>
@@ -749,10 +846,12 @@
                                                 <th>#</th>
                                                 <th>Due Date</th>
                                                 <th>Principal</th>
-                                                <th>Interest</th>
+                                                <th>Expected Interest</th>
+                                                <th>Accrued Interest</th>
                                                 <th>Penalty Amount</th>
                                                 <th>Fee Amount</th>
                                                 <th class="text-end pe-4">Total Due</th>
+                                                <th class="text-end pe-4">Actual Due</th>
                                                 <th class="text-end pe-4">Paid Amount</th>
                                                 <th class="text-end pe-4">Remaining</th>
                                                 <th class="text-center">Status</th>
@@ -763,29 +862,119 @@
                                             @foreach($loan->schedule->sortBy('due_date') as $index => $item)
 
                                                 @php
+                                                    // Get accrued interest (from daily interest accruals)
+                                                    $accruedInterest = $item->accrued_interest ?? 0;
+                                                    
+                                                    // Total Due uses expected interest
                                                     $totalDue = $item->total_due;
+                                                    
+                                                    // Actual Due uses accrued interest instead of expected interest
+                                                    $actualDue = $item->principal + $accruedInterest + $item->penalty_amount + $item->fee_amount;
+                                                    
                                                     $paidAmount = $item->paid_amount;
-                                                    $remainingAmount = $item->remaining_amount;
+                                                    
+                                                    // Remaining balance uses accrued interest
+                                                    $remainingAmount = max(0, $actualDue - $paidAmount);
+                                                    
                                                     $isFullyPaid = $item->fullPrincipalPaid();
                                                     $paymentPercentage = $item->payment_percentage;
                                                     $completed = $loan->status === 'completed';
                                                     $penaltyPaid = $item->PenaltyPaid();
-                                                    // $penaltAmount = $item->penalty_amount;
-                                                    // dd($penaltyPaid, $penaltAmount);
-
+                                                    
+                                                    // Check if schedule is in arrears (overdue and not fully paid)
+                                                    $isInArrears = false;
+                                                    if ($item->due_date && \Carbon\Carbon::parse($item->due_date)->isPast() && $remainingAmount > 0) {
+                                                        $isInArrears = true;
+                                                    }
                                                 @endphp
                                                 <tr
-                                                    class="{{ $isFullyPaid ? 'table-success' : ($paidAmount > 0 ? 'table-warning' : '') }}">
-                                                    <td>{{ $index + 1 }}</td>
-                                                    <td class="ps-4">{{ \Carbon\Carbon::parse($item->due_date)->format('M d, Y') }}
+                                                    class="{{ $isInArrears ? 'table-danger' : ($isFullyPaid ? 'table-success' : ($paidAmount > 0 ? 'table-warning' : '')) }}"
+                                                    style="{{ $isInArrears ? 'background-color: #fee !important;' : '' }}">
+                                                    <td>
+                                                        @if($isInArrears)
+                                                            <del style="color: #dc3545;">{{ $index + 1 }}</del>
+                                                        @else
+                                                            {{ $index + 1 }}
+                                                        @endif
                                                     </td>
-                                                    <td>{{ number_format($item->principal, 2) }}</td>
-                                                    <td>{{ number_format($item->interest, 2) }}</td>
-                                                    <td>{{ number_format($item->penalty_amount, 2) }}</td>
-                                                    <td>{{ number_format($item->fee_amount, 2) }}</td>
-                                                    <td class="text-end pe-4 fw-bold">{{ number_format($totalDue, 2) }}</td>
-                                                    <td class="text-end pe-4 text-success">{{ number_format($paidAmount, 2) }}</td>
-                                                    <td class="text-end pe-4 text-danger">{{ number_format($remainingAmount, 2) }}
+                                                    <td class="ps-4">
+                                                        @if($isInArrears)
+                                                            <del style="color: #dc3545;">{{ \Carbon\Carbon::parse($item->due_date)->format('M d, Y') }}</del>
+                                                        @else
+                                                            {{ \Carbon\Carbon::parse($item->due_date)->format('M d, Y') }}
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($item->principal, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($item->principal, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($item->principal, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($item->interest, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($item->interest, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($item->interest, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-info">
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($accruedInterest, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($accruedInterest, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($accruedInterest, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($item->penalty_amount, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($item->penalty_amount, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($item->penalty_amount, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($item->fee_amount, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($item->fee_amount, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($item->fee_amount, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-end pe-4">
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($totalDue, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($totalDue, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($totalDue, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-end pe-4 fw-bold text-primary">
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($actualDue, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($actualDue, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($actualDue, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-end pe-4 text-success">
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($paidAmount, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($paidAmount, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($paidAmount, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-end pe-4 text-danger">
+                                                        @if($isInArrears)
+                                                            <span style="color: #000; font-weight: bold;">{{ number_format($remainingAmount, 2) }}</span>
+                                                            <br><del style="color: #dc3545; font-size: 0.9em;">{{ number_format($remainingAmount, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($remainingAmount, 2) }}
+                                                        @endif
                                                     </td>
                                                     <td class="text-center">
                                                         @if($isFullyPaid)
@@ -807,7 +996,7 @@
                                                             </button>
                                                         @else
                                                             <button type="button" class="btn btn-sm btn-primary"
-                                                                onclick="repayScheduleItem('{{ $item->id }}', '{{ number_format($remainingAmount, 2) }}', '{{ \Carbon\Carbon::parse($item->due_date)->format('M d, Y') }}', '{{ number_format($item->principal, 2) }}', '{{ number_format($item->interest, 2) }}', '{{ number_format($item->penalty_amount, 2) }}', '{{ number_format($item->fee_amount, 2) }}')">
+                                                                onclick="repayScheduleItem('{{ $item->id }}', '{{ number_format($remainingAmount, 2) }}', '{{ \Carbon\Carbon::parse($item->due_date)->format('M d, Y') }}', '{{ number_format($item->principal, 2) }}', '{{ number_format($accruedInterest, 2) }}', '{{ number_format($item->penalty_amount, 2) }}', '{{ number_format($item->fee_amount, 2) }}')">
                                                                 <i class="bx bx-credit-card me-1"></i>Repay
                                                             </button>
                                                         @endif
@@ -2042,8 +2231,8 @@
                         </div>
                         <div class="col-md-3">
                             <div class="mb-3">
-                                <label class="form-label text-muted small">Interest</label>
-                                <p id="modal_interest" class="fw-bold text-dark mb-0"></p>
+                                <label class="form-label text-muted small">Accrued Interest</label>
+                                <p id="modal_interest" class="fw-bold text-info mb-0"></p>
                             </div>
                         </div>
                         <div class="col-md-3">
@@ -2093,7 +2282,7 @@
                                 <select class="form-select" name="payment_source" id="payment_source" required>
                                     <option value="">-- Select Payment Source --</option>
                                     <option value="bank">Receive from Bank</option>
-                                    <option value="cash_deposit">Receive from Cash Deposit</option>
+                                    <option value="contributions">Receive from Contributions Account</option>
                                 </select>
                             </div>
                         </div>
@@ -2113,26 +2302,26 @@
                             </div>
                         </div>
 
-                        <!-- Cash Deposit Account Field -->
-                        <div class="col-md-12" id="cash_deposit_section" style="display: none;">
+                        <!-- Contributions Account Field -->
+                        <div class="col-md-12" id="contributions_section" style="display: none;">
                             <div class="mb-3">
-                                <label for="cash_deposit_id" class="form-label">Cash Deposit Account</label>
-                                <select class="form-select" name="cash_deposit_id" id="cash_deposit_id">
-                                    <option value="">-- Select Cash Deposit Account --</option>
+                                <label for="contribution_account_id" class="form-label">Contributions Account</label>
+                                <select class="form-select" name="contribution_account_id" id="contribution_account_id">
+                                    <option value="">-- Select Contributions Account --</option>
                                     @php
-                                        $cashDeposits = \App\Models\CashCollateral::with(['customer', 'type'])
-                                            ->where('amount', '>', 0)
+                                        $contributionAccounts = \App\Models\ContributionAccount::with(['customer', 'contributionProduct'])
+                                            ->where('customer_id', $loan->customer_id)
+                                            ->where('balance', '>', 0)
                                             ->get();
                                     @endphp
-                                    @foreach($cashDeposits as $deposit)
-                                        <option value="{{ $deposit->id }}" data-balance="{{ $deposit->amount }}">
-                                            {{ $deposit->customer->name }} - {{ $deposit->type->name }} (Balance: TSHS
-                                            {{ number_format($deposit->amount, 2) }})
+                                    @foreach($contributionAccounts as $account)
+                                        <option value="{{ $account->id }}" data-balance="{{ $account->balance }}">
+                                            {{ $account->customer->name ?? 'N/A' }} - {{ $account->contributionProduct->product_name ?? 'N/A' }} ({{ $account->account_number }}) - Balance: TSHS {{ number_format($account->balance, 2) }}
                                         </option>
                                     @endforeach
                                 </select>
-                                <small class="text-muted" id="deposit_balance_info" style="display: none;">
-                                    Available Balance: <span id="selected_balance" class="text-success fw-bold"></span>
+                                <small class="text-muted" id="contribution_balance_info" style="display: none;">
+                                    Available Balance: <span id="selected_contribution_balance" class="text-success fw-bold"></span>
                                 </small>
                             </div>
                         </div>
@@ -2262,8 +2451,8 @@
                                 <label for="settle_payment_source" class="form-label">Payment Source</label>
                                 <select class="form-select" name="payment_source" id="settle_payment_source" required>
                                     <option value="">-- Select Payment Source --</option>
-                                    <option value="bank">Receive from Bank</option>
-                                    <option value="cash_deposit">Receive from Cash Deposit</option>
+                                    <option value="bank">Bank/Cash Account</option>
+                                    <option value="contributions">Receive from Contributions Account</option>
                                 </select>
                             </div>
                         </div>
@@ -2283,26 +2472,25 @@
                             </div>
                         </div>
 
-                        <!-- Cash Deposit Account Field -->
-                        <div class="col-md-12" id="settle_cash_deposit_section" style="display: none;">
+                        <!-- Contributions Account Field -->
+                        <div class="col-md-12" id="settle_contributions_section" style="display: none;">
                             <div class="mb-3">
-                                <label for="settle_cash_deposit_id" class="form-label">Cash Deposit Account</label>
-                                <select class="form-select" name="cash_deposit_id" id="settle_cash_deposit_id">
-                                    <option value="">-- Select Cash Deposit Account --</option>
+                                <label for="settle_contribution_account_id" class="form-label">Contributions Account</label>
+                                <select class="form-select" name="contribution_account_id" id="settle_contribution_account_id">
+                                    <option value="">-- Select Contributions Account --</option>
                                     @php
-                                        $cashDeposits = \App\Models\CashCollateral::with(['customer', 'type'])
-                                            ->where('amount', '>', 0)
+                                        $settleContributionAccounts = \App\Models\ContributionAccount::with(['customer', 'contributionProduct'])
+                                            ->where('balance', '>', 0)
                                             ->get();
                                     @endphp
-                                    @foreach($cashDeposits as $deposit)
-                                        <option value="{{ $deposit->id }}" data-balance="{{ $deposit->amount }}">
-                                            {{ $deposit->customer->name }} - {{ $deposit->type->name }} (Balance: TSHS
-                                            {{ number_format($deposit->amount, 2) }})
+                                    @foreach($settleContributionAccounts as $account)
+                                        <option value="{{ $account->id }}" data-balance="{{ $account->balance }}">
+                                            {{ $account->customer->name ?? 'N/A' }} - {{ $account->contributionProduct->product_name ?? 'N/A' }} ({{ $account->account_number }}) - Balance: TSHS {{ number_format($account->balance, 2) }}
                                         </option>
                                     @endforeach
                                 </select>
-                                <small class="text-muted" id="settle_deposit_balance_info" style="display: none;">
-                                    Available Balance: <span id="settle_selected_balance"
+                                <small class="text-muted" id="settle_contribution_balance_info" style="display: none;">
+                                    Available Balance: <span id="settle_selected_contribution_balance"
                                         class="text-success fw-bold"></span>
                                 </small>
                             </div>
@@ -2956,45 +3144,45 @@
 
                 if (selectedSource === 'bank') {
                     $('#bank_account_section').show();
-                    $('#cash_deposit_section').hide();
+                    $('#contributions_section').hide();
                     $('#bank_account_id').prop('required', true);
-                    $('#cash_deposit_id').prop('required', false);
-                    $('#deposit_balance_info').hide();
-                } else if (selectedSource === 'cash_deposit') {
+                    $('#contribution_account_id').prop('required', false);
+                    $('#contribution_balance_info').hide();
+                } else if (selectedSource === 'contributions') {
                     $('#bank_account_section').hide();
-                    $('#cash_deposit_section').show();
+                    $('#contributions_section').show();
                     $('#bank_account_id').prop('required', false);
-                    $('#cash_deposit_id').prop('required', true);
-                    $('#deposit_balance_info').show();
+                    $('#contribution_account_id').prop('required', true);
+                    $('#contribution_balance_info').show();
                 } else {
                     $('#bank_account_section').hide();
-                    $('#cash_deposit_section').hide();
+                    $('#contributions_section').hide();
                     $('#bank_account_id').prop('required', false);
-                    $('#cash_deposit_id').prop('required', false);
-                    $('#deposit_balance_info').hide();
+                    $('#contribution_account_id').prop('required', false);
+                    $('#contribution_balance_info').hide();
                 }
             });
 
-            // Cash deposit account change handler
-            $('#cash_deposit_id').change(function () {
+            // Contributions account change handler
+            $('#contribution_account_id').change(function () {
                 const selectedOption = $(this).find('option:selected');
                 const balance = selectedOption.data('balance');
 
                 if (balance !== undefined) {
-                    $('#selected_balance').text('TSHS ' + parseFloat(balance).toLocaleString('en-US', { minimumFractionDigits: 2 }));
-                    $('#deposit_balance_info').show();
+                    $('#selected_contribution_balance').text('TSHS ' + parseFloat(balance).toLocaleString('en-US', { minimumFractionDigits: 2 }));
+                    $('#contribution_balance_info').show();
                 } else {
-                    $('#deposit_balance_info').hide();
+                    $('#contribution_balance_info').hide();
                 }
             });
 
-            // Amount validation for cash deposit
+            // Amount validation for contributions account
             $('#payment_amount').on('input', function () {
                 const paymentSource = $('#payment_source').val();
                 const amount = parseFloat($(this).val()) || 0;
 
-                if (paymentSource === 'cash_deposit') {
-                    const selectedOption = $('#cash_deposit_id').find('option:selected');
+                if (paymentSource === 'contributions') {
+                    const selectedOption = $('#contribution_account_id').find('option:selected');
                     const balance = parseFloat(selectedOption.data('balance')) || 0;
 
                     if (amount > balance) {
@@ -3023,20 +3211,20 @@
                     return false;
                 }
 
-                if (paymentSource === 'cash_deposit') {
+                if (paymentSource === 'contributions') {
                     const amount = parseFloat($('#payment_amount').val()) || 0;
-                    const selectedOption = $('#cash_deposit_id').find('option:selected');
+                    const selectedOption = $('#contribution_account_id').find('option:selected');
                     const balance = parseFloat(selectedOption.data('balance')) || 0;
 
                     if (amount > balance) {
                         e.preventDefault();
-                        alert('Payment amount cannot exceed available cash deposit balance');
+                        alert('Payment amount cannot exceed available contributions balance');
                         return false;
                     }
 
-                    if (!$('#cash_deposit_id').val()) {
+                    if (!$('#contribution_account_id').val()) {
                         e.preventDefault();
-                        alert('Please select a cash deposit account');
+                        alert('Please select a contributions account');
                         return false;
                     }
                 } else if (paymentSource === 'bank') {
@@ -4676,51 +4864,51 @@
         document.addEventListener('DOMContentLoaded', function () {
             const settlePaymentSource = document.getElementById('settle_payment_source');
             const settleBankSection = document.getElementById('settle_bank_account_section');
-            const settleCashDepositSection = document.getElementById('settle_cash_deposit_section');
-            const settleCashDepositSelect = document.getElementById('settle_cash_deposit_id');
-            const settleDepositBalanceInfo = document.getElementById('settle_deposit_balance_info');
-            const settleSelectedBalance = document.getElementById('settle_selected_balance');
+            const settleContributionsSection = document.getElementById('settle_contributions_section');
+            const settleContributionSelect = document.getElementById('settle_contribution_account_id');
+            const settleContributionBalanceInfo = document.getElementById('settle_contribution_balance_info');
+            const settleSelectedContributionBalance = document.getElementById('settle_selected_contribution_balance');
 
             if (settlePaymentSource) {
                 settlePaymentSource.addEventListener('change', function () {
                     if (this.value === 'bank') {
                         settleBankSection.style.display = 'block';
-                        settleCashDepositSection.style.display = 'none';
-                        settleDepositBalanceInfo.style.display = 'none';
-                    } else if (this.value === 'cash_deposit') {
+                        settleContributionsSection.style.display = 'none';
+                        settleContributionBalanceInfo.style.display = 'none';
+                    } else if (this.value === 'contributions') {
                         settleBankSection.style.display = 'none';
-                        settleCashDepositSection.style.display = 'block';
+                        settleContributionsSection.style.display = 'block';
                     } else {
                         settleBankSection.style.display = 'none';
-                        settleCashDepositSection.style.display = 'none';
-                        settleDepositBalanceInfo.style.display = 'none';
+                        settleContributionsSection.style.display = 'none';
+                        settleContributionBalanceInfo.style.display = 'none';
                     }
                 });
             }
 
-            // Handle cash deposit selection for settle loan
-            if (settleCashDepositSelect) {
-                settleCashDepositSelect.addEventListener('change', function () {
+            // Handle contributions account selection for settle loan
+            if (settleContributionSelect) {
+                settleContributionSelect.addEventListener('change', function () {
                     const selectedOption = this.options[this.selectedIndex];
                     if (selectedOption && selectedOption.dataset.balance) {
                         const balance = parseFloat(selectedOption.dataset.balance);
                         const settleAmount = parseFloat(document.getElementById('settle_amount').value);
 
-                        settleSelectedBalance.textContent = 'TSHS ' + balance.toLocaleString('en-US', {
+                        settleSelectedContributionBalance.textContent = 'TSHS ' + balance.toLocaleString('en-US', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2
                         });
-                        settleDepositBalanceInfo.style.display = 'block';
+                        settleContributionBalanceInfo.style.display = 'block';
 
                         if (balance < settleAmount) {
-                            settleSelectedBalance.classList.remove('text-success');
-                            settleSelectedBalance.classList.add('text-danger');
+                            settleSelectedContributionBalance.classList.remove('text-success');
+                            settleSelectedContributionBalance.classList.add('text-danger');
                         } else {
-                            settleSelectedBalance.classList.remove('text-danger');
-                            settleSelectedBalance.classList.add('text-success');
+                            settleSelectedContributionBalance.classList.remove('text-danger');
+                            settleSelectedContributionBalance.classList.add('text-success');
                         }
                     } else {
-                        settleDepositBalanceInfo.style.display = 'none';
+                        settleContributionBalanceInfo.style.display = 'none';
                     }
                 });
             }

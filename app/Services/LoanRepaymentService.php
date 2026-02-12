@@ -1361,10 +1361,13 @@ class LoanRepaymentService
             }
 
             // Calculate current interest (remaining interest from current schedule)
+            // Use accrued_interest instead of interest for accurate calculation
             // Ensure repayments relationship is loaded
             $repayments = $currentSchedule->repayments ?? collect();
             $interestPaid = $repayments->sum('interest');
-            $currentInterest = max(0, $currentSchedule->interest - $interestPaid);
+            // Use accrued_interest if available, otherwise fall back to interest
+            $scheduleInterest = $currentSchedule->accrued_interest ?? $currentSchedule->interest ?? 0;
+            $currentInterest = max(0, $scheduleInterest - $interestPaid);
 
             // Calculate total outstanding principal from all schedules
             $totalPrincipal = $schedules->sum('principal');
