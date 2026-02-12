@@ -8,37 +8,78 @@ use Jenssegers\Agent\Agent;
 
 trait LogsActivity
 {
+    /** Cache for old/new values during update (avoids polluting model attributes) */
+    protected static $activityLogUpdateCache = [];
+
     public static function bootLogsActivity()
     {
+        static::updating(function ($model) {
+            try {
+                $dirty = $model->getDirty();
+                if (!empty($dirty)) {
+                    $excluded = (property_exists($model, 'activityLogExcludedAttributes') && is_array($model->activityLogExcludedAttributes))
+                        ? $model->activityLogExcludedAttributes
+                        : ['password', 'password_confirmation', 'remember_token'];
+                    $oldValues = [];
+                    $newValues = [];
+                    foreach ($dirty as $key => $newVal) {
+                        if (in_array($key, $excluded)) {
+                            continue;
+                        }
+                        $oldVal = $model->getOriginal($key);
+                        $oldValues[$key] = $oldVal instanceof \DateTimeInterface ? $oldVal->format('Y-m-d H:i:s') : $oldVal;
+                        $newValues[$key] = $newVal instanceof \DateTimeInterface ? $newVal->format('Y-m-d H:i:s') : $newVal;
+                    }
+                    if (!empty($oldValues)) {
+                        self::$activityLogUpdateCache[spl_object_id($model)] = ['old' => $oldValues, 'new' => $newValues];
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('LogsActivity updating: ' . $e->getMessage());
+            }
+        });
+
         static::created(function ($model) {
-            $model->storeActivityLog('create');
+            try {
+                $model->storeActivityLog('create');
+            } catch (\Throwable $e) {
+                \Log::warning('LogsActivity created: ' . $e->getMessage());
+            }
         });
 
         static::updated(function ($model) {
-            // Only log if there are actual changes (Laravel's isDirty check)
-            if ($model->isDirty()) {
+            try {
+                $cacheKey = spl_object_id($model);
+                $cached = self::$activityLogUpdateCache[$cacheKey] ?? null;
+                unset(self::$activityLogUpdateCache[$cacheKey]);
+
+                $oldValues = $cached['old'] ?? null;
+                $newValues = $cached['new'] ?? null;
+                $dirtyFields = $oldValues ? array_keys($oldValues) : [];
+
                 // Skip automatic logging if only status-related fields changed
-                // (we handle status changes manually with custom descriptions)
-                $dirtyFields = array_keys($model->getDirty());
                 $statusOnlyFields = ['status', 'approved_by', 'approved_at', 'rejected_by', 'rejected_at', 'rejection_reason', 'current_approval_level', 'submitted_by', 'submitted_at', 'updated_by'];
-                
-                // Check if only status-related fields changed
-                $onlyStatusFieldsChanged = !empty($dirtyFields) && 
+                $onlyStatusFieldsChanged = !empty($dirtyFields) &&
                     count(array_diff($dirtyFields, $statusOnlyFields)) === 0;
-                
-                // Don't auto-log if only status fields changed (we log these manually)
-                if (!$onlyStatusFieldsChanged) {
-                    $model->storeActivityLog('update');
+
+                if (!$onlyStatusFieldsChanged && !empty($dirtyFields)) {
+                    $model->storeActivityLog('update', $oldValues, $newValues);
                 }
+            } catch (\Throwable $e) {
+                \Log::warning('LogsActivity updated: ' . $e->getMessage());
             }
         });
 
         static::deleted(function ($model) {
-            $model->storeActivityLog('delete');
+            try {
+                $model->storeActivityLog('delete');
+            } catch (\Throwable $e) {
+                \Log::warning('LogsActivity deleted: ' . $e->getMessage());
+            }
         });
     }
 
-    protected function storeActivityLog($action)
+    protected function storeActivityLog($action, $oldValues = null, $newValues = null)
     {
         $agent = new Agent();
 
@@ -70,8 +111,8 @@ trait LogsActivity
         try {
             // Ensure user_id is set - use null if not authenticated (system action)
             $userId = Auth::id();
-            
-            ActivityLog::create([
+
+            $logData = [
                 'user_id'       => $userId,
                 'model'         => class_basename($this),
                 'model_id'      => $this->id ?? null,
@@ -82,7 +123,14 @@ trait LogsActivity
                 'activity_time' => now(),
                 'company_id'    => $companyId,
                 'branch_id'     => $branchId,
-            ]);
+            ];
+
+            if ($action === 'update' && $oldValues !== null && $newValues !== null) {
+                $logData['old_values'] = $oldValues;
+                $logData['new_values'] = $newValues;
+            }
+
+            ActivityLog::create($logData);
         } catch (\Exception $e) {
             // Silently fail if activity log creation fails to not break main operations
             \Log::warning('Failed to create activity log: ' . $e->getMessage());
@@ -444,6 +492,9 @@ trait LogsActivity
             if (isset($this->nominal_amount)) {
                 $description .= " | Amount: " . number_format($this->nominal_amount, 2);
             }
+        } elseif ($modelName === 'SystemSetting') {
+            $description = "{$action}d System Setting";
+            $description .= isset($this->key) ? " - " . ucfirst(str_replace('_', ' ', $this->key)) : " (ID: {$this->id})";
         } elseif (method_exists($this, 'getDisplayName')) {
             $description .= " - " . $this->getDisplayName();
         } elseif (isset($this->name)) {

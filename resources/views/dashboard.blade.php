@@ -113,27 +113,25 @@ use Vinkla\Hashids\Facades\Hashids;
                             </div>
                             <div class="me-3">
                                 <select name="branch_id" id="branch_id" class="form-select" onchange="this.form.submit()">
-                                    <option value="">All Branches</option>
+                                    <option value="" {{ !$selectedBranchId ? 'selected' : '' }}>All Branches</option>
                                     @foreach($branches as $branch)
-                                        <option value="{{ $branch->id }}" {{ $selectedBranchId == $branch->id ? 'selected' : '' }}>
-                                            {{ $branch->name }}
-                                        </option>
+                                    <option value="{{ $branch->id }}" {{ $selectedBranchId == $branch->id ? 'selected' : '' }}>
+                                        {{ $branch->name }}
+                                    </option>
                                     @endforeach
                                 </select>
                             </div>
-                            @if($selectedBranchId)
-                                <div class="me-3">
-                                    <span class="badge bg-primary">
-                                        Showing: {{ collect($branches)->where('id', $selectedBranchId)->first()['name'] ?? 'Selected Branch' }}
-                                    </span>
-                                </div>
-                            @endif
+                            <div class="me-3">
+                                <span class="badge bg-primary">
+                                    Showing: {{ $selectedBranchId ? (collect($branches)->where('id', $selectedBranchId)->first()['name'] ?? 'Selected Branch') : 'All Branches' }}
+                                </span>
+                            </div>
                         </form>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <!-- Quick Stats -->
         <div class="row row-cols-1 row-cols-lg-4">
             @can('view charges')
@@ -303,112 +301,122 @@ use Vinkla\Hashids\Facades\Hashids;
         @endcan
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Get current branch filter from URL or form
-            const urlParams = new URLSearchParams(window.location.search);
-            const branchId = urlParams.get('branch_id') || '';
-            
-            // Loan Product Disbursement Chart
-            fetch('/dashboard/loan-product-disbursement' + (branchId ? '?branch_id=' + branchId : ''))
-                .then(response => response.json())
-                .then(data => {
-                    const ctx = document.getElementById('loanProductChart').getContext('2d');
-                    if (!data.products.length || !data.amounts.length || data.amounts.every(a => a == 0)) {
-                        document.getElementById('loanProductChart').style.display = 'none';
-                        const fallback = document.createElement('div');
-                        fallback.style.textAlign = 'center';
-                        fallback.style.padding = '40px 0';
-                        fallback.style.color = '#888';
-                        fallback.innerHTML = '<b>No loan product disbursement data available for this year.</b>';
-                        ctx.canvas.parentNode.appendChild(fallback);
-                        return;
-                    }
-                    new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: data.products,
-                            datasets: [{
-                                label: 'Amount Disbursed (TZS)',
-                                data: data.amounts,
-                                backgroundColor: [
-                                    '#8e44ad', '#e74c3c', '#f1c40f', '#27ae60', '#34495e', '#00bfff'
-                                ],
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                legend: { display: false },
-                                title: {
-                                    display: true,
-                                    text: 'Loan By Product Disbursement (This Year)'
-                                }
-                            },
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    title: { display: true, text: 'Amount (TZS)' }
-                                },
-                                x: {
-                                    title: { display: true, text: 'Loan Product' }
-                                }
-                            }
-                        }
-                    });
-                });
+            document.addEventListener('DOMContentLoaded', function() {
+                // Get current branch filter from URL or form
+                const urlParams = new URLSearchParams(window.location.search);
+                const branchId = urlParams.get('branch_id') || '';
 
-            // Delinquency Loan Pie Chart
-            fetch('/dashboard/delinquency-loan-buckets' + (branchId ? '?branch_id=' + branchId : ''))
-                .then(response => response.json())
-                .then(data => {
-                    const ctx = document.getElementById('delinquencyLoanChart').getContext('2d');
-                    if (!data.labels.length || !data.values.length || data.values.every(v => v == 0)) {
-                        document.getElementById('delinquencyLoanChart').style.display = 'none';
-                        const fallback = document.createElement('div');
-                        fallback.style.textAlign = 'center';
-                        fallback.style.padding = '40px 0';
-                        fallback.style.color = '#888';
-                        fallback.innerHTML = '<b>No delinquency loan data available for this year.</b>';
-                        ctx.canvas.parentNode.appendChild(fallback);
-                        return;
-                    }
-                    new Chart(ctx, {
-                        type: 'pie',
-                        data: {
-                            labels: data.labels,
-                            datasets: [{
-                                label: 'Delinquency Loans',
-                                data: data.values,
-                                backgroundColor: [
-                                    '#e74c3c', '#f1c40f', '#27ae60', '#34495e', '#00bfff', '#8e44ad'
-                                ],
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                legend: { display: true },
-                                title: {
-                                    display: true,
-                                    text: 'Delinquency Loan Buckets (Percent)'
+                // Loan Product Disbursement Chart
+                fetch('/dashboard/loan-product-disbursement' + (branchId ? '?branch_id=' + branchId : ''))
+                    .then(response => response.json())
+                    .then(data => {
+                        const ctx = document.getElementById('loanProductChart').getContext('2d');
+                        if (!data.products.length || !data.amounts.length || data.amounts.every(a => a == 0)) {
+                            document.getElementById('loanProductChart').style.display = 'none';
+                            const fallback = document.createElement('div');
+                            fallback.style.textAlign = 'center';
+                            fallback.style.padding = '40px 0';
+                            fallback.style.color = '#888';
+                            fallback.innerHTML = '<b>No loan product disbursement data available for this year.</b>';
+                            ctx.canvas.parentNode.appendChild(fallback);
+                            return;
+                        }
+                        new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: data.products,
+                                datasets: [{
+                                    label: 'Amount Disbursed (TZS)',
+                                    data: data.amounts,
+                                    backgroundColor: [
+                                        '#8e44ad', '#e74c3c', '#f1c40f', '#27ae60', '#34495e', '#00bfff'
+                                    ],
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    legend: {
+                                        display: false
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Loan By Product Disbursement (This Year)'
+                                    }
                                 },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                            const value = context.parsed;
-                                            const percent = total ? ((value / total) * 100).toFixed(1) : 0;
-                                            return `${context.label}: ${value} (${percent}%)`;
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        title: {
+                                            display: true,
+                                            text: 'Amount (TZS)'
+                                        }
+                                    },
+                                    x: {
+                                        title: {
+                                            display: true,
+                                            text: 'Loan Product'
                                         }
                                     }
                                 }
                             }
-                        }
+                        });
                     });
-                });
-        });
 
-           // Monthly Collections Grouped Bar Chart
+                // Delinquency Loan Pie Chart
+                fetch('/dashboard/delinquency-loan-buckets' + (branchId ? '?branch_id=' + branchId : ''))
+                    .then(response => response.json())
+                    .then(data => {
+                        const ctx = document.getElementById('delinquencyLoanChart').getContext('2d');
+                        if (!data.labels.length || !data.values.length || data.values.every(v => v == 0)) {
+                            document.getElementById('delinquencyLoanChart').style.display = 'none';
+                            const fallback = document.createElement('div');
+                            fallback.style.textAlign = 'center';
+                            fallback.style.padding = '40px 0';
+                            fallback.style.color = '#888';
+                            fallback.innerHTML = '<b>No delinquency loan data available for this year.</b>';
+                            ctx.canvas.parentNode.appendChild(fallback);
+                            return;
+                        }
+                        new Chart(ctx, {
+                            type: 'pie',
+                            data: {
+                                labels: data.labels,
+                                datasets: [{
+                                    label: 'Delinquency Loans',
+                                    data: data.values,
+                                    backgroundColor: [
+                                        '#e74c3c', '#f1c40f', '#27ae60', '#34495e', '#00bfff', '#8e44ad'
+                                    ],
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    legend: {
+                                        display: true
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Delinquency Loan Buckets (Percent)'
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                                const value = context.parsed;
+                                                const percent = total ? ((value / total) * 100).toFixed(1) : 0;
+                                                return `${context.label}: ${value} (${percent}%)`;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    });
+            });
+
+            // Monthly Collections Grouped Bar Chart
             fetch('/dashboard/monthly-collections')
                 .then(response => response.json())
                 .then(data => {
@@ -433,8 +441,7 @@ use Vinkla\Hashids\Facades\Hashids;
                         type: 'bar',
                         data: {
                             labels: data.months,
-                            datasets: [
-                                {
+                            datasets: [{
                                     label: 'Expected',
                                     data: data.expected,
                                     backgroundColor: '#f1c40f',
@@ -460,7 +467,9 @@ use Vinkla\Hashids\Facades\Hashids;
                         options: {
                             responsive: true,
                             plugins: {
-                                legend: { display: true },
+                                legend: {
+                                    display: true
+                                },
                                 title: {
                                     display: true,
                                     text: 'Monthly Expected vs Collected vs Arrears'
@@ -481,12 +490,18 @@ use Vinkla\Hashids\Facades\Hashids;
                             scales: {
                                 x: {
                                     stacked: true,
-                                    title: { display: true, text: 'Month' }
+                                    title: {
+                                        display: true,
+                                        text: 'Month'
+                                    }
                                 },
                                 y: {
                                     stacked: false,
                                     beginAtZero: true,
-                                    title: { display: true, text: 'Amount (TZS)' }
+                                    title: {
+                                        display: true,
+                                        text: 'Amount (TZS)'
+                                    }
                                 }
                             },
                             barThickness: 12
@@ -500,7 +515,7 @@ use Vinkla\Hashids\Facades\Hashids;
         <div class="row">
             <div class="col-12 col-lg-8 d-lg-flex align-items-lg-stretch">
                 <div class="card radius-10 w-100">
-                    <div class="card-body">                
+                    <div class="card-body">
                         <div id="chart3"></div>
                         <div class="mt-4">
                             <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
@@ -563,7 +578,7 @@ use Vinkla\Hashids\Facades\Hashids;
         <!--end row-->
         @endcan
         <!-- Recent Activities -->
-        @can('view recent activities') 
+        @can('view recent activities')
         <div class="row row-cols-1 row-cols-lg-3">
             <div class="col">
                 <div class="card radius-10">
@@ -645,7 +660,16 @@ use Vinkla\Hashids\Facades\Hashids;
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
                                 <h5 class="mb-0 text-dark"><i class="bx bx-bar-chart me-2"></i>FINANCIAL REPORT SUMMARY</h5>
-                                <small class="text-muted">Comprehensive financial overview as of {{ date('d-m-Y') }}</small>
+                                <small class="text-muted">
+                                    Comprehensive financial overview as of {{ date('d-m-Y') }}
+                                    @php
+                                    $currentBranchName = null;
+                                    if (!empty($selectedBranchId)) {
+                                    $currentBranchName = optional($branches->firstWhere('id', $selectedBranchId))->name;
+                                    }
+                                    @endphp
+                                    — {{ $currentBranchName ? ('Branch: ' . $currentBranchName) : 'All Branches' }}
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -665,7 +689,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                             <h6 class="mb-0 text-dark"><i class="bx bx-trending-up me-1"></i>ASSETS</h6>
                                         </div>
                                         <div class="table-responsive">
-                                            <table class="table table-striped">
+                                            <table class="table table-striped table-hover mb-0" id="assets-table">
                                                 <thead class="table-light">
                                                     <tr>
                                                         <th>Account</th>
@@ -676,53 +700,79 @@ use Vinkla\Hashids\Facades\Hashids;
                                                 </thead>
                                                 <tbody>
                                                     @php $sumAsset = 0; $sumAssetPrev = 0; @endphp
-                                                    @foreach($financialReportData['chartAccountsAssets'] as $groupName => $accounts)
-                                                    @php $groupTotal = collect($accounts)->sum(fn($account) => $account['sum'] ?? 0); @endphp
-                                                    @if($groupTotal != 0)
-                                                    <tr class="table-light">
-                                                        <td colspan="4" class="fw-bold text-dark">{{ $groupName }}</td>
-                                                    </tr>
-                                                    @foreach($accounts as $chartAccountAsset)
-                                                    @if($chartAccountAsset['sum'] != 0)
-                                                    @php 
-                                                        $sumAsset += $chartAccountAsset['sum'] ?? 0;
-                                                        $prevYearAccount = collect($previousYearData['chartAccountsAssets'][$groupName] ?? [])->firstWhere('account_id', $chartAccountAsset['account_id']);
-                                                        $prevYearAmount = $prevYearAccount['sum'] ?? 0;
-                                                        $sumAssetPrev += $prevYearAmount;
-                                                        $change = ($chartAccountAsset['sum'] ?? 0) - $prevYearAmount;
+                                                    @foreach($financialReportData['chartAccountsAssets'] as $mainGroupName => $mainGroup)
+                                                    @php
+                                                    $prevMainGroup = $previousYearData['chartAccountsAssets'][$mainGroupName] ?? null;
+                                                    $prevMainGroupTotal = $prevMainGroup['total'] ?? 0;
+                                                    $currentMainGroupTotal = $mainGroup['total'] ?? 0;
                                                     @endphp
-                                                    <tr class="account-row">
-                                                        <td>
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountAsset['account_id'])) }}"
-                                                                class="text-decoration-none text-dark fw-medium">
-                                                                <i class="bx bx-chevron-right me-1 text-dark"></i>
-                                                                {{ $chartAccountAsset['account'] }}
-                                                            </a>
+                                                    @if($currentMainGroupTotal != 0 || $prevMainGroupTotal != 0)
+                                                    @php
+                                                    $mainGroupId = 'asset-' . Str::slug($mainGroupName);
+                                                    $mainGroupChange = $currentMainGroupTotal - $prevMainGroupTotal;
+                                                    @endphp
+                                                    <tr class="table-primary parent-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $mainGroupId }}" aria-expanded="true">
+                                                        <td class="fw-bold text-dark">
+                                                            <i class="bx bx-chevron-down me-1 transition-icon"></i>
+                                                            <i class="bx bx-folder me-1"></i>{{ $mainGroupName }}
                                                         </td>
-                                                        <td class="text-end">
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountAsset['account_id'])) }}"
-                                                                class="text-decoration-none fw-bold text-dark">
-                                                                {{ number_format($chartAccountAsset['sum'] ?? 0,2) }}
-                                                            </a>
-                                                        </td>
-                                                        <td class="text-end text-dark">
-                                                            {{ number_format($prevYearAmount,2) }}
-                                                        </td>
-                                                        <td class="text-end">
-                                                                {{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($currentMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($prevMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">
+                                                            {{ $mainGroupChange >= 0 ? '+' : '' }}{{ number_format($mainGroupChange, 2) }}
                                                         </td>
                                                     </tr>
+                                                    @if(isset($mainGroup['fslis']))
+                                                    @foreach($mainGroup['fslis'] as $fsliName => $fsli)
+                                                    @php
+                                                    $prevFsli = $prevMainGroup['fslis'][$fsliName] ?? null;
+                                                    $prevFsliTotal = $prevFsli['total'] ?? 0;
+                                                    $currentFsliTotal = $fsli['total'] ?? 0;
+                                                    @endphp
+                                                    @if($currentFsliTotal != 0 || $prevFsliTotal != 0)
+                                                    @php
+                                                    $fsliId = 'fsli-asset-' . Str::slug($fsliName);
+                                                    $fsliChange = $currentFsliTotal - $prevFsliTotal;
+                                                    @endphp
+                                                    <tr class="table-light collapse show {{ $mainGroupId }} fsli-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $fsliId }}" aria-expanded="false">
+                                                        <td class="ps-4 fw-medium text-dark">
+                                                            <i class="bx bx-chevron-right me-1 transition-icon"></i>
+                                                            {{ $fsliName }}
+                                                        </td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($currentFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($prevFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">
+                                                            {{ $fsliChange >= 0 ? '+' : '' }}{{ number_format($fsliChange, 2) }}
+                                                        </td>
+                                                    </tr>
+                                                    @if(isset($fsli['accounts']))
+                                                    @foreach($fsli['accounts'] as $chartAccountAsset)
+                                                    @include('partials.dashboard-account-row', [
+                                                    'account' => $chartAccountAsset,
+                                                    'mainGroupName' => $mainGroupName,
+                                                    'fsliName' => $fsliName,
+                                                    'fsliId' => $fsliId,
+                                                    'previousYearData' => $previousYearData['chartAccountsAssets'],
+                                                    'depth' => 0
+                                                    ])
+                                                    @endforeach
+                                                    @endif
                                                     @endif
                                                     @endforeach
                                                     @endif
+                                                    @endif
                                                     @endforeach
+                                                    @php
+                                                    $sumAsset = collect($financialReportData['chartAccountsAssets'])->sum('total');
+                                                    $sumAssetPrev = collect($previousYearData['chartAccountsAssets'])->sum('total');
+                                                    @endphp
                                                     <tr class="table-secondary fw-bold">
                                                         <td>TOTAL ASSETS</td>
                                                         <td class="text-end">{{ number_format($sumAsset,2) }}</td>
                                                         <td class="text-end">{{ number_format($sumAssetPrev,2) }}</td>
                                                         <td class="text-end">
                                                             @php $assetChange = $sumAsset - $sumAssetPrev; @endphp
-                                                                {{ $assetChange >= 0 ? '+' : '' }}{{ number_format($assetChange,2) }}
+                                                            {{ $assetChange >= 0 ? '+' : '' }}{{ number_format($assetChange,2) }}
                                                         </td>
                                                     </tr>
                                                 </tbody>
@@ -734,7 +784,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                             <h6 class="mb-0 text-dark"><i class="bx bx-user me-1"></i>EQUITY</h6>
                                         </div>
                                         <div class="table-responsive">
-                                            <table class="table table-sm mb-0">
+                                            <table class="table table-sm mb-0 table-hover" id="equity-table">
                                                 <thead class="table-light">
                                                     <tr>
                                                         <th>Account</th>
@@ -745,62 +795,88 @@ use Vinkla\Hashids\Facades\Hashids;
                                                 </thead>
                                                 <tbody>
                                                     @php $sumEquity = 0; $sumEquityPrev = 0; @endphp
-                                                    @foreach($financialReportData['chartAccountsEquitys'] as $groupName => $accounts)
-                                                    @php $groupTotal = collect($accounts)->sum(fn($account) => $account['sum'] ?? 0); @endphp
-                                                    @if($groupTotal != 0)
-                                                    <tr class="table-light">
-                                                        <td colspan="4" class="fw-bold text-dark">{{ $groupName }}</td>
-                                                    </tr>
-                                                    @foreach($accounts as $chartAccountEquity)
-                                                    @if($chartAccountEquity['sum'] != 0)
-                                                    @php 
-                                                        $sumEquity += abs($chartAccountEquity['sum'] ?? 0);
-                                                        $prevYearAccount = collect($previousYearData['chartAccountsEquitys'][$groupName] ?? [])->firstWhere('account_id', $chartAccountEquity['account_id']);
-                                                        $prevYearAmount = abs($prevYearAccount['sum'] ?? 0);
-                                                        $sumEquityPrev += $prevYearAmount;
-                                                        $change = abs($chartAccountEquity['sum'] ?? 0) - $prevYearAmount;
+                                                    @foreach($financialReportData['chartAccountsEquitys'] as $mainGroupName => $mainGroup)
+                                                    @php
+                                                    $prevMainGroup = $previousYearData['chartAccountsEquitys'][$mainGroupName] ?? null;
+                                                    $prevMainGroupTotal = $prevMainGroup['total'] ?? 0;
+                                                    $currentMainGroupTotal = $mainGroup['total'] ?? 0;
                                                     @endphp
-                                                    <tr class="account-row">
-                                                        <td>
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountEquity['account_id'])) }}"
-                                                                class="text-decoration-none text-dark fw-medium">
-                                                                <i class="bx bx-chevron-right me-1 text-dark"></i>
-                                                                {{ $chartAccountEquity['account'] }}
-                                                            </a>
+                                                    @if($currentMainGroupTotal != 0 || $prevMainGroupTotal != 0)
+                                                    @php
+                                                    $mainGroupId = 'equity-' . Str::slug($mainGroupName);
+                                                    $mainGroupChange = $currentMainGroupTotal - $prevMainGroupTotal;
+                                                    @endphp
+                                                    <tr class="table-primary parent-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $mainGroupId }}" aria-expanded="true">
+                                                        <td class="fw-bold text-dark">
+                                                            <i class="bx bx-chevron-down me-1 transition-icon"></i>
+                                                            <i class="bx bx-folder me-1"></i>{{ $mainGroupName }}
                                                         </td>
-                                                        <td class="text-end">
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountEquity['account_id'])) }}"
-                                                                class="text-decoration-none fw-bold text-dark">
-                                                                {{ number_format(abs($chartAccountEquity['sum'] ?? 0),2) }}
-                                                            </a>
-                                                        </td>
-                                                        <td class="text-end text-dark">
-                                                            {{ number_format($prevYearAmount,2) }}
-                                                        </td>
-                                                        <td class="text-end">
-                                                                {{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($currentMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($prevMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">
+                                                            {{ $mainGroupChange >= 0 ? '+' : '' }}{{ number_format($mainGroupChange, 2) }}
                                                         </td>
                                                     </tr>
+                                                    @if(isset($mainGroup['fslis']))
+                                                    @foreach($mainGroup['fslis'] as $fsliName => $fsli)
+                                                    @php
+                                                    $prevFsli = $prevMainGroup['fslis'][$fsliName] ?? null;
+                                                    $prevFsliTotal = $prevFsli['total'] ?? 0;
+                                                    $currentFsliTotal = $fsli['total'] ?? 0;
+                                                    @endphp
+                                                    @if($currentFsliTotal != 0 || $prevFsliTotal != 0)
+                                                    @php
+                                                    $fsliId = 'fsli-equity-' . Str::slug($fsliName);
+                                                    $fsliChange = $currentFsliTotal - $prevFsliTotal;
+                                                    @endphp
+                                                    <tr class="table-light collapse show {{ $mainGroupId }} fsli-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $fsliId }}" aria-expanded="false">
+                                                        <td class="ps-4 fw-medium text-dark">
+                                                            <i class="bx bx-chevron-right me-1 transition-icon"></i>
+                                                            {{ $fsliName }}
+                                                        </td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($currentFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($prevFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">
+                                                            {{ $fsliChange >= 0 ? '+' : '' }}{{ number_format($fsliChange, 2) }}
+                                                        </td>
+                                                    </tr>
+                                                    @if(isset($fsli['accounts']))
+                                                    @foreach($fsli['accounts'] as $chartAccountEquity)
+                                                    @include('partials.dashboard-account-row', [
+                                                    'account' => $chartAccountEquity,
+                                                    'mainGroupName' => $mainGroupName,
+                                                    'fsliName' => $fsliName,
+                                                    'fsliId' => $fsliId,
+                                                    'previousYearData' => $previousYearData['chartAccountsEquitys'],
+                                                    'depth' => 0
+                                                    ])
+                                                    @endforeach
+                                                    @endif
                                                     @endif
                                                     @endforeach
                                                     @endif
+                                                    @endif
                                                     @endforeach
+                                                    @php
+                                                    $sumEquity = collect($financialReportData['chartAccountsEquitys'])->sum('total');
+                                                    $sumEquityPrev = collect($previousYearData['chartAccountsEquitys'])->sum('total');
+                                                    @endphp
                                                     <tr class="table-info">
-                                                        <td>Profit And Loss</td>
-                                                        <td class="text-end fw-bold">{{ number_format($financialReportData['profitLoss'],2) }}</td>
+                                                        <td>Profit And Loss (YTD)</td>
+                                                        <td class="text-end fw-bold">{{ number_format($cumulativeProfitLoss ?? 0,2) }}</td>
                                                         <td class="text-end text-dark">{{ number_format($previousYearData['profitLoss'],2) }}</td>
                                                         <td class="text-end">
-                                                            @php $profitChange = $financialReportData['profitLoss'] - $previousYearData['profitLoss']; @endphp
-                                                                {{ $profitChange >= 0 ? '+' : '' }}{{ number_format($profitChange,2) }}
+                                                            @php $profitChange = ($cumulativeProfitLoss ?? 0) - $previousYearData['profitLoss']; @endphp
+                                                            {{ $profitChange >= 0 ? '+' : '' }}{{ number_format($profitChange,2) }}
                                                         </td>
                                                     </tr>
                                                     <tr class="table-secondary fw-bold">
                                                         <td>TOTAL EQUITY</td>
-                                                        <td class="text-end">{{ number_format($sumEquity + $financialReportData['profitLoss'],2) }}</td>
+                                                        <td class="text-end">{{ number_format($sumEquity + ($cumulativeProfitLoss ?? 0),2) }}</td>
                                                         <td class="text-end">{{ number_format($sumEquityPrev + $previousYearData['profitLoss'],2) }}</td>
                                                         <td class="text-end">
-                                                            @php $equityChange = ($sumEquity + $financialReportData['profitLoss']) - ($sumEquityPrev + $previousYearData['profitLoss']); @endphp
-                                                                {{ $equityChange >= 0 ? '+' : '' }}{{ number_format($equityChange,2) }}
+                                                            @php $equityChange = ($sumEquity + ($cumulativeProfitLoss ?? 0)) - ($sumEquityPrev + $previousYearData['profitLoss']); @endphp
+                                                            {{ $equityChange >= 0 ? '+' : '' }}{{ number_format($equityChange,2) }}
                                                         </td>
                                                     </tr>
                                                 </tbody>
@@ -812,7 +888,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                             <h6 class="mb-0 text-dark"><i class="bx bx-trending-down me-1"></i>LIABILITIES</h6>
                                         </div>
                                         <div class="table-responsive">
-                                            <table class="table table-sm mb-0">
+                                            <table class="table table-sm mb-0 table-hover" id="liabilities-table">
                                                 <thead class="table-light">
                                                     <tr>
                                                         <th>Account</th>
@@ -822,64 +898,88 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    @php $sumLiability = 0; $sumLiabilityPrev = 0; @endphp
-                                                    @foreach($financialReportData['chartAccountsLiabilities'] as $groupName => $accounts)
-                                                    @php $groupTotal = collect($accounts)->sum(fn($account) => $account['sum'] ?? 0); @endphp
-                                                    @if($groupTotal != 0)
-                                                    <tr class="table-secondary">
-                                                        <td colspan="4" class="fw-bold text-dark">{{ $groupName }}</td>
-                                                    </tr>
-                                                    @foreach($accounts as $chartAccountLiability)
-                                                    @if($chartAccountLiability['sum'] != 0)
-                                                    @php 
-                                                        $sumLiability += abs($chartAccountLiability['sum'] ?? 0);
-                                                        $prevYearAccount = collect($previousYearData['chartAccountsLiabilities'][$groupName] ?? [])->firstWhere('account_id', $chartAccountLiability['account_id']);
-                                                        $prevYearAmount = abs($prevYearAccount['sum'] ?? 0);
-                                                        $sumLiabilityPrev += $prevYearAmount;
-                                                        $change = abs($chartAccountLiability['sum'] ?? 0) - $prevYearAmount;
+                                                    @foreach($financialReportData['chartAccountsLiabilities'] as $mainGroupName => $mainGroup)
+                                                    @php
+                                                    $prevMainGroup = $previousYearData['chartAccountsLiabilities'][$mainGroupName] ?? null;
+                                                    $prevMainGroupTotal = $prevMainGroup['total'] ?? 0;
+                                                    $currentMainGroupTotal = $mainGroup['total'] ?? 0;
                                                     @endphp
-                                                    <tr class="account-row">
-                                                        <td>
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountLiability['account_id'])) }}"
-                                                                class="text-decoration-none text-dark fw-medium">
-                                                                <i class="bx bx-chevron-right me-1 text-dark"></i>
-                                                                {{ $chartAccountLiability['account'] }}
-                                                            </a>
+                                                    @if($currentMainGroupTotal != 0 || $prevMainGroupTotal != 0)
+                                                    @php
+                                                    $mainGroupId = 'liability-' . Str::slug($mainGroupName);
+                                                    $mainGroupChange = $currentMainGroupTotal - $prevMainGroupTotal;
+                                                    @endphp
+                                                    <tr class="table-primary parent-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $mainGroupId }}" aria-expanded="true">
+                                                        <td class="fw-bold text-dark">
+                                                            <i class="bx bx-chevron-down me-1 transition-icon"></i>
+                                                            <i class="bx bx-folder me-1"></i>{{ $mainGroupName }}
                                                         </td>
-                                                        <td class="text-end">
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountLiability['account_id'])) }}"
-                                                                class="text-decoration-none fw-bold text-dark">
-                                                                {{ number_format(abs($chartAccountLiability['sum'] ?? 0),2) }}
-                                                            </a>
-                                                        </td>
-                                                        <td class="text-end text-dark">
-                                                            {{ number_format($prevYearAmount,2) }}
-                                                        </td>
-                                                        <td class="text-end">
-                                                                {{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($currentMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($prevMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">
+                                                            {{ $mainGroupChange >= 0 ? '+' : '' }}{{ number_format($mainGroupChange, 2) }}
                                                         </td>
                                                     </tr>
+                                                    @if(isset($mainGroup['fslis']))
+                                                    @foreach($mainGroup['fslis'] as $fsliName => $fsli)
+                                                    @php
+                                                    $prevFsli = $prevMainGroup['fslis'][$fsliName] ?? null;
+                                                    $prevFsliTotal = $prevFsli['total'] ?? 0;
+                                                    $currentFsliTotal = $fsli['total'] ?? 0;
+                                                    @endphp
+                                                    @if($currentFsliTotal != 0 || $prevFsliTotal != 0)
+                                                    @php
+                                                    $fsliId = 'fsli-liability-' . Str::slug($fsliName);
+                                                    $fsliChange = $currentFsliTotal - $prevFsliTotal;
+                                                    @endphp
+                                                    <tr class="table-light collapse show {{ $mainGroupId }} fsli-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $fsliId }}" aria-expanded="false">
+                                                        <td class="ps-4 fw-medium text-dark">
+                                                            <i class="bx bx-chevron-right me-1 transition-icon"></i>
+                                                            {{ $fsliName }}
+                                                        </td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($currentFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($prevFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">
+                                                            {{ $fsliChange >= 0 ? '+' : '' }}{{ number_format($fsliChange, 2) }}
+                                                        </td>
+                                                    </tr>
+                                                    @if(isset($fsli['accounts']))
+                                                    @foreach($fsli['accounts'] as $chartAccountLiability)
+                                                    @include('partials.dashboard-account-row', [
+                                                    'account' => $chartAccountLiability,
+                                                    'mainGroupName' => $mainGroupName,
+                                                    'fsliName' => $fsliName,
+                                                    'fsliId' => $fsliId,
+                                                    'previousYearData' => $previousYearData['chartAccountsLiabilities'],
+                                                    'depth' => 0
+                                                    ])
+                                                    @endforeach
+                                                    @endif
                                                     @endif
                                                     @endforeach
                                                     @endif
+                                                    @endif
                                                     @endforeach
+                                                    @php
+                                                    $sumLiability = collect($financialReportData['chartAccountsLiabilities'])->sum('total');
+                                                    $sumLiabilityPrev = collect($previousYearData['chartAccountsLiabilities'])->sum('total');
+                                                    @endphp
                                                     <tr class="fw-bold">
                                                         <td>TOTAL LIABILITIES</td>
                                                         <td class="text-end">{{ number_format($sumLiability,2) }}</td>
-                                                        <td class="text-end">{{ number_format($sumLiabilityPrev,2) }}</td>
+                                                        <td class="text-end">{{ number_format($sumLiabilityPrev, 2) }}</td>
                                                         <td class="text-end">
                                                             @php $liabilityChange = $sumLiability - $sumLiabilityPrev; @endphp
-                                                                {{ $liabilityChange >= 0 ? '+' : '' }}{{ number_format($liabilityChange,2) }}
+                                                            {{ $liabilityChange >= 0 ? '+' : '' }}{{ number_format(abs($liabilityChange),2) }}
                                                         </td>
                                                     </tr>
                                                     <tr class="table-secondary fw-bold">
                                                         <td>TOTAL EQUITY & LIABILITY</td>
-                                                        <td class="text-end">{{ number_format($sumLiability + $sumEquity + $financialReportData['profitLoss'],2) }}</td>
+                                                        <td class="text-end">{{ number_format($sumLiability + $sumEquity + ($cumulativeProfitLoss ?? 0),2) }}</td>
                                                         <td class="text-end">{{ number_format($sumLiabilityPrev + $sumEquityPrev + $previousYearData['profitLoss'],2) }}</td>
                                                         <td class="text-end">
-                                                            @php $totalChange = ($sumLiability + $sumEquity + $financialReportData['profitLoss']) - ($sumLiabilityPrev + $sumEquityPrev + $previousYearData['profitLoss']); @endphp
-
-                                                                {{ $totalChange >= 0 ? '+' : '' }}{{ number_format($totalChange,2) }}
+                                                            @php $totalChange = ($sumLiability + $sumEquity + ($cumulativeProfitLoss ?? 0)) - ($sumLiabilityPrev + $sumEquityPrev + $previousYearData['profitLoss']); @endphp
+                                                            {{ $totalChange >= 0 ? '+' : '' }}{{ number_format($totalChange,2) }}
 
                                                         </td>
                                                     </tr>
@@ -914,45 +1014,66 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    @php $sumRevenue = 0; $sumRevenuePrev = 0; @endphp
-                                                    @foreach($financialReportData['chartAccountsRevenues'] as $groupName => $accounts)
-                                                    @php $groupTotal = collect($accounts)->sum('sum'); @endphp
-                                                    @if($groupTotal != 0)
-                                                    <tr>
-                                                        <td colspan="4" class="fw-bold text-dark">{{ $groupName }}</td>
-                                                    </tr>
-                                                    @foreach($accounts as $chartAccountRevenue)
-                                                    @if($chartAccountRevenue['sum'] != 0)
-                                                    @php 
-                                                        $sumRevenue += $chartAccountRevenue['sum'];
-                                                        $prevYearAccount = collect($previousYearData['chartAccountsRevenues'][$groupName] ?? [])->firstWhere('account_id', $chartAccountRevenue['account_id']);
-                                                        $prevYearAmount = $prevYearAccount['sum'] ?? 0;
-                                                        $sumRevenuePrev += $prevYearAmount;
-                                                        $change = $chartAccountRevenue['sum'] - $prevYearAmount;
+                                                    @php
+                                                    $sumRevenue = collect($financialReportData['chartAccountsRevenues'])->sum('total');
+                                                    $sumRevenuePrev = collect($previousYearData['chartAccountsRevenues'])->sum('total');
                                                     @endphp
-                                                    <tr class="account-row">
-                                                        <td>
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountRevenue['account_id'])) }}"
-                                                                class="text-decoration-none text-dark fw-medium">
-                                                                <i class="bx bx-chevron-right me-1 text-dark"></i>
-                                                                {{ $chartAccountRevenue['account'] }}
-                                                            </a>
+                                                    @foreach($financialReportData['chartAccountsRevenues'] as $mainGroupName => $mainGroup)
+                                                    @php
+                                                    $prevMainGroup = $previousYearData['chartAccountsRevenues'][$mainGroupName] ?? null;
+                                                    $prevMainGroupTotal = $prevMainGroup['total'] ?? 0;
+                                                    $currentMainGroupTotal = $mainGroup['total'] ?? 0;
+                                                    @endphp
+                                                    @if($currentMainGroupTotal != 0 || $prevMainGroupTotal != 0)
+                                                    @php
+                                                    $mainGroupId = 'income-' . Str::slug($mainGroupName);
+                                                    $mainGroupChange = $currentMainGroupTotal - $prevMainGroupTotal;
+                                                    @endphp
+                                                    <tr class="table-primary parent-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $mainGroupId }}" aria-expanded="true">
+                                                        <td class="fw-bold text-dark">
+                                                            <i class="bx bx-chevron-down me-1 transition-icon"></i>
+                                                            <i class="bx bx-folder me-1"></i>{{ $mainGroupName }}
                                                         </td>
-                                                        <td class="text-end">
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountRevenue['account_id'])) }}"
-                                                                class="text-decoration-none fw-bold text-dark">
-                                                                {{ number_format($chartAccountRevenue['sum'],2) }}
-                                                            </a>
-                                                        </td>
-                                                        <td class="text-end text-dark">
-                                                            {{ number_format($prevYearAmount,2) }}
-                                                        </td>
-                                                        <td class="text-end">
-
-                                                                {{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}
-                                                           
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($currentMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($prevMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">
+                                                            {{ $mainGroupChange >= 0 ? '+' : '' }}{{ number_format($mainGroupChange, 2) }}
                                                         </td>
                                                     </tr>
+                                                    @foreach($mainGroup['fslis'] as $fsliName => $fsli)
+                                                    @php
+                                                    $prevFsli = $prevMainGroup['fslis'][$fsliName] ?? null;
+                                                    $prevFsliTotal = $prevFsli['total'] ?? 0;
+                                                    $currentFsliTotal = $fsli['total'] ?? 0;
+                                                    @endphp
+                                                    @if($currentFsliTotal != 0 || $prevFsliTotal != 0)
+                                                    @php
+                                                    $fsliId = 'fsli-income-' . Str::slug($fsliName);
+                                                    $fsliChange = $currentFsliTotal - $prevFsliTotal;
+                                                    @endphp
+                                                    <tr class="table-light collapse show {{ $mainGroupId }} fsli-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $fsliId }}" aria-expanded="false">
+                                                        <td class="ps-4 fw-medium text-dark">
+                                                            <i class="bx bx-chevron-right me-1 transition-icon"></i>
+                                                            {{ $fsliName }}
+                                                        </td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($currentFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($prevFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">
+                                                            {{ $fsliChange >= 0 ? '+' : '' }}{{ number_format($fsliChange, 2) }}
+                                                        </td>
+                                                    </tr>
+                                                    @if(isset($fsli['accounts']))
+                                                    @foreach($fsli['accounts'] as $chartAccountRevenue)
+                                                    @include('partials.dashboard-account-row', [
+                                                    'account' => $chartAccountRevenue,
+                                                    'mainGroupName' => $mainGroupName,
+                                                    'fsliName' => $fsliName,
+                                                    'fsliId' => $fsliId,
+                                                    'previousYearData' => $previousYearData['chartAccountsRevenues'],
+                                                    'depth' => 0
+                                                    ])
+                                                    @endforeach
+                                                    @endif
                                                     @endif
                                                     @endforeach
                                                     @endif
@@ -964,7 +1085,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                                         <td class="text-end">
                                                             @php $revenueChange = $sumRevenue - $sumRevenuePrev; @endphp
 
-                                                                {{ $revenueChange >= 0 ? '+' : '' }}{{ number_format($revenueChange,2) }}
+                                                            {{ $revenueChange >= 0 ? '+' : '' }}{{ number_format($revenueChange,2) }}
 
                                                         </td>
                                                     </tr>
@@ -987,45 +1108,67 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    @php $sumExpense = 0; $sumExpensePrev = 0; @endphp
-                                                    @foreach($financialReportData['chartAccountsExpense'] as $groupName => $accounts)
-                                                    @php $groupTotal = collect($accounts)->sum('sum'); @endphp
-                                                    @if($groupTotal != 0)
-                                                    <tr class="table-light">
-                                                        <td colspan="4" class="fw-bold text-dark">{{ $groupName }}</td>
-                                                    </tr>
-                                                    @foreach($accounts as $chartAccountExpense)
-                                                    @if($chartAccountExpense['sum'] != 0)
-                                                    @php 
-                                                        $sumExpense += abs($chartAccountExpense['sum']);
-                                                        $prevYearAccount = collect($previousYearData['chartAccountsExpense'][$groupName] ?? [])->firstWhere('account_id', $chartAccountExpense['account_id']);
-                                                        $prevYearAmount = abs($prevYearAccount['sum'] ?? 0);
-                                                        $sumExpensePrev += $prevYearAmount;
-                                                        $change = abs($chartAccountExpense['sum']) - $prevYearAmount;
+                                                    @php
+                                                    $sumExpense = collect($financialReportData['chartAccountsExpense'])->sum('total');
+                                                    $sumExpensePrev = collect($previousYearData['chartAccountsExpense'])->sum('total');
                                                     @endphp
-                                                    <tr class="account-row">
-                                                        <td>
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountExpense['account_id'])) }}"
-                                                                class="text-decoration-none text-dark fw-medium">
-                                                                <i class="bx bx-chevron-right me-1 text-dark"></i>
-                                                                {{ $chartAccountExpense['account'] }}
-                                                            </a>
+                                                    @foreach($financialReportData['chartAccountsExpense'] as $mainGroupName => $mainGroup)
+                                                    @php
+                                                    $prevMainGroup = $previousYearData['chartAccountsExpense'][$mainGroupName] ?? null;
+                                                    $prevMainGroupTotal = $prevMainGroup['total'] ?? 0;
+                                                    $currentMainGroupTotal = $mainGroup['total'] ?? 0;
+                                                    @endphp
+                                                    @if($currentMainGroupTotal != 0 || $prevMainGroupTotal != 0)
+                                                    @php
+                                                    $mainGroupId = 'expense-' . Str::slug($mainGroupName);
+                                                    $mainGroupChange = $currentMainGroupTotal - $prevMainGroupTotal;
+                                                    @endphp
+                                                    <tr class="table-primary parent-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $mainGroupId }}" aria-expanded="true">
+                                                        <td class="fw-bold text-dark">
+                                                            <i class="bx bx-chevron-down me-1 transition-icon"></i>
+                                                            <i class="bx bx-folder me-1"></i>{{ $mainGroupName }}
                                                         </td>
-                                                        <td class="text-end">
-                                                            <a href="{{ route('accounting.transactions.doubleEntries', Hashids::encode($chartAccountExpense['account_id'])) }}"
-                                                                class="text-decoration-none fw-bold text-dark">
-                                                                {{ number_format(abs($chartAccountExpense['sum']),2) }}
-                                                            </a>
-                                                        </td>
-                                                        <td class="text-end text-dark">
-                                                            {{ number_format($prevYearAmount,2) }}
-                                                        </td>
-                                                        <td class="text-end">
-
-                                                                {{ $change >= 0 ? '+' : '' }}{{ number_format($change,2) }}
-                                                        
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($currentMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">{{ number_format($prevMainGroupTotal, 2) }}</td>
+                                                        <td class="text-end fw-bold text-dark">
+                                                            {{ $mainGroupChange >= 0 ? '+' : '' }}{{ number_format($mainGroupChange, 2) }}
                                                         </td>
                                                     </tr>
+                                                    @foreach($mainGroup['fslis'] as $fsliName => $fsli)
+                                                    @php
+                                                    $prevFsli = $prevMainGroup['fslis'][$fsliName] ?? null;
+                                                    $prevFsliTotal = $prevFsli['total'] ?? 0;
+                                                    $currentFsliTotal = $fsli['total'] ?? 0;
+                                                    @endphp
+                                                    @if($currentFsliTotal != 0 || $prevFsliTotal != 0)
+                                                    @php
+                                                    $fsliId = 'fsli-expense-' . Str::slug($fsliName);
+                                                    $fsliChange = $currentFsliTotal - $prevFsliTotal;
+                                                    @endphp
+                                                    <tr class="table-light collapse show {{ $mainGroupId }} fsli-row clickable" data-bs-toggle="collapse" data-bs-target=".{{ $fsliId }}" aria-expanded="false">
+                                                        <td class="ps-4 fw-medium text-dark">
+                                                            <i class="bx bx-chevron-right me-1 transition-icon"></i>
+                                                            {{ $fsliName }}
+                                                        </td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($currentFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">{{ number_format($prevFsliTotal, 2) }}</td>
+                                                        <td class="text-end fw-medium text-dark">
+                                                            {{ $fsliChange >= 0 ? '+' : '' }}{{ number_format($fsliChange, 2) }}
+                                                        </td>
+                                                    </tr>
+                                                    @if(isset($fsli['accounts']))
+                                                    @foreach($fsli['accounts'] as $chartAccountExpense)
+                                                    @include('partials.dashboard-account-row', [
+                                                    'account' => $chartAccountExpense,
+                                                    'mainGroupName' => $mainGroupName,
+                                                    'fsliName' => $fsliName,
+                                                    'fsliId' => $fsliId,
+                                                    'parentClasses' => $mainGroupId,
+                                                    'previousYearData' => $previousYearData['chartAccountsExpense'],
+                                                    'depth' => 0
+                                                    ])
+                                                    @endforeach
+                                                    @endif
                                                     @endif
                                                     @endforeach
                                                     @endif
@@ -1037,7 +1180,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                                         <td class="text-end">
                                                             @php $expenseChange = $sumExpense - $sumExpensePrev; @endphp
 
-                                                                {{ $expenseChange >= 0 ? '+' : '' }}{{ number_format($expenseChange,2) }}
+                                                            {{ $expenseChange >= 0 ? '+' : '' }}{{ number_format($expenseChange,2) }}
 
                                                         </td>
                                                     </tr>
@@ -1048,7 +1191,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                                         <td class="text-end">
                                                             @php $netProfitChange = ($sumRevenue - $sumExpense) - ($sumRevenuePrev - $sumExpensePrev); @endphp
 
-                                                                {{ $netProfitChange >= 0 ? '+' : '' }}{{ number_format($netProfitChange,2) }}
+                                                            {{ $netProfitChange >= 0 ? '+' : '' }}{{ number_format($netProfitChange,2) }}
 
                                                         </td>
                                                     </tr>
@@ -1192,7 +1335,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                 <select class="form-select" id="branch_id" name="branch_id" required>
                                     <option value="all">All Branches</option>
                                     @foreach(App\Models\Branch::all() as $branch)
-                                        <option value="{{ $branch->id }}">{{ $branch->name }}</option>
+                                    <option value="{{ $branch->id }}">{{ $branch->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -1229,104 +1372,108 @@ use Vinkla\Hashids\Facades\Hashids;
         @push('scripts')
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script>
-        // Character counter for bulk SMS
-        function updateBulkCharacterCount() {
-            const bulkMessageContent = document.getElementById('bulk_message_content');
-            const bulkCharacterCount = document.getElementById('bulk_character_count');
-            const count = bulkMessageContent.value.length;
-            bulkCharacterCount.textContent = count;
-            if (count > 500) {
-                bulkCharacterCount.style.color = 'red';
-            } else if (count > 450) {
-                bulkCharacterCount.style.color = 'orange';
-            } else {
-                bulkCharacterCount.style.color = 'green';
+            // Character counter for bulk SMS
+            function updateBulkCharacterCount() {
+                const bulkMessageContent = document.getElementById('bulk_message_content');
+                const bulkCharacterCount = document.getElementById('bulk_character_count');
+                const count = bulkMessageContent.value.length;
+                bulkCharacterCount.textContent = count;
+                if (count > 500) {
+                    bulkCharacterCount.style.color = 'red';
+                } else if (count > 450) {
+                    bulkCharacterCount.style.color = 'orange';
+                } else {
+                    bulkCharacterCount.style.color = 'green';
+                }
             }
-        }
-        document.getElementById('bulk_message_content').addEventListener('input', updateBulkCharacterCount);
+            document.getElementById('bulk_message_content').addEventListener('input', updateBulkCharacterCount);
 
-        // Bulk SMS form submission
-        const bulkSmsForm = document.getElementById('bulkSmsForm');
-        bulkSmsForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const sendBtn = document.getElementById('sendBulkSmsBtn');
-            const originalText = sendBtn.innerHTML;
-            const modal = document.getElementById('bulkSmsModal');
-            const formElements = modal.querySelectorAll('input, textarea, select, button');
-            const closeBtn = modal.querySelector('.btn-close');
-            // Show loading state and disable all form elements
-            sendBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Sending...';
-            sendBtn.disabled = true;
-            formElements.forEach(element => { element.disabled = true; });
-            if (closeBtn) closeBtn.disabled = true;
-            const modalBody = modal.querySelector('.modal-body');
-            modalBody.style.opacity = '0.7';
-            // Submit the form via AJAX
-            fetch(this.action, {
-                method: 'POST',
-                body: new FormData(this),
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                let responseMsg = '';
-                if (typeof data.response === 'string') {
-                    try {
-                        const parsed = JSON.parse(data.response);
-                        responseMsg = parsed.message || data.message || '';
-                    } catch (e) {
-                        responseMsg = data.response || data.message || '';
-                    }
-                } else if (typeof data.response === 'object' && data.response !== null) {
-                    responseMsg = data.response.message || data.message || '';
-                } else {
-                    responseMsg = data.message || '';
-                }
-                if (data.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Bulk SMS Sent!',
-                        html: `<div><b>${responseMsg}</b></div>`,
-                        confirmButtonColor: '#28a745',
-                        timer: 3000,
-                        timerProgressBar: true,
-                        showConfirmButton: true
-                    });
-                    bulkSmsForm.reset();
-                    updateBulkCharacterCount();
-                    const modalInstance = bootstrap.Modal.getInstance(modal);
-                    modalInstance.hide();
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Failed to Send Bulk SMS',
-                        text: responseMsg || 'Unknown error occurred',
-                        confirmButtonColor: '#dc3545',
-                        footer: 'Please try again or contact support if the problem persists.'
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Connection Error',
-                    text: 'Failed to send bulk SMS due to connection issues.',
-                    confirmButtonColor: '#dc3545',
-                    footer: 'Please check your internet connection and try again.'
+            // Bulk SMS form submission
+            const bulkSmsForm = document.getElementById('bulkSmsForm');
+            bulkSmsForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const sendBtn = document.getElementById('sendBulkSmsBtn');
+                const originalText = sendBtn.innerHTML;
+                const modal = document.getElementById('bulkSmsModal');
+                const formElements = modal.querySelectorAll('input, textarea, select, button');
+                const closeBtn = modal.querySelector('.btn-close');
+                // Show loading state and disable all form elements
+                sendBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Sending...';
+                sendBtn.disabled = true;
+                formElements.forEach(element => {
+                    element.disabled = true;
                 });
-            })
-            .finally(() => {
-                sendBtn.innerHTML = originalText;
-                sendBtn.disabled = false;
-                formElements.forEach(element => { element.disabled = false; });
-                if (closeBtn) closeBtn.disabled = false;
-                modalBody.style.opacity = '1';
+                if (closeBtn) closeBtn.disabled = true;
+                const modalBody = modal.querySelector('.modal-body');
+                modalBody.style.opacity = '0.7';
+                // Submit the form via AJAX
+                fetch(this.action, {
+                        method: 'POST',
+                        body: new FormData(this),
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        let responseMsg = '';
+                        if (typeof data.response === 'string') {
+                            try {
+                                const parsed = JSON.parse(data.response);
+                                responseMsg = parsed.message || data.message || '';
+                            } catch (e) {
+                                responseMsg = data.response || data.message || '';
+                            }
+                        } else if (typeof data.response === 'object' && data.response !== null) {
+                            responseMsg = data.response.message || data.message || '';
+                        } else {
+                            responseMsg = data.message || '';
+                        }
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Bulk SMS Sent!',
+                                html: `<div><b>${responseMsg}</b></div>`,
+                                confirmButtonColor: '#28a745',
+                                timer: 3000,
+                                timerProgressBar: true,
+                                showConfirmButton: true
+                            });
+                            bulkSmsForm.reset();
+                            updateBulkCharacterCount();
+                            const modalInstance = bootstrap.Modal.getInstance(modal);
+                            modalInstance.hide();
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Failed to Send Bulk SMS',
+                                text: responseMsg || 'Unknown error occurred',
+                                confirmButtonColor: '#dc3545',
+                                footer: 'Please try again or contact support if the problem persists.'
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Connection Error',
+                            text: 'Failed to send bulk SMS due to connection issues.',
+                            confirmButtonColor: '#dc3545',
+                            footer: 'Please check your internet connection and try again.'
+                        });
+                    })
+                    .finally(() => {
+                        sendBtn.innerHTML = originalText;
+                        sendBtn.disabled = false;
+                        formElements.forEach(element => {
+                            element.disabled = false;
+                        });
+                        if (closeBtn) closeBtn.disabled = false;
+                        modalBody.style.opacity = '1';
+                    });
             });
-        });
         </script>
         @endpush
     </div>

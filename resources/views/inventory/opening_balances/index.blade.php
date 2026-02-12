@@ -74,7 +74,7 @@
                                     </div>
                                 </div>
                                 <div class="modal-footer d-flex justify-content-between align-items-center w-100">
-                                    <a href="{{ route('inventory.opening-balances.template') }}" class="btn btn-outline-secondary">
+                                    <a href="{{ route('inventory.opening-balances.download-template') }}" class="btn btn-outline-secondary">
                                         <i class="bx bx-download me-1"></i> Download Sample
                                     </a>
                                     <div>

@@ -135,8 +135,8 @@ class ShareTransferController extends Controller
             ->orderBy('account_number')
             ->get();
 
-        // Get bank accounts (for fee payment)
-        $bankAccounts = BankAccount::orderBy('name')->get();
+        // Get bank accounts (for fee payment, branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         // Get journal references
         $user = auth()->user();
@@ -398,8 +398,8 @@ class ShareTransferController extends Controller
             ->orderBy('account_number')
             ->get();
 
-        // Get bank accounts
-        $bankAccounts = BankAccount::orderBy('name')->get();
+        // Get bank accounts (branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         // Get journal references
         $user = auth()->user();

@@ -319,7 +319,7 @@ class ContributionController extends Controller
         $branchId = $user->branch_id;
 
         $chartAccounts = ChartAccount::all();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
         $journalReferences = \App\Models\JournalReference::where('company_id', $companyId)
             ->where(function ($query) use ($branchId) {
                 $query->where('branch_id', $branchId)
@@ -498,8 +498,9 @@ class ContributionController extends Controller
 
         $customers = $customersQuery->orderBy('name')->get();
 
-        // Get bank accounts
-        $bankAccounts = BankAccount::with('chartAccount')
+        // Get bank accounts filtered by branch
+        $bankAccounts = BankAccount::forCurrentBranch()
+            ->with('chartAccount')
             ->orderBy('name')
             ->get();
 
@@ -641,8 +642,9 @@ class ContributionController extends Controller
             ->orderBy('product_name')
             ->get();
 
-        // Get bank accounts
-        $bankAccounts = BankAccount::with('chartAccount')
+        // Get bank accounts filtered by branch
+        $bankAccounts = BankAccount::forCurrentBranch()
+            ->with('chartAccount')
             ->orderBy('name')
             ->get();
 
@@ -913,8 +915,9 @@ class ContributionController extends Controller
             ->orderBy('name')
             ->get();
 
-        // Get bank accounts
-        $bankAccounts = BankAccount::with('chartAccount')
+        // Get bank accounts filtered by branch
+        $bankAccounts = BankAccount::forCurrentBranch()
+            ->with('chartAccount')
             ->orderBy('name')
             ->get();
 
@@ -1536,7 +1539,7 @@ class ContributionController extends Controller
             ->firstOrFail();
 
         $chartAccounts = ChartAccount::all();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
         $journalReferences = JournalReference::where('company_id', $companyId)
             ->where(function ($query) use ($branchId) {
                 $query->where('branch_id', $branchId)
@@ -1680,8 +1683,9 @@ class ContributionController extends Controller
             ->orderBy('product_name')
             ->get();
 
-        // Get bank accounts
-        $bankAccounts = BankAccount::with('chartAccount')
+        // Get bank accounts (branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()
+            ->with('chartAccount')
             ->orderBy('name')
             ->get();
 

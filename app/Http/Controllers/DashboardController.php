@@ -177,15 +177,25 @@ class DashboardController extends Controller
         }
         $company = $user->company;
         
-        // Get branch filter
-        $selectedBranchId = $request->get('branch_id', $user->branch_id);
-        
         // Get available branches for the filter - only user's assigned branches
         $branches = $user->branches()->where('company_id', $company->id)->get();
         
-        // Get user's assigned branch IDs for filtering
+        // Get user's assigned branch IDs for filtering (fallback to user's branch_id if no branches assigned)
         $userBranchIds = $branches->pluck('id')->toArray();
+        if (empty($userBranchIds) && $user->branch_id) {
+            $userBranchIds = [$user->branch_id];
+            $branches = $company->branches()->whereIn('id', $userBranchIds)->get();
+        }
         
+        // Branch filter: when user has multiple branches, default to "All Branches" to show all assigned branches' data
+        $defaultBranchId = (count($userBranchIds) > 1) ? '' : ($user->branch_id ?? '');
+        $selectedBranchId = $request->get('branch_id', $defaultBranchId);
+        
+        // Ensure user's primary branch is always included in permitted branches
+        if ($user->branch_id && !in_array($user->branch_id, $userBranchIds)) {
+            $userBranchIds[] = $user->branch_id;
+        }
+
         // Get balance sheet data
         $balanceSheetData = $this->getBalanceSheetData($selectedBranchId, $userBranchIds);
         
@@ -195,7 +205,7 @@ class DashboardController extends Controller
         // Get current month
         $currentMonth = now()->format('Y-m');
 
-        // Get recent activities - filter by company through branch and current month
+        // Get recent activities - filter by company through branch (last 90 days for journals)
         $recentJournals = Journal::whereHas('branch', function($query) use ($company) {
             $query->where('company_id', $company->id);
         })->when($selectedBranchId, function($query) use ($selectedBranchId) {
@@ -203,9 +213,9 @@ class DashboardController extends Controller
         }, function($query) use ($userBranchIds) {
             return $query->whereIn('branch_id', $userBranchIds);
         })
-        ->whereRaw("DATE_FORMAT(date, '%Y-%m') = ?", [$currentMonth])
+        ->where('date', '>=', now()->subDays(90))
         ->with(['user', 'branch'])
-        ->latest()
+        ->latest('date')
         ->take(5)
         ->get();
         
@@ -463,26 +473,25 @@ class DashboardController extends Controller
         ));
     }
     
-    private function getBalanceSheetData($selectedBranchId = null, $userBranchIds = [])
+    
+    private function getBalanceSheetData($branchId = null, array $permittedBranchIds = [])
     {
         $company = auth()->user()->company;
         
+        if (!$company) {
+            return [];
+        }
+        
         // Get balance sheet data directly from gl_transactions
+        // Balance sheet shows cumulative balances up to today (no date filter)
+        // This ensures all historical balances are included, including retained earnings from previous years
         $query = DB::table('gl_transactions')
             ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
             ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
             ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
-            ->where('account_class_groups.company_id', $company->id);
-        
-        // Apply branch filter
-        if ($selectedBranchId) {
-            $query->where('gl_transactions.branch_id', $selectedBranchId);
-        } else {
-            // If no specific branch selected, filter by user's assigned branches
-            $query->whereIn('gl_transactions.branch_id', $userBranchIds);
-        }
-        
-        $balanceSheetData = $query
+            ->where('account_class_groups.company_id', $company->id)
+            // Filter to only include transactions up to today
+            ->whereDate('gl_transactions.date', '<=', now()->toDateString())
             ->select(
                 'account_class.name as class_name',
                 'account_class_groups.group_code as class_code',
@@ -490,8 +499,22 @@ class DashboardController extends Controller
                 DB::raw('SUM(CASE WHEN gl_transactions.nature = "credit" THEN gl_transactions.amount ELSE 0 END) as total_credit'),
                 DB::raw('COUNT(DISTINCT chart_accounts.id) as account_count')
             )
-            ->groupBy('account_class.id', 'account_class.name', 'account_class_groups.group_code')
-            ->get()
+            ->groupBy('account_class.id', 'account_class.name', 'account_class_groups.group_code');
+
+        if (!empty($permittedBranchIds)) {
+            $query->whereIn('gl_transactions.branch_id', $permittedBranchIds);
+        }
+        if ($branchId) {
+            $query->where('gl_transactions.branch_id', $branchId);
+        }
+        if (empty($permittedBranchIds) && $company) {
+            $branchIds = \App\Models\Branch::where('company_id', $company->id)->pluck('id')->toArray();
+            if (!empty($branchIds)) {
+                $query->whereIn('gl_transactions.branch_id', $branchIds);
+            }
+        }
+
+        $balanceSheetData = $query->get()
             ->map(function ($item) {
                 // Calculate balance based on account class
                 $balance = 0;
@@ -533,38 +556,129 @@ class DashboardController extends Controller
         return $balanceSheetData;
     }
     
-    private function getFinancialReportData($selectedBranchId = null, $userBranchIds = [])
+    private function getFinancialReportData($branchId = null, array $permittedBranchIds = [], $balanceSheetEndDate = null, $incomeStatementEndDate = null, $incomeStatementStartDate = null)
     {
         $company = auth()->user()->company;
         
-        // Get all chart accounts with their balances grouped by account class
-        $query = DB::table('gl_transactions')
+        // Balance Sheet Query: Cumulative balances up to end date (Assets, Liabilities, Equity)
+        // Balance Sheet accounts carry forward, so we need ALL transactions up to the end date
+        $balanceSheetQuery = DB::table('gl_transactions')
             ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
             ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->leftJoin('main_groups', 'account_class_groups.main_group_id', '=', 'main_groups.id')
             ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
-            ->where('account_class_groups.company_id', $company->id);
+            ->where('account_class_groups.company_id', $company->id)
+            ->whereIn('account_class.name', ['assets', 'liabilities', 'equity']);
         
-        // Apply branch filter
-        if ($selectedBranchId) {
-            $query->where('gl_transactions.branch_id', $selectedBranchId);
-        } else {
-            // If no specific branch selected, filter by user's assigned branches
-            $query->whereIn('gl_transactions.branch_id', $userBranchIds);
+        // Balance Sheet: Filter by end date only (cumulative up to that date)
+        if ($balanceSheetEndDate) {
+            $balanceSheetQuery->where(DB::raw('DATE(gl_transactions.date)'), '<=', $balanceSheetEndDate);
         }
         
-        $chartAccountsData = $query
-            ->select(
+        // Income Statement Query: Period-based (Revenue and Expenses)
+        // Income Statement accounts reset each year, so we need transactions from start to end date
+        $incomeStatementQuery = DB::table('gl_transactions')
+            ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
+            ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->leftJoin('main_groups', 'account_class_groups.main_group_id', '=', 'main_groups.id')
+            ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
+            ->leftJoin('journals', function($join) {
+                $join->on('gl_transactions.transaction_id', '=', 'journals.id')
+                     ->where('gl_transactions.transaction_type', '=', 'journal');
+            })
+            ->where('account_class_groups.company_id', $company->id)
+            ->whereIn('account_class.name', ['income', 'revenue', 'expenses', 'expense']);
+        
+        // Income Statement: Filter by date range (YTD: from year start to end date)
+        if ($incomeStatementStartDate && $incomeStatementEndDate) {
+            $incomeStatementQuery->whereBetween(DB::raw('DATE(gl_transactions.date)'), [$incomeStatementStartDate, $incomeStatementEndDate])
+                  // Exclude year-end closing entries from income statement calculations
+                  ->where(function($q) {
+                      $q->whereNull('journals.reference_type')
+                        ->orWhere('journals.reference_type', '!=', 'Year-End Close');
+                  });
+        } elseif ($incomeStatementEndDate) {
+            $incomeStatementQuery->where(DB::raw('DATE(gl_transactions.date)'), '<=', $incomeStatementEndDate);
+        }
+        
+        // Common select and group by
+        $selectFields = [
                 'chart_accounts.id as account_id',
                 'chart_accounts.account_name as account',
+                'chart_accounts.account_code',
+                'chart_accounts.parent_id',
                 'account_class.name as class_name',
-                'account_class_groups.name as group_name',
+                'account_class_groups.id as fsli_id',
+                'account_class_groups.name as fsli_name',
+                'main_groups.id as main_group_id',
+                'main_groups.name as main_group_name',
                 DB::raw('SUM(CASE WHEN gl_transactions.nature = "debit" THEN gl_transactions.amount ELSE 0 END) as debit_total'),
                 DB::raw('SUM(CASE WHEN gl_transactions.nature = "credit" THEN gl_transactions.amount ELSE 0 END) as credit_total')
-            )
-            ->groupBy('chart_accounts.id', 'chart_accounts.account_name', 'account_class.name', 'account_class_groups.name')
+        ];
+        
+        $groupByFields = [
+            'chart_accounts.id', 'chart_accounts.account_name', 'chart_accounts.account_code', 'chart_accounts.parent_id',
+                     'account_class.name', 'account_class_groups.id', 'account_class_groups.name',
+            'main_groups.id', 'main_groups.name'
+        ];
+
+        // Apply branch filters (fallback to all company branches when user has none assigned)
+        $effectiveBranchIds = $permittedBranchIds;
+        if (empty($effectiveBranchIds) && $company) {
+            $effectiveBranchIds = \App\Models\Branch::where('company_id', $company->id)->pluck('id')->toArray();
+        }
+        if (!empty($effectiveBranchIds)) {
+            $balanceSheetQuery->whereIn('gl_transactions.branch_id', $effectiveBranchIds);
+            $incomeStatementQuery->whereIn('gl_transactions.branch_id', $effectiveBranchIds);
+        }
+        if ($branchId) {
+            $balanceSheetQuery->where('gl_transactions.branch_id', $branchId);
+            $incomeStatementQuery->where('gl_transactions.branch_id', $branchId);
+        }
+
+        // Execute queries
+        $balanceSheetData = (clone $balanceSheetQuery)
+            ->select($selectFields)
+            ->groupBy($groupByFields)
             ->get();
-            
-        // Group by account class and calculate balances
+        
+        $incomeStatementData = (clone $incomeStatementQuery)
+            ->select($selectFields)
+            ->groupBy($groupByFields)
+            ->get();
+        
+        // Fetch ALL accounts for this company to ensure parent accounts are included even if they have no transactions
+        $allCompanyAccounts = DB::table('chart_accounts')
+            ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->leftJoin('main_groups', 'account_class_groups.main_group_id', '=', 'main_groups.id')
+            ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
+            ->where('account_class_groups.company_id', $company->id)
+            ->select([
+                'chart_accounts.id as account_id',
+                'chart_accounts.account_name as account',
+                'chart_accounts.account_code',
+                'chart_accounts.parent_id',
+                'account_class.name as class_name',
+                'account_class_groups.id as fsli_id',
+                'account_class_groups.name as fsli_name',
+                'main_groups.id as main_group_id',
+                'main_groups.name as main_group_name',
+            ])
+            ->get()
+            ->keyBy('account_id');
+
+        // Combine transaction data
+        $transactionBalances = $balanceSheetData->merge($incomeStatementData)->keyBy('account_id');
+        
+        // Map balances to the full account list
+        $chartAccountsData = $allCompanyAccounts->map(function ($account) use ($transactionBalances) {
+            $balanceData = $transactionBalances->get($account->account_id);
+            $account->debit_total = $balanceData->debit_total ?? 0;
+            $account->credit_total = $balanceData->credit_total ?? 0;
+            return $account;
+        });
+
+        // Group by account class using hierarchical structure: main_groups -> fslis -> accounts
         $chartAccountsAssets = [];
         $chartAccountsLiabilities = [];
         $chartAccountsEquitys = [];
@@ -575,57 +689,141 @@ class DashboardController extends Controller
             // Calculate balance based on account class
             $balance = 0;
             
+            // Get main group name (fallback to 'Uncategorized' if null)
+            $mainGroupName = $account->main_group_name ?? 'Uncategorized';
+            $fsliName = $account->fsli_name ?? 'Uncategorized';
+            
             // Categorize based on account class
             switch (strtolower($account->class_name)) {
                 case 'assets':
                     $balance = $account->debit_total - $account->credit_total; // Assets: debit increases
-                    $chartAccountsAssets[$account->group_name][] = [
+                    $chartAccountsAssets[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($chartAccountsAssets[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $chartAccountsAssets[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $chartAccountsAssets[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($chartAccountsAssets[$mainGroupName]['total'])) {
+                        $chartAccountsAssets[$mainGroupName]['total'] = 0;
+                    }
+                    $chartAccountsAssets[$mainGroupName]['total'] += $balance;
                     break;
                 case 'liabilities':
                     $balance = $account->credit_total - $account->debit_total; // Liabilities: credit increases
-                    $chartAccountsLiabilities[$account->group_name][] = [
+                    $chartAccountsLiabilities[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($chartAccountsLiabilities[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $chartAccountsLiabilities[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $chartAccountsLiabilities[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($chartAccountsLiabilities[$mainGroupName]['total'])) {
+                        $chartAccountsLiabilities[$mainGroupName]['total'] = 0;
+                    }
+                    $chartAccountsLiabilities[$mainGroupName]['total'] += $balance;
                     break;
                 case 'equity':
                     $balance = $account->credit_total - $account->debit_total; // Equity: credit increases
-                    $chartAccountsEquitys[$account->group_name][] = [
+                    $chartAccountsEquitys[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($chartAccountsEquitys[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $chartAccountsEquitys[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $chartAccountsEquitys[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($chartAccountsEquitys[$mainGroupName]['total'])) {
+                        $chartAccountsEquitys[$mainGroupName]['total'] = 0;
+                    }
+                    $chartAccountsEquitys[$mainGroupName]['total'] += $balance;
                     break;
                 case 'income':
                 case 'revenue':
                     $balance = $account->credit_total - $account->debit_total; // Revenue: credit increases
-                    $chartAccountsRevenues[$account->group_name][] = [
+                    $chartAccountsRevenues[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($chartAccountsRevenues[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $chartAccountsRevenues[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $chartAccountsRevenues[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($chartAccountsRevenues[$mainGroupName]['total'])) {
+                        $chartAccountsRevenues[$mainGroupName]['total'] = 0;
+                    }
+                    $chartAccountsRevenues[$mainGroupName]['total'] += $balance;
                     break;
                 case 'expenses':
                 case 'expense':
                     $balance = $account->debit_total - $account->credit_total; // Expenses: debit increases
-                    $chartAccountsExpense[$account->group_name][] = [
+                    $chartAccountsExpense[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($chartAccountsExpense[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $chartAccountsExpense[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $chartAccountsExpense[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($chartAccountsExpense[$mainGroupName]['total'])) {
+                        $chartAccountsExpense[$mainGroupName]['total'] = 0;
+                    }
+                    $chartAccountsExpense[$mainGroupName]['total'] += $balance;
                     break;
             }
         }
         
-        // Calculate profit/loss
-        $sumRevenue = collect($chartAccountsRevenues)->flatten(1)->sum('sum');
-        $sumExpense = collect($chartAccountsExpense)->flatten(1)->sum('sum');
+        // Calculate profit/loss (sum all main group totals)
+        $sumRevenue = collect($chartAccountsRevenues)->sum(function($mainGroup) {
+            return $mainGroup['total'] ?? 0;
+        });
+        $sumExpense = collect($chartAccountsExpense)->sum(function($mainGroup) {
+            return $mainGroup['total'] ?? 0;
+        });
         $profitLoss = $sumRevenue - $sumExpense;
+
+        // Apply nesting to all categories
+        $categories = [
+            'chartAccountsAssets' => &$chartAccountsAssets,
+            'chartAccountsLiabilities' => &$chartAccountsLiabilities,
+            'chartAccountsEquitys' => &$chartAccountsEquitys,
+            'chartAccountsRevenues' => &$chartAccountsRevenues,
+            'chartAccountsExpense' => &$chartAccountsExpense,
+        ];
+
+        foreach ($categories as $key => &$category) {
+            foreach ($category as $mgName => &$mg) {
+                if (isset($mg['fslis'])) {
+                    foreach ($mg['fslis'] as $fsliName => &$fsli) {
+                        if (isset($fsli['accounts'])) {
+                            $fsli['accounts'] = $this->nestAccounts($fsli['accounts']);
+                        }
+                    }
+                }
+            }
+        }
         
         return [
             'chartAccountsAssets' => $chartAccountsAssets,
@@ -637,102 +835,347 @@ class DashboardController extends Controller
         ];
     }
     
-    private function getPreviousYearData($selectedBranchId = null, $userBranchIds = [])
+    /**
+     * Calculate cumulative profit/loss from ALL income statement transactions up to end date
+     * This is used for Balance Sheet to show accumulated profits from all years
+     * Excludes year-end closing entries
+     */
+    private function getCumulativeProfitLoss($branchId = null, array $permittedBranchIds = [], $endDate = null)
+    {
+        $company = auth()->user()->company;
+        
+        // Query ALL income statement transactions up to end date (cumulative)
+        $query = DB::table('gl_transactions')
+            ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
+            ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
+            ->leftJoin('journals', function($join) {
+                $join->on('gl_transactions.transaction_id', '=', 'journals.id')
+                     ->where('gl_transactions.transaction_type', '=', 'journal');
+            })
+            ->where('account_class_groups.company_id', $company->id)
+            ->whereIn('account_class.name', ['income', 'revenue', 'expenses', 'expense']);
+        
+        // Filter by end date (cumulative up to that date)
+        if ($endDate) {
+            $query->where(DB::raw('DATE(gl_transactions.date)'), '<=', $endDate);
+        }
+        
+        // Exclude year-end closing entries (these zero out accounts, so we don't want them in cumulative calculation)
+        $query->where(function($q) {
+            $q->whereNull('journals.reference_type')
+              ->orWhere('journals.reference_type', '!=', 'Year-End Close');
+        });
+        
+        // Apply branch filters (fallback to all company branches when user has none assigned)
+        $effectiveBranchIds = $permittedBranchIds;
+        if (empty($effectiveBranchIds) && $company) {
+            $effectiveBranchIds = \App\Models\Branch::where('company_id', $company->id)->pluck('id')->toArray();
+        }
+        if (!empty($effectiveBranchIds)) {
+            $query->whereIn('gl_transactions.branch_id', $effectiveBranchIds);
+        }
+        if ($branchId) {
+            $query->where('gl_transactions.branch_id', $branchId);
+        }
+        
+        // Calculate revenue and expenses
+        $revenueRow = (clone $query)
+            ->whereIn('account_class.name', ['income', 'revenue'])
+            ->selectRaw('COALESCE(SUM(CASE WHEN gl_transactions.nature = "credit" THEN gl_transactions.amount ELSE -gl_transactions.amount END), 0) as revenue')
+            ->first();
+        
+        $expenseRow = (clone $query)
+            ->whereIn('account_class.name', ['expenses', 'expense'])
+            ->selectRaw('COALESCE(SUM(CASE WHEN gl_transactions.nature = "debit" THEN gl_transactions.amount ELSE -gl_transactions.amount END), 0) as expense')
+            ->first();
+        
+        $revenue = (float)($revenueRow->revenue ?? 0);
+        $expense = (float)($expenseRow->expense ?? 0);
+        
+        return $revenue - $expense;
+    }
+    
+    private function getPreviousYearData($branchId = null, array $permittedBranchIds = [], $balanceSheetEndDate = null, $incomeStatementStartDate = null, $incomeStatementEndDate = null)
     {
         $company = auth()->user()->company;
         $currentYear = date('Y');
         $previousYear = $currentYear - 1;
         
-        // Get previous year financial data by account
-        $query = DB::table('gl_transactions')
+        // Balance Sheet Query: Cumulative balances up to Dec 31 of previous year
+        // Balance Sheet accounts carry forward, so we need ALL transactions up to Dec 31
+        $balanceSheetQuery = DB::table('gl_transactions')
             ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
             ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->leftJoin('main_groups', 'account_class_groups.main_group_id', '=', 'main_groups.id')
             ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
             ->where('account_class_groups.company_id', $company->id)
-            ->whereYear('gl_transactions.date', $previousYear);
+            ->whereIn('account_class.name', ['assets', 'liabilities', 'equity']);
         
-        // Apply branch filter
-        if ($selectedBranchId) {
-            $query->where('gl_transactions.branch_id', $selectedBranchId);
+        // Balance Sheet: Cumulative up to Dec 31 of previous year
+        if ($balanceSheetEndDate) {
+            $balanceSheetQuery->where(DB::raw('DATE(gl_transactions.date)'), '<=', $balanceSheetEndDate);
         } else {
-            // If no specific branch selected, filter by user's assigned branches
-            $query->whereIn('gl_transactions.branch_id', $userBranchIds);
+            // Fallback: use Dec 31 of previous year
+            $balanceSheetQuery->where(DB::raw('DATE(gl_transactions.date)'), '<=', \Carbon\Carbon::create($previousYear, 12, 31)->toDateString());
         }
         
-        $previousYearData = $query
-            ->select(
+        // Income Statement Query: Period-based from Jan 1 to Dec 31 of previous year
+        // Income Statement accounts reset each year, so we need transactions for the full previous year
+        $incomeStatementQuery = DB::table('gl_transactions')
+            ->join('chart_accounts', 'gl_transactions.chart_account_id', '=', 'chart_accounts.id')
+            ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->leftJoin('main_groups', 'account_class_groups.main_group_id', '=', 'main_groups.id')
+            ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
+            ->leftJoin('journals', function($join) {
+                $join->on('gl_transactions.transaction_id', '=', 'journals.id')
+                     ->where('gl_transactions.transaction_type', '=', 'journal');
+            })
+            ->where('account_class_groups.company_id', $company->id)
+            ->whereIn('account_class.name', ['income', 'revenue', 'expenses', 'expense']);
+        
+        // Income Statement: Full year (Jan 1 to Dec 31 of previous year)
+        if ($incomeStatementStartDate && $incomeStatementEndDate) {
+            $incomeStatementQuery->whereBetween(DB::raw('DATE(gl_transactions.date)'), [$incomeStatementStartDate, $incomeStatementEndDate])
+                  // Exclude year-end closing entries
+                  ->where(function($q) {
+                      $q->whereNull('journals.reference_type')
+                        ->orWhere('journals.reference_type', '!=', 'Year-End Close');
+                  });
+        } else {
+            // Fallback: use full previous year
+            $prevYearStart = \Carbon\Carbon::create($previousYear, 1, 1)->toDateString();
+            $prevYearEnd = \Carbon\Carbon::create($previousYear, 12, 31)->toDateString();
+            $incomeStatementQuery->whereBetween(DB::raw('DATE(gl_transactions.date)'), [$prevYearStart, $prevYearEnd])
+                  ->where(function($q) {
+                      $q->whereNull('journals.reference_type')
+                        ->orWhere('journals.reference_type', '!=', 'Year-End Close');
+                  });
+        }
+        
+        // Common select and group by
+        $selectFields = [
                 'chart_accounts.id as account_id',
                 'chart_accounts.account_name as account',
+                'chart_accounts.account_code',
+                'chart_accounts.parent_id',
                 'account_class.name as class_name',
-                'account_class_groups.name as group_name',
+                'account_class_groups.id as fsli_id',
+                'account_class_groups.name as fsli_name',
+                'main_groups.id as main_group_id',
+                'main_groups.name as main_group_name',
                 DB::raw('SUM(CASE WHEN gl_transactions.nature = "debit" THEN gl_transactions.amount ELSE 0 END) as debit_total'),
                 DB::raw('SUM(CASE WHEN gl_transactions.nature = "credit" THEN gl_transactions.amount ELSE 0 END) as credit_total')
-            )
-            ->groupBy('chart_accounts.id', 'chart_accounts.account_name', 'account_class.name', 'account_class_groups.name')
+        ];
+        
+        $groupByFields = [
+            'chart_accounts.id', 'chart_accounts.account_name', 'chart_accounts.account_code', 'chart_accounts.parent_id',
+                     'account_class.name', 'account_class_groups.id', 'account_class_groups.name',
+            'main_groups.id', 'main_groups.name'
+        ];
+
+        // Apply branch filters (fallback to all company branches when user has none assigned)
+        $effectiveBranchIds = $permittedBranchIds;
+        if (empty($effectiveBranchIds) && $company) {
+            $effectiveBranchIds = \App\Models\Branch::where('company_id', $company->id)->pluck('id')->toArray();
+        }
+        if (!empty($effectiveBranchIds)) {
+            $balanceSheetQuery->whereIn('gl_transactions.branch_id', $effectiveBranchIds);
+            $incomeStatementQuery->whereIn('gl_transactions.branch_id', $effectiveBranchIds);
+        }
+        if ($branchId) {
+            $balanceSheetQuery->where('gl_transactions.branch_id', $branchId);
+            $incomeStatementQuery->where('gl_transactions.branch_id', $branchId);
+        }
+
+        // Execute queries
+        $balanceSheetData = (clone $balanceSheetQuery)
+            ->select($selectFields)
+            ->groupBy($groupByFields)
             ->get();
+        
+        $incomeStatementData = (clone $incomeStatementQuery)
+            ->select($selectFields)
+            ->groupBy($groupByFields)
+            ->get();
+        
+        // Fetch ALL accounts for this company to ensure parent accounts are included even if they have no transactions
+        $allCompanyAccounts = DB::table('chart_accounts')
+            ->join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
+            ->leftJoin('main_groups', 'account_class_groups.main_group_id', '=', 'main_groups.id')
+            ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
+            ->where('account_class_groups.company_id', $company->id)
+            ->select([
+                'chart_accounts.id as account_id',
+                'chart_accounts.account_name as account',
+                'chart_accounts.account_code',
+                'chart_accounts.parent_id',
+                'account_class.name as class_name',
+                'account_class_groups.id as fsli_id',
+                'account_class_groups.name as fsli_name',
+                'main_groups.id as main_group_id',
+                'main_groups.name as main_group_name',
+            ])
+            ->get()
+            ->keyBy('account_id');
+
+        // Combine transaction data
+        $transactionBalances = $balanceSheetData->merge($incomeStatementData)->keyBy('account_id');
+        
+        // Map balances to the full account list
+        $previousYearDataFlat = $allCompanyAccounts->map(function ($account) use ($transactionBalances) {
+            $balanceData = $transactionBalances->get($account->account_id);
+            $account->debit_total = $balanceData->debit_total ?? 0;
+            $account->credit_total = $balanceData->credit_total ?? 0;
+            return $account;
+        });
             
-        // Group by account class and calculate balances
+        // Group by account class using hierarchical structure: main_groups -> fslis -> accounts
         $previousYearAssets = [];
         $previousYearLiabilities = [];
         $previousYearEquitys = [];
         $previousYearRevenues = [];
         $previousYearExpense = [];
         
-        foreach ($previousYearData as $account) {
+        foreach ($previousYearDataFlat as $account) {
             // Calculate balance based on account class
             $balance = 0;
+            
+            // Get main group name (fallback to 'Uncategorized' if null)
+            $mainGroupName = $account->main_group_name ?? 'Uncategorized';
+            $fsliName = $account->fsli_name ?? 'Uncategorized';
             
             // Categorize based on account class
             switch (strtolower($account->class_name)) {
                 case 'assets':
                     $balance = $account->debit_total - $account->credit_total; // Assets: debit increases
-                    $previousYearAssets[$account->group_name][] = [
+                    $previousYearAssets[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($previousYearAssets[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $previousYearAssets[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $previousYearAssets[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($previousYearAssets[$mainGroupName]['total'])) {
+                        $previousYearAssets[$mainGroupName]['total'] = 0;
+                    }
+                    $previousYearAssets[$mainGroupName]['total'] += $balance;
                     break;
                 case 'liabilities':
                     $balance = $account->credit_total - $account->debit_total; // Liabilities: credit increases
-                    $previousYearLiabilities[$account->group_name][] = [
+                    $previousYearLiabilities[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($previousYearLiabilities[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $previousYearLiabilities[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $previousYearLiabilities[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($previousYearLiabilities[$mainGroupName]['total'])) {
+                        $previousYearLiabilities[$mainGroupName]['total'] = 0;
+                    }
+                    $previousYearLiabilities[$mainGroupName]['total'] += $balance;
                     break;
                 case 'equity':
                     $balance = $account->credit_total - $account->debit_total; // Equity: credit increases
-                    $previousYearEquitys[$account->group_name][] = [
+                    $previousYearEquitys[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($previousYearEquitys[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $previousYearEquitys[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $previousYearEquitys[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($previousYearEquitys[$mainGroupName]['total'])) {
+                        $previousYearEquitys[$mainGroupName]['total'] = 0;
+                    }
+                    $previousYearEquitys[$mainGroupName]['total'] += $balance;
                     break;
                 case 'income':
                 case 'revenue':
                     $balance = $account->credit_total - $account->debit_total; // Revenue: credit increases
-                    $previousYearRevenues[$account->group_name][] = [
+                    $previousYearRevenues[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($previousYearRevenues[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $previousYearRevenues[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $previousYearRevenues[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($previousYearRevenues[$mainGroupName]['total'])) {
+                        $previousYearRevenues[$mainGroupName]['total'] = 0;
+                    }
+                    $previousYearRevenues[$mainGroupName]['total'] += $balance;
                     break;
                 case 'expenses':
                 case 'expense':
                     $balance = $account->debit_total - $account->credit_total; // Expenses: debit increases
-                    $previousYearExpense[$account->group_name][] = [
+                    $previousYearExpense[$mainGroupName]['fslis'][$fsliName]['accounts'][] = [
                         'account_id' => $account->account_id,
                         'account' => $account->account,
+                        'account_code' => $account->account_code ?? '',
+                        'parent_id' => $account->parent_id,
                         'sum' => $balance
                     ];
+                    // Calculate totals
+                    if (!isset($previousYearExpense[$mainGroupName]['fslis'][$fsliName]['total'])) {
+                        $previousYearExpense[$mainGroupName]['fslis'][$fsliName]['total'] = 0;
+                    }
+                    $previousYearExpense[$mainGroupName]['fslis'][$fsliName]['total'] += $balance;
+                    if (!isset($previousYearExpense[$mainGroupName]['total'])) {
+                        $previousYearExpense[$mainGroupName]['total'] = 0;
+                    }
+                    $previousYearExpense[$mainGroupName]['total'] += $balance;
                     break;
             }
         }
         
-        // Calculate previous year profit/loss
-        $sumRevenue = collect($previousYearRevenues)->flatten(1)->sum('sum');
-        $sumExpense = collect($previousYearExpense)->flatten(1)->sum('sum');
+        // Calculate previous year profit/loss (sum all main group totals)
+        $sumRevenue = collect($previousYearRevenues)->sum(function($mainGroup) {
+            return $mainGroup['total'] ?? 0;
+        });
+        $sumExpense = collect($previousYearExpense)->sum(function($mainGroup) {
+            return $mainGroup['total'] ?? 0;
+        });
         $previousYearProfitLoss = $sumRevenue - $sumExpense;
+
+        // Apply nesting to all categories
+        $categories = [
+            'chartAccountsAssets' => &$previousYearAssets,
+            'chartAccountsLiabilities' => &$previousYearLiabilities,
+            'chartAccountsEquitys' => &$previousYearEquitys,
+            'chartAccountsRevenues' => &$previousYearRevenues,
+            'chartAccountsExpense' => &$previousYearExpense,
+        ];
+
+        foreach ($categories as $key => &$category) {
+            foreach ($category as $mgName => &$mg) {
+                if (isset($mg['fslis'])) {
+                    foreach ($mg['fslis'] as $fsliName => &$fsli) {
+                        if (isset($fsli['accounts'])) {
+                            $fsli['accounts'] = $this->nestAccounts($fsli['accounts']);
+                        }
+                    }
+                }
+            }
+        }
         
         return [
             'year' => $previousYear,
@@ -744,6 +1187,7 @@ class DashboardController extends Controller
             'profitLoss' => $previousYearProfitLoss
         ];
     }
+
 
     /**
      * Handle bulk SMS sending from dashboard
@@ -816,5 +1260,55 @@ class DashboardController extends Controller
                 'details' => $responses
             ]
         ]);
+    }
+
+        /**
+     * Nest accounts within an FSLI based on parent_id
+     */
+    private function nestAccounts(array $accounts)
+    {
+        $tree = [];
+        $lookup = [];
+
+        // First pass: create lookup and initialize children
+        foreach ($accounts as $account) {
+            $id = $account['account_id'];
+            $lookup[$id] = $account;
+            $lookup[$id]['children'] = [];
+        }
+
+        // Second pass: build tree
+        foreach ($lookup as $id => &$account) {
+            $parentId = $account['parent_id'] ?? null;
+            if ($parentId && isset($lookup[$parentId])) {
+                $lookup[$parentId]['children'][] = &$account;
+            } else {
+                $tree[] = &$account;
+            }
+        }
+
+        // Third pass: Return the tree without filtering empty branches
+        // This allows the view to decide which accounts to show (e.g. if they have balance in previous year)
+        return $this->rollupBalances($tree);
+    }
+
+    /**
+     * Roll up child balances to parents without filtering
+     */
+    private function rollupBalances(array $tree)
+    {
+        foreach ($tree as &$account) {
+            if (!empty($account['children'])) {
+                $account['children'] = $this->rollupBalances($account['children']);
+                
+                // Roll up children balances to the parent sum
+                $childrenSum = 0;
+                foreach ($account['children'] as $child) {
+                    $childrenSum += ($child['sum'] ?? 0);
+                }
+                $account['sum'] = ($account['sum'] ?? 0) + $childrenSum;
+            }
+            }
+        return $tree;
     }
 }

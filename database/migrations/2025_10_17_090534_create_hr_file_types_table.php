@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('hr_file_types')) {
+            return;
+        }
+
         Schema::create('hr_file_types', function (Blueprint $table) {
             $table->id();
             $table->foreignId('company_id')->constrained('companies');

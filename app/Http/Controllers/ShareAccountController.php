@@ -1103,8 +1103,9 @@ class ShareAccountController extends Controller
             ->orderBy('share_name')
             ->get();
 
-        // Get bank accounts
-        $bankAccounts = BankAccount::with('chartAccount')
+        // Get bank accounts (branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()
+            ->with('chartAccount')
             ->orderBy('name')
             ->get();
 

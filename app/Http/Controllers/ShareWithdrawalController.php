@@ -124,8 +124,8 @@ class ShareWithdrawalController extends Controller
             ->orderBy('account_number')
             ->get();
 
-        // Get bank accounts
-        $bankAccounts = BankAccount::orderBy('name')->get();
+        // Get bank accounts (branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         return view('shares.withdrawals.create', compact('shareAccounts', 'bankAccounts'));
     }
@@ -330,8 +330,8 @@ class ShareWithdrawalController extends Controller
             ->orderBy('account_number')
             ->get();
 
-        // Get bank accounts
-        $bankAccounts = BankAccount::orderBy('name')->get();
+        // Get bank accounts (branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         return view('shares.withdrawals.edit', compact('withdrawal', 'shareAccounts', 'bankAccounts'));
     }

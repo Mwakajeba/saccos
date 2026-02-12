@@ -5,6 +5,8 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\BankAccount;
 use App\Models\ChartAccount;
+use App\Models\Company;
+use App\Models\Branch;
 
 class BankAccountSeeder extends Seeder
 {
@@ -29,32 +31,49 @@ class BankAccountSeeder extends Seeder
             return;
         }
 
+        $company = Company::first();
+        $branch = Branch::first();
+        $companyId = $company?->id ?? 1;
+        $branchId = $branch?->id ?? null;
+
         $bankAccounts = [
             [
                 'chart_account_id' => $cashAccount->id,
                 'name' => 'Cash Register',
                 'account_number' => 'CASH-001',
+                'company_id' => $companyId,
+                'branch_id' => $branchId,
+                'is_all_branches' => true,
             ],
             [
                 'chart_account_id' => $bankAccountMain->id,
                 'name' => 'CRDB Bank',
                 'account_number' => '1234567890',
+                'company_id' => $companyId,
+                'branch_id' => $branchId,
+                'is_all_branches' => true,
             ],
             [
                 'chart_account_id' => $bankAccountSavings ? $bankAccountSavings->id : $bankAccountMain->id,
                 'name' => 'NMB Bank',
                 'account_number' => '0987654321',
+                'company_id' => $companyId,
+                'branch_id' => $branchId,
+                'is_all_branches' => true,
             ],
             [
                 'chart_account_id' => $bankAccountFixed ? $bankAccountFixed->id : $bankAccountMain->id,
                 'name' => 'NBC Bank',
                 'account_number' => '1122334455',
+                'company_id' => $companyId,
+                'branch_id' => $branchId,
+                'is_all_branches' => true,
             ],
         ];
 
         foreach ($bankAccounts as $accountData) {
             BankAccount::firstOrCreate(
-                ['account_number' => $accountData['account_number']],
+                ['account_number' => $accountData['account_number'], 'company_id' => $companyId],
                 $accountData
             );
         }
