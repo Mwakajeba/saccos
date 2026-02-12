@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Auth;
 use Vinkla\Hashids\Facades\Hashids;
 use App\Models\ApprovalLevel;
 use App\Models\ApprovalLevelAssignment;
+use App\Jobs\CalculateDailyInterestJob;
+use App\Models\ArrearsClassification;
 
 class SettingsController extends Controller
 {
@@ -3023,5 +3025,167 @@ class SettingsController extends Controller
         $filename = 'Job_Log_' . $jobLog->id . '_' . now()->format('Y-m-d') . '.pdf';
 
         return $pdf->download($filename);
+    }
+
+    /**
+     * Run the Daily Accrued Interest Job manually
+     */
+    public function runAccruedInterestJob()
+    {
+        try {
+            // Run the job synchronously
+            dispatch_sync(new CalculateDailyInterestJob());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Daily Accrued Interest Job completed successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to run job: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Display arrears classifications index
+     */
+    public function arrearsClassificationsIndex()
+    {
+        $companyId = Auth::user()->company_id;
+        $classifications = ArrearsClassification::where('company_id', $companyId)
+            ->orderBy('sort_order')
+            ->orderBy('days_from')
+            ->get();
+
+        return view('settings.arrears-classifications.index', compact('classifications'));
+    }
+
+    /**
+     * Store a new arrears classification
+     */
+    public function arrearsClassificationsStore(Request $request)
+    {
+        $request->validate([
+            'days_from' => 'required|integer|min:0',
+            'days_to' => 'nullable|integer|min:0',
+            'bucket_label' => 'required|string|max:50',
+            'status' => 'required|string|in:Current,Past Due,Substandard,Doubtful,Loss/NPL',
+            'provision_percentage' => 'required|numeric|min:0|max:100',
+            'sort_order' => 'nullable|integer|min:0',
+            'is_active' => 'nullable|boolean',
+            'comments' => 'nullable|string|max:500',
+        ]);
+
+        ArrearsClassification::create([
+            'company_id' => Auth::user()->company_id,
+            'days_from' => $request->days_from,
+            'days_to' => $request->days_to,
+            'bucket_label' => $request->bucket_label,
+            'status' => $request->status,
+            'provision_percentage' => $request->provision_percentage,
+            'sort_order' => $request->sort_order ?? 0,
+            'is_active' => $request->is_active ?? true,
+            'comments' => $request->comments,
+            'created_by' => Auth::id(),
+        ]);
+
+        return redirect()->route('settings.arrears-classifications.index')
+            ->with('success', 'Arrears classification created successfully.');
+    }
+
+    /**
+     * Update an arrears classification
+     */
+    public function arrearsClassificationsUpdate(Request $request, $id)
+    {
+        $request->validate([
+            'days_from' => 'required|integer|min:0',
+            'days_to' => 'nullable|integer|min:0',
+            'bucket_label' => 'required|string|max:50',
+            'status' => 'required|string|in:Current,Past Due,Substandard,Doubtful,Loss/NPL',
+            'provision_percentage' => 'required|numeric|min:0|max:100',
+            'sort_order' => 'nullable|integer|min:0',
+            'is_active' => 'nullable|boolean',
+            'comments' => 'nullable|string|max:500',
+        ]);
+
+        $classification = ArrearsClassification::where('company_id', Auth::user()->company_id)
+            ->findOrFail($id);
+
+        $classification->update([
+            'days_from' => $request->days_from,
+            'days_to' => $request->days_to,
+            'bucket_label' => $request->bucket_label,
+            'status' => $request->status,
+            'provision_percentage' => $request->provision_percentage,
+            'sort_order' => $request->sort_order ?? 0,
+            'is_active' => $request->is_active ?? true,
+            'comments' => $request->comments,
+            'updated_by' => Auth::id(),
+        ]);
+
+        return redirect()->route('settings.arrears-classifications.index')
+            ->with('success', 'Arrears classification updated successfully.');
+    }
+
+    /**
+     * Delete an arrears classification
+     */
+    public function arrearsClassificationsDestroy($id)
+    {
+        $classification = ArrearsClassification::where('company_id', Auth::user()->company_id)
+            ->findOrFail($id);
+
+        $classification->delete();
+
+        return redirect()->route('settings.arrears-classifications.index')
+            ->with('success', 'Arrears classification deleted successfully.');
+    }
+
+    /**
+     * Seed default arrears classifications
+     */
+    public function arrearsClassificationsSeedDefaults()
+    {
+        $companyId = Auth::user()->company_id;
+
+        // Check if any classifications already exist
+        $existingCount = ArrearsClassification::where('company_id', $companyId)->count();
+        if ($existingCount > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Classifications already exist. Delete existing ones first to seed defaults.'
+            ]);
+        }
+
+        $defaults = [
+            ['days_from' => 0, 'days_to' => 0, 'bucket_label' => '0', 'status' => 'Current', 'provision_percentage' => 0, 'sort_order' => 1, 'comments' => 'Loans that are current with no days past due'],
+            ['days_from' => 1, 'days_to' => 30, 'bucket_label' => '1-30', 'status' => 'Past Due', 'provision_percentage' => 1, 'sort_order' => 2, 'comments' => 'Loans 1-30 days past due'],
+            ['days_from' => 31, 'days_to' => 90, 'bucket_label' => '31-90', 'status' => 'Substandard', 'provision_percentage' => 5, 'sort_order' => 3, 'comments' => 'Loans 31-90 days past due - Substandard category'],
+            ['days_from' => 91, 'days_to' => 180, 'bucket_label' => '91-180', 'status' => 'Doubtful', 'provision_percentage' => 25, 'sort_order' => 4, 'comments' => 'Loans 91-180 days past due - Doubtful category'],
+            ['days_from' => 181, 'days_to' => null, 'bucket_label' => '181+', 'status' => 'Loss/NPL', 'provision_percentage' => 100, 'sort_order' => 5, 'comments' => 'Loans 181+ days past due - Non-Performing Loans (NPL)'],
+        ];
+
+        foreach ($defaults as $default) {
+            ArrearsClassification::create([
+                'company_id' => $companyId,
+                'days_from' => $default['days_from'],
+                'days_to' => $default['days_to'],
+                'bucket_label' => $default['bucket_label'],
+                'status' => $default['status'],
+                'provision_percentage' => $default['provision_percentage'],
+                'sort_order' => $default['sort_order'],
+                'comments' => $default['comments'],
+                'is_active' => true,
+                'created_by' => Auth::id(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Default arrears classifications created successfully!'
+        ]);
     }
 }

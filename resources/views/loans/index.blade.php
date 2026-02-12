@@ -235,6 +235,27 @@
                                         </div>
                                     </div>
                                 @endcan
+                                @can('view loans')
+                                    <!-- Non-Performing Loans (NPL) Report -->
+                                    <div class="col-md-6 col-lg-4 mb-4">
+                                        <div class="card border-dark position-relative">
+                                            @php
+                                                $nplCount = $stats['npl'] ?? 0;
+                                            @endphp
+                                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-dark">{{ $nplCount }}</span>
+                                            <div class="card-body text-center">
+                                                <div class="mb-3">
+                                                    <i class="bx bx-error-alt fs-1 text-dark"></i>
+                                                </div>
+                                                <h5 class="card-title">NPL Report (Loss/NPL)</h5>
+                                                <p class="card-text">View loans classified as Loss/NPL (181+ days in arrears) with provisions.</p>
+                                                <a href="{{ route('loans.npl-report') }}" class="btn btn-dark">
+                                                    <i class="bx bx-file me-1"></i> View NPL Report
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endcan
                             </div>
                         </div>
                     </div>
@@ -260,12 +281,12 @@
                             <!-- Download Template Button -->
                             <div class="col-12 mb-3">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <h6 class="mb-0">Step 1: Download Template</h6>
+                                    <h6 class="mb-0">Step 1: Download Excel Template</h6>
                                     <button type="button" id="downloadTemplateBtn" class="btn btn-outline-primary btn-sm">
-                                        <i class="bx bx-download me-1"></i> Download Template
+                                        <i class="bx bx-download me-1"></i> Download Excel Template
                                     </button>
                                 </div>
-                                <small class="text-muted">Download the CSV template and fill in your loan data</small>
+                                <small class="text-muted">Download the Excel template with dropdown selections for sectors, interest cycles, and loan officers</small>
                             </div>
 
                             <!-- Product Selection -->
@@ -313,33 +334,78 @@
                                 @error('chart_account_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
 
-                            <!-- CSV File Upload -->
+                            <!-- Excel File Upload -->
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">CSV File <span class="text-danger">*</span></label>
-                                <input type="file" name="csv_file"
-                                    class="form-control @error('csv_file') is-invalid @enderror" accept=".csv" required>
-                                @error('csv_file') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                <small class="text-muted">Upload the filled CSV template</small>
+                                <label class="form-label">Excel File <span class="text-danger">*</span></label>
+                                <input type="file" name="excel_file" id="excelFile"
+                                    class="form-control @error('excel_file') is-invalid @enderror" accept=".xlsx,.xls,.csv" required>
+                                @error('excel_file') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                <small class="text-muted">Upload the filled Excel template (.xlsx, .xls, .csv)</small>
                             </div>
+                        </div>
+
+                        <!-- Progress Bar (hidden by default) -->
+                        <div id="uploadProgressContainer" class="mb-3" style="display: none;">
+                            <label class="form-label">Processing Progress</label>
+                            <div class="progress" style="height: 25px;">
+                                <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" 
+                                    style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                    0%
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <small id="progressStatus" class="text-muted">Initializing...</small>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-4 text-center">
+                                    <span class="badge bg-primary" id="processedCount">0</span>
+                                    <small class="d-block">Processed</small>
+                                </div>
+                                <div class="col-4 text-center">
+                                    <span class="badge bg-success" id="createdCount">0</span>
+                                    <small class="d-block">Created</small>
+                                </div>
+                                <div class="col-4 text-center">
+                                    <span class="badge bg-danger" id="failedCount">0</span>
+                                    <small class="d-block">Failed</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Failed Loans Download (hidden by default) -->
+                        <div id="failedLoansContainer" class="alert alert-danger" style="display: none;">
+                            <h6 class="alert-heading"><i class="bx bx-error-circle me-1"></i> Some loans failed to create</h6>
+                            <p class="mb-2">Download the failed loans Excel file to see the reasons for failure and correct the data.</p>
+                            <a href="#" id="downloadFailedLoansBtn" class="btn btn-danger btn-sm">
+                                <i class="bx bx-download me-1"></i> Download Failed Loans
+                            </a>
                         </div>
 
                         <!-- Instructions -->
                         <div class="alert alert-info">
                             <h6 class="alert-heading">Instructions:</h6>
                             <ul class="mb-0">
-                                <li>Select a loan product first, then download the template</li>
-                                <li>Interest cycle will be automatically taken from the selected product</li>
-                                <li>Fill in the loan data in the CSV template</li>
-                                <li>Ensure customer numbers exist in the system</li>
+                                <li>Select a loan product first, then download the Excel template</li>
+                                <li>The template includes <strong>dropdown selections</strong> for:
+                                    <ul>
+                                        <li><strong>Sector:</strong> Choose from seeded business sectors</li>
+                                        <li><strong>Interest Cycle:</strong> Daily, Weekly, Monthly, Quarterly, etc.</li>
+                                        <li><strong>Loan Officer:</strong> Select from branch users</li>
+                                    </ul>
+                                </li>
+                                <li>Fill in loan amount, interest rate, and period for each customer</li>
+                                <li>For backdated loans, <strong>accrued interest will be calculated automatically</strong></li>
+                                <li>Delete the instruction row (row 2) before uploading</li>
                                 <li>Loans will be created with 'active' status</li>
                                 <li>Repayments will be processed automatically if amount_paid > 0</li>
-                                <li>Process runs in background - you'll be notified when complete</li>
+                                <li>Process runs in background with <strong>progress tracking</strong></li>
+                                <li>Failed loans can be <strong>exported to Excel</strong> with failure reasons</li>
                             </ul>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-warning">
+                        <button type="submit" id="submitBtn" class="btn btn-warning">
                             <i class="bx bx-upload me-1"></i> Process Opening Balance
                         </button>
                     </div>
@@ -448,7 +514,21 @@
         document.addEventListener('DOMContentLoaded', function () {
             const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
             const productSelect = document.querySelector('select[name="product_id"]');
+            const openingBalanceForm = document.getElementById('openingBalanceForm');
+            const submitBtn = document.getElementById('submitBtn');
+            const progressContainer = document.getElementById('uploadProgressContainer');
+            const progressBar = document.getElementById('uploadProgressBar');
+            const progressStatus = document.getElementById('progressStatus');
+            const processedCount = document.getElementById('processedCount');
+            const createdCount = document.getElementById('createdCount');
+            const failedCount = document.getElementById('failedCount');
+            const failedLoansContainer = document.getElementById('failedLoansContainer');
+            const downloadFailedLoansBtn = document.getElementById('downloadFailedLoansBtn');
 
+            let currentBatchId = null;
+            let progressInterval = null;
+
+            // Download Excel Template
             downloadTemplateBtn.addEventListener('click', function () {
                 const productId = productSelect.value;
 
@@ -464,10 +544,133 @@
                 // Create a temporary link and trigger download
                 const link = document.createElement('a');
                 link.href = downloadUrl;
-                link.download = 'opening_balance_template_{{ date("Y-m-d") }}.csv';
+                link.download = 'loan_opening_balance_template_{{ date("Y-m-d") }}.xlsx';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+            });
+
+            // Handle form submission with AJAX for progress tracking
+            openingBalanceForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(openingBalanceForm);
+                
+                // Disable submit button and show progress
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processing...';
+                progressContainer.style.display = 'block';
+                failedLoansContainer.style.display = 'none';
+                
+                // Reset progress
+                updateProgress(0, 0, 0, 0);
+                progressStatus.textContent = 'Uploading file...';
+
+                fetch(openingBalanceForm.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.batch_id) {
+                        currentBatchId = data.batch_id;
+                        progressStatus.textContent = 'Processing ' + data.total_rows + ' loans...';
+                        
+                        // Start polling for progress
+                        startProgressPolling();
+                    } else if (data.errors) {
+                        showError(Object.values(data.errors).flat().join(', '));
+                    } else {
+                        // Redirect on success without batch tracking
+                        window.location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('An error occurred while processing the file.');
+                });
+            });
+
+            function startProgressPolling() {
+                progressInterval = setInterval(function() {
+                    if (!currentBatchId) {
+                        clearInterval(progressInterval);
+                        return;
+                    }
+
+                    fetch('{{ route("loans.opening-balance.progress") }}?batch_id=' + currentBatchId)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                clearInterval(progressInterval);
+                                showError(data.error);
+                                return;
+                            }
+
+                            updateProgress(data.percentage, data.processed, data.created, data.failed);
+                            progressStatus.textContent = `Processing: ${data.processed}/${data.total} loans`;
+
+                            if (data.status === 'completed') {
+                                clearInterval(progressInterval);
+                                progressBar.classList.remove('progress-bar-animated');
+                                progressBar.classList.add('bg-success');
+                                progressStatus.textContent = `Completed! ${data.created} loans created, ${data.failed} failed.`;
+                                
+                                submitBtn.disabled = false;
+                                submitBtn.innerHTML = '<i class="bx bx-upload me-1"></i> Process Opening Balance';
+
+                                // Show failed loans download if there are failures
+                                if (data.failed > 0) {
+                                    failedLoansContainer.style.display = 'block';
+                                    downloadFailedLoansBtn.href = '{{ route("loans.opening-balance.failed") }}?batch_id=' + currentBatchId;
+                                }
+
+                                // Show success message
+                                if (data.created > 0) {
+                                    setTimeout(function() {
+                                        alert(`Successfully created ${data.created} loans.` + (data.failed > 0 ? ` ${data.failed} loans failed - please download the failed loans file.` : ''));
+                                    }, 500);
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Progress polling error:', error);
+                        });
+                }, 2000); // Poll every 2 seconds
+            }
+
+            function updateProgress(percentage, processed, created, failed) {
+                progressBar.style.width = percentage + '%';
+                progressBar.setAttribute('aria-valuenow', percentage);
+                progressBar.textContent = percentage + '%';
+                processedCount.textContent = processed;
+                createdCount.textContent = created;
+                failedCount.textContent = failed;
+            }
+
+            function showError(message) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bx bx-upload me-1"></i> Process Opening Balance';
+                progressContainer.style.display = 'none';
+                alert('Error: ' + message);
+            }
+
+            // Clean up on modal close
+            document.getElementById('openingBalanceModal').addEventListener('hidden.bs.modal', function() {
+                if (progressInterval) {
+                    clearInterval(progressInterval);
+                }
+                // Reset form
+                progressContainer.style.display = 'none';
+                failedLoansContainer.style.display = 'none';
+                progressBar.style.width = '0%';
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.add('progress-bar-animated');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bx bx-upload me-1"></i> Process Opening Balance';
             });
         });
     </script>

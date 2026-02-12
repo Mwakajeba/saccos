@@ -2,7 +2,7 @@
 
 namespace App\Providers;
 
-use App\Jobs\CollectMatureInterestJob;
+//use App\Jobs\CollectMatureInterestJob;
 use App\Jobs\RepaymentReminderJob;
 use App\Jobs\CheckSubscriptionExpiryJob;
 use App\Jobs\CalculateContributionInterestJob;
@@ -28,13 +28,13 @@ class ScheduleServiceProvider extends ServiceProvider
             $schedule = $this->app->make(Schedule::class);
 
             // Schedule mature interest collection to run daily at midnight
-            $schedule->job(new CollectMatureInterestJob())
+           // $schedule->job(new CollectMatureInterestJob())
                 // ->dailyAt('08:00')
                 // ->everyMinute()
-                ->everySecond()
-                ->withoutOverlapping()
-                ->onOneServer()
-                ->appendOutputTo(storage_path('logs/mature-interest-collection.log'));
+              //  ->everySecond()
+              //  ->withoutOverlapping()
+             //   ->onOneServer()
+              //  ->appendOutputTo(storage_path('logs/mature-interest-collection.log'));
 
             // Schedule repayment reminders to run daily at 08:00 AM
             $schedule->job(new RepaymentReminderJob())

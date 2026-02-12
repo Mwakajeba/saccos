@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Jobs\CalculateDailyInterestJob;
 use App\Jobs\CollectMatureInterestJob;
 use Carbon\Carbon;
 use Illuminate\Auth\Events\Login;
@@ -33,7 +34,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Run mature interest collection once per day on first user login
         Event::listen(Login::class, function () {
-            Log::info('Login event triggered - checking mature interest job');
+            Log::info('Login event triggered - checking scheduled jobs');
+            
+            // Run mature interest collection
             try {
                 $cacheKey = 'mature_interest_job_ran_' . Carbon::today()->toDateString();
 
@@ -41,14 +44,28 @@ class AppServiceProvider extends ServiceProvider
                 $added = Cache::add($cacheKey, true, Carbon::now()->endOfDay());
                 if (!$added) {
                     Log::info('Mature interest job already ran today, skipping');
-                    return; // Already ran today
+                } else {
+                    Log::info('Running CollectMatureInterestJob synchronously from login event (once per day)');
+                    dispatch_sync(new CollectMatureInterestJob());
                 }
-
-                Log::info('Running CollectMatureInterestJob synchronously from login event (once per day)');
-                // Run immediately so it processes on user login without needing a worker
-                dispatch_sync(new CollectMatureInterestJob());
             } catch (\Throwable $e) {
                 Log::error('Failed dispatching CollectMatureInterestJob on login: ' . $e->getMessage());
+            }
+
+            // Run daily accrued interest calculation
+            try {
+                $cacheKey = 'daily_interest_job_ran_' . Carbon::today()->toDateString();
+
+                // Only run once per day
+                $added = Cache::add($cacheKey, true, Carbon::now()->endOfDay());
+                if (!$added) {
+                    Log::info('Daily interest job already ran today, skipping');
+                } else {
+                    Log::info('Running CalculateDailyInterestJob synchronously from login event (once per day)');
+                    dispatch_sync(new CalculateDailyInterestJob());
+                }
+            } catch (\Throwable $e) {
+                Log::error('Failed dispatching CalculateDailyInterestJob on login: ' . $e->getMessage());
             }
         });
     }

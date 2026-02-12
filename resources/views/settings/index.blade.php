@@ -575,6 +575,68 @@
                             </div>
                             @endcan
 
+                            <!-- Run Daily Accrued Interest Job -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-warning">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-calculator fs-1 text-warning"></i>
+                                        </div>
+                                        <h5 class="card-title">Daily Accrued Interest Job</h5>
+                                        <p class="card-text">
+                                            Manually run the daily accrued interest calculation job if it didn't run automatically.
+                                            This updates accrued interest on all active loans.
+                                        </p>
+                                        <button type="button" class="btn btn-warning" id="runAccruedInterestJobBtn" onclick="runAccruedInterestJob()">
+                                            <i class="bx bx-play-circle me-1"></i> Run Job Now
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
+                            <!-- Run Daily Accrued Interest Job -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-warning">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-calculator fs-1 text-warning"></i>
+                                        </div>
+                                        <h5 class="card-title">Daily Accrued Interest Job</h5>
+                                        <p class="card-text">
+                                            Manually run the daily accrued interest calculation job if it didn't run automatically.
+                                            This updates accrued interest on all active loans.
+                                        </p>
+                                        <button type="button" class="btn btn-warning" id="runAccruedInterestJobBtn" onclick="runAccruedInterestJob()">
+                                            <i class="bx bx-play-circle me-1"></i> Run Job Now
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
+                            <!-- Arrears Classifications -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-danger">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-category fs-1 text-danger"></i>
+                                        </div>
+                                        <h5 class="card-title">Arrears Classifications</h5>
+                                        <p class="card-text">
+                                            Configure loan aging buckets, classification statuses (Current, Past Due, Substandard, Doubtful, Loss/NPL), and provision percentages.
+                                        </p>
+                                        <a href="{{ route('settings.arrears-classifications.index') }}" class="btn btn-danger">
+                                            <i class="bx bx-cog me-1"></i> Configure
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
                             <!-- Complain Categories -->
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-orange">
@@ -714,4 +776,57 @@
     }
 
 </style>
+@endpush
+
+@push('scripts')
+<script>
+    function runAccruedInterestJob() {
+        const btn = document.getElementById('runAccruedInterestJobBtn');
+        const originalHtml = btn.innerHTML;
+        
+        // Show loading state
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> Running...';
+        
+        fetch('{{ route("settings.run-accrued-interest-job") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success!',
+                    text: data.message,
+                    confirmButtonColor: '#3085d6'
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error!',
+                    text: data.message,
+                    confirmButtonColor: '#d33'
+                });
+            }
+        })
+        .catch(error => {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error!',
+                text: 'An error occurred while running the job. Please try again.',
+                confirmButtonColor: '#d33'
+            });
+        })
+        .finally(() => {
+            // Restore button state
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+    }
+</script>
 @endpush
