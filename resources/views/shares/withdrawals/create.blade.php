@@ -76,10 +76,7 @@
                                     </div>
                                     <div class="col-md-6">
                                         <strong>Nominal Price:</strong> <span id="nominalPrice">-</span><br>
-                                        <strong>Available Balance:</strong> <span id="currentBalance">-</span> shares<br>
-                                        <strong>Min Withdrawal:</strong> <span id="minWithdrawal">-</span><br>
-                                        <strong>Max Withdrawal:</strong> <span id="maxWithdrawal">-</span><br>
-                                        <strong>Partial Allowed:</strong> <span id="partialAllowed">-</span>
+                                        <strong>Available Balance:</strong> <span id="currentBalance">-</span> shares
                                     </div>
                                 </div>
                             </div>
@@ -291,18 +288,12 @@
                         $('#shareProductName').text(response.share_product_name);
                         $('#nominalPrice').text(formatCurrency(response.nominal_price));
                         $('#currentBalance').text(formatNumber(response.current_balance, 4));
-                        $('#minWithdrawal').text(response.minimum_withdrawal_amount ? formatCurrency(response.minimum_withdrawal_amount) : 'No limit');
-                        $('#maxWithdrawal').text(response.maximum_withdrawal_amount ? formatCurrency(response.maximum_withdrawal_amount) : 'No limit');
-                        $('#partialAllowed').text(response.allow_partial_withdrawal ? 'Yes' : 'No');
                         
                         // Show account details
                         $('#accountDetails').show();
                         
                         // Update shares helper text
                         let helperText = 'Available: ' + formatNumber(response.current_balance, 4) + ' shares';
-                        if (!response.allow_partial_withdrawal) {
-                            helperText += ' (Full withdrawal only)';
-                        }
                         $('#sharesHelper').text(helperText);
                         
                         // Set max attribute for number of shares
@@ -416,41 +407,6 @@
                 return false;
             }
 
-            // Check if partial withdrawal is allowed
-            if (!accountDetails.allow_partial_withdrawal && numberOfShares != availableBalance) {
-                e.preventDefault();
-                Swal.fire({
-                    title: 'Validation Error',
-                    text: 'Partial withdrawal is not allowed. You must withdraw all shares (' + formatNumber(availableBalance, 4) + ')',
-                    icon: 'error',
-                    confirmButtonText: 'OK'
-                });
-                return false;
-            }
-
-            // Validate minimum withdrawal amount
-            if (accountDetails.minimum_withdrawal_amount && withdrawalAmount < parseFloat(accountDetails.minimum_withdrawal_amount)) {
-                e.preventDefault();
-                Swal.fire({
-                    title: 'Validation Error',
-                    text: 'Withdrawal amount must be at least ' + formatCurrency(accountDetails.minimum_withdrawal_amount),
-                    icon: 'error',
-                    confirmButtonText: 'OK'
-                });
-                return false;
-            }
-
-            // Validate maximum withdrawal amount
-            if (accountDetails.maximum_withdrawal_amount && withdrawalAmount > parseFloat(accountDetails.maximum_withdrawal_amount)) {
-                e.preventDefault();
-                Swal.fire({
-                    title: 'Validation Error',
-                    text: 'Withdrawal amount must not exceed ' + formatCurrency(accountDetails.maximum_withdrawal_amount),
-                    icon: 'error',
-                    confirmButtonText: 'OK'
-                });
-                return false;
-            }
         });
 
         // Trigger change if account is already selected (for form errors)

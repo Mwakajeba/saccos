@@ -425,12 +425,6 @@
                                     @if($shareProduct->withdrawal_fee)
                                         <br><small>Fee: {{ number_format($shareProduct->withdrawal_fee, 2) }} ({{ $shareProduct->withdrawal_fee_type }})</small>
                                     @endif
-                                    @if($shareProduct->withdrawal_notice_period)
-                                        <br><small>Notice: {{ $shareProduct->withdrawal_notice_period }} {{ $shareProduct->withdrawal_notice_period_type }}</small>
-                                    @endif
-                                    @if($shareProduct->allow_partial_withdrawal)
-                                        <br><small><span class="badge bg-info">Partial withdrawal allowed</span></small>
-                                    @endif
                                 @else
                                     <span class="badge bg-danger">No</span>
                                 @endif

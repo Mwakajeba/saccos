@@ -196,6 +196,20 @@ class AccountClassGroupSeeder extends Seeder
                 'name' => 'Liabilities Associated with Assets Held for Sale',
                 'company_id' => $company_id,
             ],
+            [
+                'main_group_id' => $currentLiabilities->id,
+                'class_id' => $currentLiabilities->class_id,
+                'group_code' => 'MSA',
+                'name' => 'Akiba za wanachama',
+                'company_id' => $company_id,
+            ],
+            [
+                'main_group_id' => $currentLiabilities->id,
+                'class_id' => $currentLiabilities->class_id,
+                'group_code' => 'MDEP',
+                'name' => 'Amana za wanachama',
+                'company_id' => $company_id,
+            ],
 
             // SHARE CAPITAL & RESERVES Groups (main_group_id = 5)
             [
@@ -217,6 +231,13 @@ class AccountClassGroupSeeder extends Seeder
                 'class_id' => $shareCapitalReserves->class_id,
                 'group_code' => 'DIV',
                 'name' => 'Dividends',
+                'company_id' => $company_id,
+            ],
+            [
+                'main_group_id' => $shareCapitalReserves->id,
+                'class_id' => $shareCapitalReserves->class_id,
+                'group_code' => 'MSH',
+                'name' => 'Hisa za wanachama',
                 'company_id' => $company_id,
             ],
 

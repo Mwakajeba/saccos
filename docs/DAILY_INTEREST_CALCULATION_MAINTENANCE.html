@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Interest Calculation System - Maintenance Guide</title>
+    <style>
+        @media print {
+            @page {
+                size: A4;
+                margin: 2cm;
+            }
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+        }
+        
+        h1 {
+            color: #0d6cf2;
+            border-bottom: 3px solid #0d6cf2;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        
+        h2 {
+            color: #0d6cf2;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 5px;
+            margin-top: 30px;
+        }
+        
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        pre {
+            background: #f4f4f4;
+            border-left: 4px solid #0d6cf2;
+            padding: 15px;
+            overflow-x: auto;
+            border-radius: 5px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #0d6cf2;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        
+        li {
+            margin: 5px 0;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .warning-box {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .success-box {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .header-info {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        
+        .toc {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .toc ol {
+            list-style-type: decimal;
+        }
+        
+        .toc a {
+            color: #0d6cf2;
+            text-decoration: none;
+        }
+        
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        
+        hr {
+            border: none;
+            border-top: 2px solid #e0e0e0;
+            margin: 30px 0;
+        }
+        
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #0d6cf2;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .print-button:hover {
+            background: #0a5cd6;
+        }
+    </style>
+</head>
+<body>
+    <button class="print-button no-print" onclick="window.print()">🖨️ Print to PDF</button>
+    
+    <div class="header-info">
+        <h1 style="margin-top: 0;">Daily Interest Calculation System</h1>
+        <h2 style="border: none; margin: 0; padding: 0; font-size: 1.2em;">Maintenance Guide</h2>
+        <p><strong>Version:</strong> 1.0</p>
+        <p><strong>Last Updated:</strong> February 11, 2026</p>
+        <p><strong>System:</strong> SmartFinance SACCO Management System</p>
+    </div>
+
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ol>
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#components">Components</a></li>
+            <li><a href="#database">Database Schema</a></li>
+            <li><a href="#performance">Performance Optimizations</a></li>
+            <li><a href="#idempotency">Idempotency</a></li>
+            <li><a href="#error-handling">Error Handling</a></li>
+            <li><a href="#maintenance">Maintenance Procedures</a></li>
+            <li><a href="#troubleshooting">Troubleshooting</a></li>
+            <li><a href="#testing">Testing</a></li>
+        </ol>
+    </div>
+
+    <hr>
+
+    <section id="overview">
+        <h2>1. Overview</h2>
+        <p>The Daily Interest Calculation System automatically calculates and accrues daily interest for all active loans. This system runs as a scheduled job and processes loans in batches to ensure optimal performance.</p>
+        
+        <div class="success-box">
+            <h3>Key Features</h3>
+            <ul>
+                <li><strong>Chunked Processing:</strong> Processes loans in batches of 200</li>
+                <li><strong>Per-Loan Transactions:</strong> Each loan processed in its own transaction</li>
+                <li><strong>Idempotent:</strong> Safe to run multiple times without duplicates</li>
+                <li><strong>Service-Based Architecture:</strong> Clean separation of concerns</li>
+                <li><strong>Database Indexes:</strong> Optimized for performance</li>
+                <li><strong>Comprehensive Logging:</strong> Full audit trail</li>
+            </ul>
+        </div>
+    </section>
+
+    <hr class="page-break">
+
+    <section id="architecture">
+        <h2>2. Architecture</h2>
+        
+        <h3>Service-Based Design</h3>
+        <pre>CalculateDailyInterestJob (Orchestrator)
+    ↓
+InterestCalculationService (Business Logic)
+    ↓
+LoanScheduleService (Schedule Updates)
+    ↓
+AccountingService (GL Transactions)</pre>
+
+        <h3>Flow Diagram</h3>
+        <pre>1. Job fetches active loans (chunked by 200)
+   ↓
+2. For each loan (in separate transaction):
+   ↓
+3. InterestCalculationService:
+   - Calculates daily interest
+   - Creates/retrieves accrual record
+   ↓
+4. LoanScheduleService:
+   - Updates accrued_interest in schedules
+   ↓
+5. AccountingService:
+   - Creates journal entries
+   - Posts GL transactions
+   ↓
+6. Job logs results and updates JobLog</pre>
+    </section>
+
+    <hr>
+
+    <section id="components">
+        <h2>3. Components</h2>
+        
+        <h3>3.1 CalculateDailyInterestJob</h3>
+        <p><strong>Location:</strong> <code>app/Jobs/CalculateDailyInterestJob.php</code></p>
+        <p><strong>Responsibilities:</strong></p>
+        <ul>
+            <li>Orchestrates the interest calculation process</li>
+            <li>Manages chunking (200 loans per batch)</li>
+            <li>Handles per-loan transactions</li>
+            <li>Tracks job progress and statistics</li>
+            <li>Logs job execution</li>
+        </ul>
+        <p><strong>Key Methods:</strong></p>
+        <ul>
+            <li><code>handle()</code>: Main job execution</li>
+            <li><code>processLoanInterest()</code>: Processes a single loan using services</li>
+        </ul>
+        <p><strong>Configuration:</strong></p>
+        <ul>
+            <li>Timeout: 600 seconds (10 minutes)</li>
+            <li>Retries: 3 attempts</li>
+            <li>Chunk Size: 200 loans</li>
+        </ul>
+
+        <h3>3.2 InterestCalculationService</h3>
+        <p><strong>Location:</strong> <code>app/Services/InterestCalculationService.php</code></p>
+        <p><strong>Responsibilities:</strong></p>
+        <ul>
+            <li>Calculates daily interest amount</li>
+            <li>Creates/retrieves accrual records (idempotent)</li>
+            <li>Validates loan eligibility (principal > 0)</li>
+        </ul>
+        <p><strong>Key Methods:</strong></p>
+        <ul>
+            <li><code>calculateAndCreateAccrual(Loan $loan, Carbon $date): ?array</code></li>
+        </ul>
+        <p><strong>Calculation Formula:</strong></p>
+        <pre>Annual Interest Rate (from product or loan) → e.g., 12%
+Daily Interest Rate = (Annual Rate / 365) / 100
+Daily Interest Amount = Principal Remaining × Daily Interest Rate</pre>
+
+        <h3>3.3 LoanScheduleService</h3>
+        <p><strong>Location:</strong> <code>app/Services/LoanScheduleService.php</code></p>
+        <p><strong>Responsibilities:</strong></p>
+        <ul>
+            <li>Updates accrued interest in loan schedules</li>
+            <li>Finds appropriate schedule (next unpaid or last schedule)</li>
+        </ul>
+        <p><strong>Key Methods:</strong></p>
+        <ul>
+            <li><code>updateAccruedInterest(Loan $loan, float $dailyInterestAmount, Carbon $date): void</code></li>
+        </ul>
+
+        <h3>3.4 AccountingService</h3>
+        <p><strong>Location:</strong> <code>app/Services/AccountingService.php</code></p>
+        <p><strong>Responsibilities:</strong></p>
+        <ul>
+            <li>Creates journal entries for interest accrual</li>
+            <li>Posts GL transactions (debit: Interest Receivable, credit: Interest Revenue)</li>
+        </ul>
+        <p><strong>Key Methods:</strong></p>
+        <ul>
+            <li><code>postDailyInterestTransactions(Loan $loan, DailyInterestAccrual $accrual, Carbon $date): void</code></li>
+        </ul>
+        <p><strong>GL Accounts Used:</strong></p>
+        <ul>
+            <li>Interest Receivable Account (from loan product)</li>
+            <li>Interest Revenue Account (from loan product)</li>
+        </ul>
+    </section>
+
+    <hr class="page-break">
+
+    <section id="database">
+        <h2>4. Database Schema</h2>
+        
+        <h3>4.1 Tables</h3>
+        
+        <h4>daily_interest_accruals</h4>
+        <table>
+            <tr>
+                <th>Column</th>
+                <th>Type</th>
+                <th>Notes</th>
+            </tr>
+            <tr>
+                <td>id</td>
+                <td>primary key</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>loan_id</td>
+                <td>foreign key</td>
+                <td><strong>INDEXED</strong></td>
+            </tr>
+            <tr>
+                <td>accrual_date</td>
+                <td>date</td>
+                <td><strong>INDEXED</strong></td>
+            </tr>
+            <tr>
+                <td>principal_balance</td>
+                <td>decimal(15,2)</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>interest_rate</td>
+                <td>decimal(10,8)</td>
+                <td>Daily interest rate</td>
+            </tr>
+            <tr>
+                <td>daily_interest_amount</td>
+                <td>decimal(15,2)</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>branch_id</td>
+                <td>foreign key</td>
+                <td>nullable</td>
+            </tr>
+            <tr>
+                <td>user_id</td>
+                <td>foreign key</td>
+                <td>nullable</td>
+            </tr>
+            <tr>
+                <td>created_at, updated_at</td>
+                <td>timestamp</td>
+                <td></td>
+            </tr>
+        </table>
+        <div class="info-box">
+            <strong>UNIQUE CONSTRAINT:</strong> (loan_id, accrual_date) - Prevents duplicate accruals
+        </div>
+
+        <h4>loans</h4>
+        <table>
+            <tr>
+                <th>Column</th>
+                <th>Type</th>
+                <th>Notes</th>
+            </tr>
+            <tr>
+                <td>id</td>
+                <td>primary key</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>status</td>
+                <td>string</td>
+                <td><strong>INDEXED</strong> - Critical for job query</td>
+            </tr>
+            <tr>
+                <td>disbursed_on</td>
+                <td>date</td>
+                <td>Used to filter active loans</td>
+            </tr>
+        </table>
+
+        <h4>loan_schedules</h4>
+        <table>
+            <tr>
+                <th>Column</th>
+                <th>Type</th>
+                <th>Notes</th>
+            </tr>
+            <tr>
+                <td>id</td>
+                <td>primary key</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>loan_id</td>
+                <td>foreign key</td>
+                <td><strong>INDEXED</strong></td>
+            </tr>
+            <tr>
+                <td>due_date</td>
+                <td>date</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>accrued_interest</td>
+                <td>decimal</td>
+                <td>Updated by LoanScheduleService</td>
+            </tr>
+        </table>
+
+        <h3>4.2 Indexes</h3>
+        <p><strong>Migration:</strong> <code>2026_02_11_180826_add_performance_indexes_for_interest_calculation.php</code></p>
+        <p><strong>Indexes Added:</strong></p>
+        <ol>
+            <li><code>daily_interest_accruals_loan_id_index</code> on <code>daily_interest_accruals.loan_id</code></li>
+            <li><code>daily_interest_accruals_accrual_date_index</code> on <code>daily_interest_accruals.accrual_date</code></li>
+            <li><code>loans_status_index</code> on <code>loans.status</code></li>
+            <li><code>loan_schedules_loan_id_index</code> on <code>loan_schedules.loan_id</code></li>
+        </ol>
+        <div class="info-box">
+            <strong>To Apply Indexes:</strong><br>
+            <code>php artisan migrate</code>
+        </div>
+    </section>
+
+    <hr>
+
+    <section id="performance">
+        <h2>5. Performance Optimizations</h2>
+        
+        <h3>5.1 Chunking</h3>
+        <p><strong>Implementation:</strong></p>
+        <pre>Loan::where('status', Loan::STATUS_ACTIVE)
+    ->whereNotNull('disbursed_on')
+    ->where('disbursed_on', '<', $this->date)
+    ->with(['product', 'customer', 'branch', 'repayments'])
+    ->chunk(200, function ($loans) {
+        // Process chunk
+    });</pre>
+        <p><strong>Benefits:</strong></p>
+        <ul>
+            <li>Reduces memory usage</li>
+            <li>Processes large datasets efficiently</li>
+            <li>Allows progress tracking per chunk</li>
+        </ul>
+
+        <h3>5.2 Per-Loan Transactions</h3>
+        <p><strong>Implementation:</strong></p>
+        <pre>DB::transaction(function () use ($loan) {
+    return $this->processLoanInterest($loan);
+});</pre>
+        <p><strong>Benefits:</strong></p>
+        <ul>
+            <li>Isolated failures (one loan failure doesn't affect others)</li>
+            <li>Shorter transaction times</li>
+            <li>Better concurrency</li>
+        </ul>
+
+        <h3>5.3 Database Indexes</h3>
+        <p>All critical query fields are indexed for fast lookups.</p>
+
+        <h3>5.4 Eager Loading</h3>
+        <p>Relationships are eager loaded to avoid N+1 queries:</p>
+        <pre>->with(['product', 'customer', 'branch', 'repayments'])</pre>
+    </section>
+
+    <hr class="page-break">
+
+    <section id="idempotency">
+        <h2>6. Idempotency</h2>
+        
+        <h3>What is Idempotency?</h3>
+        <p>Running the job multiple times produces the same result without creating duplicates.</p>
+
+        <h3>Implementation</h3>
+        <p><strong>1. Application Level:</strong></p>
+        <pre>$accrual = DailyInterestAccrual::firstOrCreate(
+    ['loan_id' => $loan->id, 'accrual_date' => $date],
+    [/* attributes */]
+);</pre>
+
+        <p><strong>2. Database Level:</strong></p>
+        <pre>$table->unique(['loan_id', 'accrual_date']);</pre>
+
+        <h3>Why Important?</h3>
+        <ul>
+            <li>Queue worker may retry jobs</li>
+            <li>Server restarts</li>
+            <li>Timeouts</li>
+            <li>Manual re-runs</li>
+        </ul>
+        <div class="warning-box">
+            <strong>⚠️ CRITICAL:</strong> Without idempotency → Double interest accrual (CRITICAL BUG)
+        </div>
+    </section>
+
+    <hr>
+
+    <section id="error-handling">
+        <h2>7. Error Handling</h2>
+        
+        <h3>Job-Level Errors</h3>
+        <ul>
+            <li>Catches exceptions at job level</li>
+            <li>Updates JobLog with error status</li>
+            <li>Logs full error trace</li>
+            <li>Continues processing other loans</li>
+        </ul>
+
+        <h3>Loan-Level Errors</h3>
+        <ul>
+            <li>Each loan processed in separate transaction</li>
+            <li>Failed loans logged but don't stop job</li>
+            <li>Error details stored in perLoanDetails array</li>
+        </ul>
+
+        <h3>Service-Level Errors</h3>
+        <ul>
+            <li>Services throw exceptions that bubble up</li>
+            <li>Transaction automatically rolls back on error</li>
+            <li>Next loan continues processing</li>
+        </ul>
+    </section>
+
+    <hr>
+
+    <section id="maintenance">
+        <h2>8. Maintenance Procedures</h2>
+        
+        <h3>8.1 Running the Job Manually</h3>
+        <pre># Run for today
+php artisan queue:work
+
+# Or dispatch manually
+php artisan tinker
+>>> \App\Jobs\CalculateDailyInterestJob::dispatch();
+>>> \App\Jobs\CalculateDailyInterestJob::dispatch('2026-02-10'); // For specific date</pre>
+
+        <h3>8.2 Scheduling the Job</h3>
+        <p><strong>Location:</strong> <code>app/Providers/ScheduleServiceProvider.php</code></p>
+        <pre>$schedule->job(new \App\Jobs\CalculateDailyInterestJob())
+    ->daily()
+    ->at('02:00'); // Run at 2 AM daily</pre>
+
+        <h3>8.3 Monitoring Job Execution</h3>
+        <p><strong>Check JobLog table:</strong></p>
+        <pre>SELECT * FROM job_logs 
+WHERE job_name = 'CalculateDailyInterestJob' 
+ORDER BY created_at DESC 
+LIMIT 10;</pre>
+
+        <p><strong>View cached details:</strong></p>
+        <pre>Cache::get('daily_interest_job_details_{job_log_id}');</pre>
+
+        <h3>8.4 Adjusting Chunk Size</h3>
+        <p><strong>Location:</strong> <code>app/Jobs/CalculateDailyInterestJob.php</code></p>
+        <pre>->chunk(200, function ($loans) { // Change 200 to desired size</pre>
+        <p><strong>Recommendations:</strong></p>
+        <ul>
+            <li>Small database (&lt; 1000 loans): 500</li>
+            <li>Medium database (1000-10000 loans): 200</li>
+            <li>Large database (&gt; 10000 loans): 100</li>
+        </ul>
+    </section>
+
+    <hr class="page-break">
+
+    <section id="troubleshooting">
+        <h2>9. Troubleshooting</h2>
+        
+        <h3>Issue: Job Times Out</h3>
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>Job fails after 10 minutes</li>
+            <li>Large number of loans</li>
+        </ul>
+        <p><strong>Solutions:</strong></p>
+        <ol>
+            <li>Reduce chunk size (200 → 100)</li>
+            <li>Increase timeout: <code>public $timeout = 1200;</code> (20 minutes)</li>
+            <li>Process loans in smaller date ranges</li>
+        </ol>
+
+        <h3>Issue: Duplicate Accruals</h3>
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>Same loan has multiple accruals for same date</li>
+        </ul>
+        <p><strong>Check:</strong></p>
+        <ol>
+            <li>Verify unique constraint exists:
+                <pre>SHOW INDEXES FROM daily_interest_accruals;</pre>
+            </li>
+            <li>Check if <code>firstOrCreate</code> is being used correctly</li>
+        </ol>
+        <p><strong>Fix:</strong></p>
+        <pre># Remove duplicates manually if needed
+# Then ensure unique constraint is in place
+php artisan migrate</pre>
+
+        <h3>Issue: Missing GL Transactions</h3>
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>Accruals created but no journal entries</li>
+        </ul>
+        <p><strong>Check:</strong></p>
+        <ol>
+            <li>Verify loan product has GL accounts configured</li>
+            <li>Check AccountingService logs</li>
+            <li>Verify product relationship is loaded</li>
+        </ol>
+
+        <h3>Issue: Zero Interest Calculated</h3>
+        <p><strong>Possible Causes:</strong></p>
+        <ol>
+            <li>Principal remaining is 0</li>
+            <li>Interest rate is 0</li>
+            <li>Calculation results in 0 after rounding</li>
+        </ol>
+        <p><strong>Check Logs:</strong></p>
+        <pre>tail -f storage/logs/laravel.log | grep "calculated zero interest"</pre>
+
+        <h3>Issue: Schedule Not Updated</h3>
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>Accrual created but schedule.accrued_interest not updated</li>
+        </ul>
+        <p><strong>Check:</strong></p>
+        <ol>
+            <li>Verify loan has schedules</li>
+            <li>Check LoanScheduleService logs</li>
+            <li>Verify loan_id relationship</li>
+        </ol>
+    </section>
+
+    <hr>
+
+    <section id="testing">
+        <h2>10. Testing</h2>
+        
+        <h3>Unit Testing Services</h3>
+        <p><strong>Example Test Structure:</strong></p>
+        <pre>// tests/Unit/Services/InterestCalculationServiceTest.php
+
+public function test_calculates_daily_interest_correctly()
+{
+    $loan = Loan::factory()->create([
+        'interest' => 12, // 12% annual
+        'amount' => 100000
+    ]);
+    
+    $service = new InterestCalculationService();
+    $result = $service->calculateAndCreateAccrual($loan, Carbon::today());
+    
+    $this->assertNotNull($result);
+    $this->assertGreaterThan(0, $result['interest_amount']);
+}
+
+public function test_idempotent_behavior()
+{
+    // Run twice, should return existing record
+    $result1 = $service->calculateAndCreateAccrual($loan, $date);
+    $result2 = $service->calculateAndCreateAccrual($loan, $date);
+    
+    $this->assertEquals($result1['accrual']->id, $result2['accrual']->id);
+}</pre>
+
+        <h3>Integration Testing</h3>
+        <pre>// tests/Feature/CalculateDailyInterestJobTest.php
+
+public function test_job_processes_loans_successfully()
+{
+    Loan::factory()->count(10)->create([
+        'status' => Loan::STATUS_ACTIVE,
+        'disbursed_on' => Carbon::yesterday()
+    ]);
+    
+    $job = new CalculateDailyInterestJob();
+    $job->handle();
+    
+    $this->assertDatabaseCount('daily_interest_accruals', 10);
+}</pre>
+    </section>
+
+    <hr>
+
+    <section>
+        <h2>Best Practices</h2>
+        
+        <div class="success-box">
+            <h3>✅ DO</h3>
+            <ul>
+                <li>Always test changes in development first</li>
+                <li>Monitor job logs after deployment</li>
+                <li>Keep chunk size reasonable (100-500)</li>
+                <li>Use transactions for data integrity</li>
+                <li>Log important operations</li>
+                <li>Handle exceptions gracefully</li>
+            </ul>
+        </div>
+
+        <div class="warning-box">
+            <h3>❌ DON'T</h3>
+            <ul>
+                <li>Don't remove idempotency checks</li>
+                <li>Don't process all loans in one transaction</li>
+                <li>Don't skip error handling</li>
+                <li>Don't modify calculation logic without testing</li>
+                <li>Don't remove database indexes</li>
+                <li>Don't run job manually during business hours (if possible)</li>
+            </ul>
+        </div>
+    </section>
+
+    <hr>
+
+    <section>
+        <h2>Support & Emergency Procedures</h2>
+        
+        <h3>For Issues:</h3>
+        <ul>
+            <li>Check logs: <code>storage/logs/laravel.log</code></li>
+            <li>Check JobLog table for job execution history</li>
+            <li>Review cached job details for per-loan information</li>
+        </ul>
+
+        <h3>Emergency Procedures:</h3>
+        <ol>
+            <li>Stop queue worker: <code>php artisan queue:restart</code></li>
+            <li>Check for duplicate accruals</li>
+            <li>Review recent job logs</li>
+            <li>Contact system administrator</li>
+        </ol>
+    </section>
+
+    <hr>
+
+    <section>
+        <h2>Version History</h2>
+        <table>
+            <tr>
+                <th>Version</th>
+                <th>Date</th>
+                <th>Changes</th>
+            </tr>
+            <tr>
+                <td>1.0</td>
+                <td>2026-02-11</td>
+                <td>Initial service-based architecture implementation</td>
+            </tr>
+        </table>
+    </section>
+
+    <hr>
+
+    <footer style="text-align: center; color: #666; margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd;">
+        <p><strong>SmartFinance SACCO Management System</strong></p>
+        <p>Daily Interest Calculation System - Maintenance Guide v1.0</p>
+        <p>© 2026 SmartFinance. Licensed by the Bank of Tanzania & TCDC.</p>
+    </footer>
+
+</body>
+</html>

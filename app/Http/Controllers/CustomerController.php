@@ -852,6 +852,14 @@ class CustomerController extends Controller
                 return strtolower(trim((string) $h));
             }, $header);
 
+            // Normalize common column aliases
+            $columnAliases = [
+                'gender' => 'sex',
+            ];
+            $header = array_map(function ($h) use ($columnAliases) {
+                return $columnAliases[$h] ?? $h;
+            }, $header);
+
             // Validate file structure
             $requiredColumns = ['name', 'phone1', 'dob', 'sex'];
             $missingColumns = array_diff($requiredColumns, $header);

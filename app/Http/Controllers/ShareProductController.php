@@ -233,11 +233,6 @@ class ShareProductController extends Controller
         $data['minimum_active_period'] = 1;
         $data['minimum_active_period_type'] = 'Days';
         $data['share_purchase_increment'] = null;
-        $data['withdrawal_notice_period'] = null;
-        $data['withdrawal_notice_period_type'] = null;
-        $data['minimum_withdrawal_amount'] = null;
-        $data['maximum_withdrawal_amount'] = null;
-        $data['allow_partial_withdrawal'] = false;
         $data['transfer_fee'] = null;
         $data['transfer_fee_type'] = null;
         $data['withdrawal_fee'] = null;
@@ -423,11 +418,6 @@ class ShareProductController extends Controller
         $data['minimum_active_period'] = 1;
         $data['minimum_active_period_type'] = 'Days';
         $data['share_purchase_increment'] = null;
-        $data['withdrawal_notice_period'] = null;
-        $data['withdrawal_notice_period_type'] = null;
-        $data['minimum_withdrawal_amount'] = null;
-        $data['maximum_withdrawal_amount'] = null;
-        $data['allow_partial_withdrawal'] = false;
         $data['transfer_fee'] = null;
         $data['transfer_fee_type'] = null;
         $data['withdrawal_fee'] = null;

@@ -38,6 +38,7 @@ class LoanProduct extends Model
         'direct_writeoff_account_id',
         'provision_writeoff_account_id',
         'income_provision_account_id',
+        'loan_clearing_account_id',
         'fees_ids',
         'penalty_ids',
         'repayment_order',
@@ -58,6 +59,11 @@ class LoanProduct extends Model
     public function incomeProvisionAccount(): BelongsTo
     {
         return $this->belongsTo(ChartAccount::class, 'income_provision_account_id');
+    }
+
+    public function loanClearingAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartAccount::class, 'loan_clearing_account_id');
     }
     public function directWriteoffAccount(): BelongsTo
     {
