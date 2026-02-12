@@ -1495,10 +1495,12 @@ class Loan extends Model
 
         $currentScheduleInterest = 0;
         if ($currentSchedule) {
-            // Calculate remaining interest (original interest - interest already paid)
+            // Calculate remaining interest using accrued_interest instead of interest
+            // Use accrued_interest if available, otherwise fall back to interest
+            $scheduleInterest = $currentSchedule->accrued_interest ?? $currentSchedule->interest ?? 0;
             $scheduleRepayments = $currentSchedule->repayments ?? collect();
             $interestPaid = $scheduleRepayments->sum('interest');
-            $currentScheduleInterest = max(0, $currentSchedule->interest - $interestPaid);
+            $currentScheduleInterest = max(0, $scheduleInterest - $interestPaid);
         }
 
         return $outstandingPrincipal + $currentScheduleInterest;
@@ -1514,12 +1516,29 @@ class Loan extends Model
     }
 
     /**
+     * Get the remaining principal balance for this loan
+     * 
+     * @return float
+     */
+    public function getPrincipalRemaining(): float
+    {
+        $totalPrincipalPaid = $this->getTotalPrincipalPaid();
+        $remaining = $this->amount - $totalPrincipalPaid;
+        return max(0, $remaining); // Ensure it doesn't go negative
+    }
+
+    /**
      * Get the total principal paid for this loan
      *
      * @return float
      */
     public function getTotalPrincipalPaid(): float
     {
+        // If repayments relationship is not loaded, query it
+        if (!$this->relationLoaded('repayments')) {
+            $this->load('repayments');
+        }
+        
         $repayments = $this->repayments ?? collect();
         return $repayments->sum('principal');
     }
@@ -1573,8 +1592,11 @@ class Loan extends Model
             }
 
             // Calculate current interest (remaining interest from current schedule)
+            // Use accrued_interest instead of interest for accurate calculation
             $interestPaid = $currentSchedule->repayments->sum('interest');
-            $currentInterest = max(0, $currentSchedule->interest - $interestPaid);
+            // Use accrued_interest if available, otherwise fall back to interest
+            $scheduleInterest = $currentSchedule->accrued_interest ?? $currentSchedule->interest ?? 0;
+            $currentInterest = max(0, $scheduleInterest - $interestPaid);
 
             // Calculate total outstanding principal from all schedules
             $outstandingPrincipal = $this->schedule->sum('principal') - $this->schedule->sum(function ($schedule) {

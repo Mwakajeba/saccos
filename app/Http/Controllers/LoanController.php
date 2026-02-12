@@ -23,6 +23,7 @@ use App\Models\Journal;
 use App\Models\JournalItem;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\ArrearsClassification;
 use App\Services\LoanRestructuringService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -299,6 +300,7 @@ class LoanController extends Controller
             'written_off' => Loan::where('branch_id', $branchId)->where('status', 'written_off')->count(),
             'completed' => Loan::where('branch_id', $branchId)->where('status', 'completed')->count(),
             'restructured' => Loan::where('branch_id', $branchId)->where('status', 'restructured')->count(),
+            'npl' => $this->getNplCount($branchId, $user->company_id),
         ];
 
         // Data for opening balance modal
@@ -814,18 +816,16 @@ class LoanController extends Controller
                             }
                         }
 
-                        // Check for existing active loan
-                        $existingLoan = Loan::where('customer_id', $validated['customer_id'])
-                            ->where('product_id', $request->product_id)
-                            ->where('status', 'active')
-                            ->first();
-
-                        if ($existingLoan) {
-                            $errorMsg = "Row " . ($rowIndex + 2) . ": Customer already has an active loan for this product";
-                            \Log::warning('Existing loan check failed', ['row' => $rowIndex + 2, 'error' => $errorMsg]);
+                        // Check if customer has reached maximum number of loans for this product
+                        if ($product->hasReachedMaxLoans($validated['customer_id'])) {
+                            $remainingLoans = $product->getRemainingLoans($validated['customer_id']);
+                            $maxLoans = $product->maximum_number_of_loans;
+                            
+                            $errorMsg = "Row " . ($rowIndex + 2) . ": Customer has reached the maximum number of loans ({$maxLoans}) for this product. Remaining loans allowed: {$remainingLoans}";
+                            \Log::warning('Maximum loans check failed', ['row' => $rowIndex + 2, 'error' => $errorMsg]);
                             if ($skipErrors) {
                                 $skippedCount++;
-                                \Log::info('Skipping row due to existing active loan', ['row' => $rowIndex + 2]);
+                                \Log::info('Skipping row due to maximum loans reached', ['row' => $rowIndex + 2]);
                                 continue;
                             } else {
                                 $errors[] = $errorMsg;
@@ -3906,72 +3906,22 @@ class LoanController extends Controller
     }
 
     /**
-     * Download opening balance template
+     * Download opening balance template (Excel with dropdowns)
      */
     public function downloadOpeningBalanceTemplate(Request $request)
     {
-        // Get product_id from request to determine interest cycle
         $productId = $request->get('product_id');
-        $interestCycle = 'Monthly'; // Default value
-
-        if ($productId) {
-            $product = LoanProduct::find($productId);
-            if ($product && $product->interest_cycle) {
-                $interestCycle = ucfirst($product->interest_cycle);
-            }
-        }
-
-        $customers = Customer::with('groups')->get();
-
-        $headers = [
-            'customer_no',
-            'customer_name',
-            'group_id',
-            'group_name',
-            'amount',
-            'interest',
-            'period',
-            'date_applied',
-            'sector',
-            'amount_paid'
-        ];
-
-        $filename = 'opening_balance_template_' . date('Y-m-d') . '.csv';
-
-        $callback = function () use ($customers, $headers, $interestCycle) {
-            $file = fopen('php://output', 'w');
-
-            // Write headers
-            fputcsv($file, $headers);
-
-            // Write data for all customers
-            foreach ($customers as $customer) {
-                $group = $customer->groups->first();
-                fputcsv($file, [
-                    $customer->customerNo,
-                    $customer->name,
-                    $group ? $group->id : '',
-                    $group ? $group->name : '',
-                    '', // amount - to be filled
-                    '', // interest - to be filled
-                    '', // period - to be filled
-                    date('Y-m-d'), // date_applied
-                    'Business', // sector
-                    '' // amount_paid - to be filled
-                ]);
-            }
-
-            fclose($file);
-        };
-
-        return response()->stream($callback, 200, [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-        ]);
+        
+        $filename = 'loan_opening_balance_template_' . date('Y-m-d') . '.xlsx';
+        
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\LoanOpeningBalanceTemplateExport($productId),
+            $filename
+        );
     }
 
     /**
-     * Store opening balance loans
+     * Store opening balance loans (Excel upload with progress tracking)
      */
     public function storeOpeningBalance(Request $request)
     {
@@ -3979,40 +3929,159 @@ class LoanController extends Controller
             'product_id' => 'required|exists:loan_products,id',
             'branch_id' => 'required|exists:branches,id',
             'chart_account_id' => 'required|exists:chart_accounts,id',
-            'csv_file' => 'required|file|mimes:csv,txt|max:10240'
+            'excel_file' => 'required|file|mimes:xlsx,xls,csv|max:10240'
         ]);
 
         try {
-            $file = $request->file('csv_file');
-            $csvData = array_map('str_getcsv', file($file->getPathname()));
-            $headers = array_shift($csvData);
-
-            // Validate CSV structure
-            $expectedHeaders = ['customer_no', 'customer_name', 'group_id', 'group_name', 'amount', 'interest', 'period', 'date_applied', 'sector', 'amount_paid'];
+            $file = $request->file('excel_file');
             
-            info("headers of the csv ", [$headers]);
-            info("expected headers",[$expectedHeaders]);
+            // Read Excel file
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getPathname());
+            $worksheet = $spreadsheet->getActiveSheet();
+            $rows = $worksheet->toArray();
+            
+            // Get headers from first row
+            $headers = array_shift($rows);
+            
+            // Remove instruction row if present (check if first cell contains 'DELETE')
+            if (!empty($rows) && isset($rows[0][0]) && stripos($rows[0][0], 'DELETE') !== false) {
+                array_shift($rows);
+            }
+            
+            // Filter out empty rows
+            $rows = array_filter($rows, function($row) {
+                return !empty(array_filter($row, function($cell) {
+                    return $cell !== null && $cell !== '';
+                }));
+            });
+            
+            if (empty($rows)) {
+                return redirect()->back()->withErrors(['excel_file' => 'No valid data rows found in the uploaded file.']);
+            }
 
-            // Normalize csv headers to trim spaces before comparing to expected headers
+            // Normalize headers
             $cleanHeaders = array_map(function($header) {
-                return trim($header);
+                return strtolower(trim($header));
             }, $headers);
 
-            if ($expectedHeaders !== $cleanHeaders) {
-                return redirect()->back()->withErrors(['csv_file' => 'Invalid CSV format. Please download the template and use it.']);
+            $expectedHeaders = ['customer_no', 'customer_name', 'group_id', 'group_name', 'amount', 'interest', 'period', 'interest_cycle', 'date_applied', 'sector', 'loan_officer_id', 'amount_paid'];
+            
+            info("Headers from Excel: ", $cleanHeaders);
+            info("Expected headers: ", $expectedHeaders);
+
+            // Validate that required columns exist
+            $missingHeaders = array_diff(['customer_no', 'amount', 'interest', 'period'], $cleanHeaders);
+            if (!empty($missingHeaders)) {
+                return redirect()->back()->withErrors(['excel_file' => 'Missing required columns: ' . implode(', ', $missingHeaders) . '. Please download the template and use it.']);
+            }
+
+            // Create a mapping of header positions
+            $headerMap = array_flip($cleanHeaders);
+
+            // Convert rows to associative arrays
+            $mappedData = [];
+            foreach ($rows as $rowIndex => $row) {
+                $mappedRow = [];
+                foreach ($expectedHeaders as $header) {
+                    $position = $headerMap[$header] ?? null;
+                    $mappedRow[$header] = ($position !== null && isset($row[$position])) ? $row[$position] : '';
+                }
+                $mappedData[] = $mappedRow;
             }
 
             // Remove the uploaded file from validated data to avoid serialization issues
-            unset($validated['csv_file']);
+            unset($validated['excel_file']);
+
+            // Generate a unique batch ID for tracking
+            $batchId = 'BULK_LOAN_' . date('YmdHis') . '_' . auth()->id();
+            
+            // Store the batch info in cache for progress tracking
+            \Illuminate\Support\Facades\Cache::put($batchId, [
+                'total' => count($mappedData),
+                'processed' => 0,
+                'created' => 0,
+                'failed' => 0,
+                'status' => 'processing',
+                'started_at' => now()->toDateTimeString(),
+                'failed_loans' => [],
+            ], 3600); // 1 hour expiry
 
             // Dispatch job for bulk loan creation
-            \App\Jobs\BulkLoanCreationJob::dispatch($csvData, $validated, auth()->id());
+            \App\Jobs\BulkLoanCreationJob::dispatch($mappedData, $validated, auth()->id(), $batchId);
 
-            return redirect()->back()->with('success', 'Opening balance processing started. You will be notified when complete.');
+            // Return JSON for AJAX requests
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Opening balance processing started. You will be notified when complete.',
+                    'batch_id' => $batchId,
+                    'total_rows' => count($mappedData)
+                ]);
+            }
+
+            return redirect()->back()->with([
+                'success' => 'Opening balance processing started. You will be notified when complete.',
+                'batch_id' => $batchId,
+                'total_rows' => count($mappedData)
+            ]);
         } catch (\Exception $e) {
             Log::error('Opening balance processing failed: ' . $e->getMessage());
+            
+            // Return JSON for AJAX requests
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => ['error' => 'Failed to process opening balance: ' . $e->getMessage()]
+                ], 422);
+            }
+            
             return redirect()->back()->withErrors(['error' => 'Failed to process opening balance: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Get bulk loan creation progress
+     */
+    public function getBulkLoanProgress(Request $request)
+    {
+        $batchId = $request->get('batch_id');
+        
+        if (!$batchId) {
+            return response()->json(['error' => 'Batch ID required'], 400);
+        }
+        
+        $progress = \Illuminate\Support\Facades\Cache::get($batchId);
+        
+        if (!$progress) {
+            return response()->json(['error' => 'Batch not found or expired'], 404);
+        }
+        
+        return response()->json($progress);
+    }
+
+    /**
+     * Download failed loans Excel
+     */
+    public function downloadFailedLoans(Request $request)
+    {
+        $batchId = $request->get('batch_id');
+        
+        if (!$batchId) {
+            return redirect()->back()->withErrors(['error' => 'Batch ID required']);
+        }
+        
+        $progress = \Illuminate\Support\Facades\Cache::get($batchId);
+        
+        if (!$progress || empty($progress['failed_loans'])) {
+            return redirect()->back()->withErrors(['error' => 'No failed loans found for this batch']);
+        }
+        
+        $filename = 'failed_loans_' . $batchId . '.xlsx';
+        
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\FailedLoansExport($progress['failed_loans']),
+            $filename
+        );
     }
 
     /**
@@ -4442,5 +4511,217 @@ class LoanController extends Controller
                 ->withErrors(['error' => 'Failed to restructure loan: ' . $e->getMessage()])
                 ->withInput();
         }
+    }
+
+    /**
+     * Get NPL count (loans classified as Loss/NPL)
+     */
+    private function getNplCount($branchId, $companyId)
+    {
+        // Get the Loss/NPL classification
+        $nplClassification = ArrearsClassification::where('company_id', $companyId)
+            ->where('status', 'Loss/NPL')
+            ->where('is_active', true)
+            ->first();
+
+        if (!$nplClassification) {
+            return 0;
+        }
+
+        $minDays = $nplClassification->days_from;
+
+        // Count loans with schedule past due more than minDays
+        // Uses subquery to sum repayments since loan_schedules doesn't have principal_paid/interest_paid columns
+        return Loan::where('branch_id', $branchId)
+            ->whereIn('status', ['active', 'disbursed', 'defaulted'])
+            ->whereHas('schedule', function ($query) use ($minDays) {
+                $query->whereRaw('(SELECT COALESCE(SUM(principal + interest), 0) FROM repayments WHERE repayments.loan_schedule_id = loan_schedules.id) < (principal + COALESCE(accrued_interest, interest))')
+                    ->where('due_date', '<', now()->subDays($minDays));
+            })
+            ->count();
+    }
+
+    /**
+     * NPL Report - List all loans classified as Loss/NPL
+     */
+    public function nplReport()
+    {
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        // Get the Loss/NPL classification
+        $nplClassification = ArrearsClassification::where('company_id', $companyId)
+            ->where('status', 'Loss/NPL')
+            ->where('is_active', true)
+            ->first();
+
+        if (!$nplClassification) {
+            return view('loans.npl-report', [
+                'loans' => collect(),
+                'totalOutstanding' => 0,
+                'totalProvision' => 0,
+                'nplClassification' => null,
+                'message' => 'NPL classification not configured. Please configure Arrears Classifications in Settings.'
+            ]);
+        }
+
+        $minDays = $nplClassification->days_from;
+
+        // Get NPL loans with their details
+        $loans = Loan::with(['customer', 'product', 'branch', 'schedule.repayments', 'repayments'])
+            ->where('branch_id', $branchId)
+            ->whereIn('status', ['active', 'disbursed', 'defaulted'])
+            ->whereHas('schedule', function ($query) use ($minDays) {
+                $query->whereRaw('(SELECT COALESCE(SUM(principal + interest), 0) FROM repayments WHERE repayments.loan_schedule_id = loan_schedules.id) < (principal + COALESCE(accrued_interest, interest))')
+                    ->where('due_date', '<', now()->subDays($minDays));
+            })
+            ->get()
+            ->map(function ($loan) use ($nplClassification) {
+                // Calculate days in arrears - find oldest unpaid schedule
+                $oldestUnpaid = $loan->schedule
+                    ->filter(function ($s) {
+                        // Calculate paid amount from repayments
+                        $paidAmount = $s->repayments->sum(fn($r) => $r->principal + $r->interest);
+                        $totalDue = $s->principal + ($s->accrued_interest ?? $s->interest);
+                        return $paidAmount < $totalDue;
+                    })
+                    ->filter(function ($s) {
+                        return \Carbon\Carbon::parse($s->due_date)->lt(now());
+                    })
+                    ->sortBy('due_date')
+                    ->first();
+
+                $daysInArrears = $oldestUnpaid 
+                    ? \Carbon\Carbon::parse($oldestUnpaid->due_date)->diffInDays(now()) 
+                    : 0;
+
+                // Calculate outstanding balance
+                $totalPaid = $loan->repayments?->sum(fn($r) => $r->principal + $r->interest) ?? 0;
+                $outstandingBalance = $loan->amount_total - $totalPaid;
+
+                // Calculate provision
+                $provisionPercentage = (float) $nplClassification->provision_percentage;
+                $provisionAmount = $outstandingBalance * ($provisionPercentage / 100);
+
+                $loan->days_in_arrears = $daysInArrears;
+                $loan->outstanding_balance = $outstandingBalance;
+                $loan->provision_percentage = $provisionPercentage;
+                $loan->provision_amount = $provisionAmount;
+
+                return $loan;
+            });
+
+        $totalOutstanding = $loans->sum('outstanding_balance');
+        $totalProvision = $loans->sum('provision_amount');
+
+        return view('loans.npl-report', [
+            'loans' => $loans,
+            'totalOutstanding' => $totalOutstanding,
+            'totalProvision' => $totalProvision,
+            'nplClassification' => $nplClassification,
+            'message' => null
+        ]);
+    }
+
+    /**
+     * Export NPL Report to Excel
+     */
+    public function exportNplExcel()
+    {
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        $nplClassification = ArrearsClassification::where('company_id', $companyId)
+            ->where('status', 'Loss/NPL')
+            ->where('is_active', true)
+            ->first();
+
+        if (!$nplClassification) {
+            return redirect()->back()->with('error', 'NPL classification not configured.');
+        }
+
+        $minDays = $nplClassification->days_from;
+
+        $loans = Loan::with(['customer', 'product', 'branch', 'schedule.repayments', 'repayments'])
+            ->where('branch_id', $branchId)
+            ->whereIn('status', ['active', 'disbursed', 'defaulted'])
+            ->whereHas('schedule', function ($query) use ($minDays) {
+                $query->whereRaw('(SELECT COALESCE(SUM(principal + interest), 0) FROM repayments WHERE repayments.loan_schedule_id = loan_schedules.id) < (principal + COALESCE(accrued_interest, interest))')
+                    ->where('due_date', '<', now()->subDays($minDays));
+            })
+            ->get();
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\NplLoansExport($loans, $nplClassification),
+            'NPL_Report_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
+
+    /**
+     * Export NPL Report to PDF
+     */
+    public function exportNplPdf()
+    {
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        $companyId = $user->company_id;
+
+        $nplClassification = ArrearsClassification::where('company_id', $companyId)
+            ->where('status', 'Loss/NPL')
+            ->where('is_active', true)
+            ->first();
+
+        if (!$nplClassification) {
+            return redirect()->back()->with('error', 'NPL classification not configured.');
+        }
+
+        $minDays = $nplClassification->days_from;
+
+        $loans = Loan::with(['customer', 'product', 'branch', 'schedule.repayments', 'repayments'])
+            ->where('branch_id', $branchId)
+            ->whereIn('status', ['active', 'disbursed', 'defaulted'])
+            ->whereHas('schedule', function ($query) use ($minDays) {
+                $query->whereRaw('(SELECT COALESCE(SUM(principal + interest), 0) FROM repayments WHERE repayments.loan_schedule_id = loan_schedules.id) < (principal + COALESCE(accrued_interest, interest))')
+                    ->where('due_date', '<', now()->subDays($minDays));
+            })
+            ->get()
+            ->map(function ($loan) use ($nplClassification) {
+                $oldestUnpaid = $loan->schedule
+                    ->filter(fn($s) => $s->repayments->sum(fn($r) => $r->principal + $r->interest) < ($s->principal + ($s->accrued_interest ?? $s->interest)))
+                    ->filter(fn($s) => \Carbon\Carbon::parse($s->due_date)->lt(now()))
+                    ->sortBy('due_date')
+                    ->first();
+
+                $daysInArrears = $oldestUnpaid ? \Carbon\Carbon::parse($oldestUnpaid->due_date)->diffInDays(now()) : 0;
+                $totalPaid = $loan->repayments?->sum(fn($r) => $r->principal + $r->interest) ?? 0;
+                $outstandingBalance = $loan->amount_total - $totalPaid;
+                $provisionAmount = $outstandingBalance * ($nplClassification->provision_percentage / 100);
+
+                $loan->days_in_arrears = $daysInArrears;
+                $loan->outstanding_balance = $outstandingBalance;
+                $loan->provision_percentage = $nplClassification->provision_percentage;
+                $loan->provision_amount = $provisionAmount;
+
+                return $loan;
+            });
+
+        $totalOutstanding = $loans->sum('outstanding_balance');
+        $totalProvision = $loans->sum('provision_amount');
+        $company = $user->company;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('loans.npl-report-pdf', [
+            'loans' => $loans,
+            'totalOutstanding' => $totalOutstanding,
+            'totalProvision' => $totalProvision,
+            'nplClassification' => $nplClassification,
+            'company' => $company,
+            'exportDate' => now()->format('d-m-Y H:i:s')
+        ]);
+
+        $pdf->setPaper('A4', 'landscape');
+
+        return $pdf->download('NPL_Report_' . now()->format('Y-m-d') . '.pdf');
     }
 }

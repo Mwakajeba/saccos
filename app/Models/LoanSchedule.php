@@ -40,10 +40,13 @@ class LoanSchedule extends Model
 
     /**
      * Get the remaining amount to be paid for this schedule
+     * Uses accrued_interest instead of interest for accurate calculation
      */
     public function getRemainingAmountAttribute()
     {
-        $totalDue = $this->principal + $this->interest + $this->fee_amount + $this->penalty_amount;
+        // Use accrued_interest if available, otherwise fall back to interest
+        $interestAmount = $this->accrued_interest ?? $this->interest ?? 0;
+        $totalDue = $this->principal + $interestAmount + $this->fee_amount + $this->penalty_amount;
         return max(0, $totalDue - $this->paid_amount);
     }
 
@@ -123,10 +126,13 @@ class LoanSchedule extends Model
 
     /**
      * Get the total amount due for this schedule
+     * Uses accrued_interest instead of interest for accurate calculation
      */
     public function getTotalDueAttribute()
     {
-        return $this->principal + $this->interest + $this->fee_amount + $this->penalty_amount;
+        // Use accrued_interest if available, otherwise fall back to interest
+        $interestAmount = $this->accrued_interest ?? $this->interest ?? 0;
+        return $this->principal + $interestAmount + $this->fee_amount + $this->penalty_amount;
     }
 
     /**
