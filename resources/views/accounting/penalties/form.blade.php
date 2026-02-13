@@ -94,6 +94,27 @@
                             @error('charge_frequency') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                         <div class="col-md-6 mb-3">
+                            <label class="form-label">Frequency Cycle <span class="text-danger">*</span></label>
+                            <select name="frequency_cycle" class="form-select @error('frequency_cycle') is-invalid @enderror" required>
+                                <option value="">-- Select Frequency Cycle --</option>
+                                @foreach($frequencyCycleOptions as $value => $label)
+                                    <option value="{{ $value }}" {{ old('frequency_cycle', $penalty->frequency_cycle ?? 'monthly') == $value ? 'selected' : '' }}>
+                                        {{ $label }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div class="form-text">The period for which the penalty rate applies (e.g., 4% per year, 4% per month)</div>
+                            @error('frequency_cycle') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Penalty Limit Days</label>
+                            <input type="number" name="penalty_limit_days" class="form-control @error('penalty_limit_days') is-invalid @enderror"
+                                value="{{ old('penalty_limit_days', $penalty->penalty_limit_days ?? '') }}" min="0" step="1" 
+                                placeholder="Enter penalty limit days">
+                            <div class="form-text">Maximum days in arrears before stopping daily penalty accrual. Leave empty for no limit.</div>
+                            @error('penalty_limit_days') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
                             <label class="form-label">Amount <span class="text-danger">*</span></label>
                             <input type="number" name="amount" class="form-control @error('amount') is-invalid @enderror"
                                 value="{{ old('amount', $penalty->amount ?? '') }}" min="0" step="0.01" 

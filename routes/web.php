@@ -537,6 +537,9 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
 
     // Run Accrued Interest Job Manually
     Route::post('/run-accrued-interest-job', [SettingsController::class, 'runAccruedInterestJob'])->name('run-accrued-interest-job');
+    
+    // Manual Penalty Accrual Trigger
+    Route::post('/run-penalty-accrual', [SettingsController::class, 'runPenaltyAccrual'])->name('runPenaltyAccrual');
 
     // Arrears Classifications
     Route::get('/arrears-classifications', [SettingsController::class, 'arrearsClassificationsIndex'])->name('arrears-classifications.index');

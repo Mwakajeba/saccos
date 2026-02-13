@@ -6,6 +6,7 @@ namespace App\Providers;
 use App\Jobs\RepaymentReminderJob;
 use App\Jobs\CheckSubscriptionExpiryJob;
 use App\Jobs\CalculateContributionInterestJob;
+use App\Jobs\AccruePenaltyJob;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
 
@@ -57,6 +58,15 @@ class ScheduleServiceProvider extends ServiceProvider
                 ->withoutOverlapping()
                 ->onOneServer()
                 ->appendOutputTo(storage_path('logs/contribution-interest-calculation.log'));
+
+            // Schedule penalty accrual to run daily at 06:00 AM
+            // This calculates penalties for overdue loan schedules, respecting grace periods,
+            // posts to GL transactions, creates journal entries, and updates penalty_amount
+            $schedule->job(new AccruePenaltyJob())
+                ->dailyAt('06:00')
+                ->withoutOverlapping()
+                ->onOneServer()
+                ->appendOutputTo(storage_path('logs/penalty-accrual.log'));
 
              // Scheduled backups from System Configuration (backup_enabled, backup_frequency).
             // Command runs every hour and decides internally whether to run based on frequency (no app restart needed).

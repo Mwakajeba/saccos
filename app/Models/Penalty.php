@@ -18,6 +18,8 @@ class Penalty extends Model
         'penalty_receivables_account_id',
         'penalty_type',
         'charge_frequency',
+        'frequency_cycle',
+        'penalty_limit_days',
         'amount',
         'deduction_type',
         'description',
