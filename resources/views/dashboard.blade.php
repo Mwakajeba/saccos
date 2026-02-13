@@ -75,11 +75,7 @@ use Vinkla\Hashids\Facades\Hashids;
                             <div class="col-md-8">
                                 <div class="card-title d-flex align-items-center">
                                     <div><i class="bx bx-home me-1 font-22 text-primary"></i></div>
-                                    <h5 class="mb-0 text-primary">Welcome back, {{ auth()->user()->name }}!
-                                        <span class="badge bg-warning text-dark ms-2" style="font-size: 1rem; vertical-align: middle;">
-                                            Branch: {{ session('branch_id') ? optional(auth()->user()->branches->where('id', session('branch_id'))->first())->name : (auth()->user()->branch->name ?? 'N/A') }}
-                                        </span>
-                                    </h5>
+                                    <h5 class="mb-0 text-primary">Dashboard</h5>
                                 </div>
                                 <p class="mb-0 text-muted">Here's what's happening with your financial data today</p>
                             </div>
@@ -158,23 +154,6 @@ use Vinkla\Hashids\Facades\Hashids;
             </div>
             @endcan
 
-
-            @can('view journals')
-            <div class="col">
-                <div class="card radius-10">
-                    <div class="card-body">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <p class="mb-0">Total Journals</p>
-                                <h4 class="font-weight-bold">{{ $recentJournals->count() > 0 ? $recentJournals->count() : 0 }}</h4>
-                                <p class="text-success mb-0 font-13">This month</p>
-                            </div>
-                            <div class="widgets-icons bg-gradient-cosmic text-white"><i class='bx bx-book-open'></i></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            @endcan
             @can('view payments')
             <div class="col">
                 <div class="card radius-10">
@@ -183,7 +162,7 @@ use Vinkla\Hashids\Facades\Hashids;
                             <div class="flex-grow-1">
                                 <p class="mb-0">Total Payments</p>
                                 <h4 class="font-weight-bold">TZS {{ number_format($recentPayments->sum('amount') ?? 0, 2) }}</h4>
-                                <p class="text-secondary mb-0 font-13">This month</p>
+                                <p class="text-success mb-0 font-13">This year ({{ now()->format('Y') }})</p>
                             </div>
                             <div class="widgets-icons bg-gradient-burning text-white"><i class='bx bx-money'></i></div>
                         </div>
@@ -191,6 +170,7 @@ use Vinkla\Hashids\Facades\Hashids;
                 </div>
             </div>
             @endcan
+
             @can('view receipts')
             <div class="col">
                 <div class="card radius-10">
@@ -198,8 +178,8 @@ use Vinkla\Hashids\Facades\Hashids;
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
                                 <p class="mb-0">Total Receipts</p>
-                                <h4 class="font-weight-bold">TZS {{ number_format($recentReceipts->sum('amount') ?? 0, 2) }}</h4>
-                                <p class="text-secondary mb-0 font-13">This month</p>
+                                <h4 class="font-weight-bold">TZS {{ number_format($receiptsThisYear->sum('amount') ?? 0, 2) }}</h4>
+                                <p class="text-success mb-0 font-13">This year ({{ now()->format('Y') }})</p>
                             </div>
                             <div class="widgets-icons bg-gradient-lush text-white"><i class='bx bx-receipt'></i></div>
                         </div>
@@ -261,15 +241,107 @@ use Vinkla\Hashids\Facades\Hashids;
                     <div class="card-body">
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
-                                <p class="mb-0">Outstanding Total</p>
-                                <h4 class="font-weight-bold">TZS {{ number_format(($outstandingPrincipal + $outstandingInterest) ?? 0, 0) }}</h4>
-                                <p class="mb-0" style="font-size: 0.75rem;">Outstanding Interest: <b>TZS {{ number_format($outstandingInterestDetailed ?? 0, 0) }}</b></p>
-                                <p class="mb-0" style="font-size: 0.75rem;">Accrued Interest: <b>TZS {{ number_format($accruedInterest ?? 0, 0) }}</b></p>
-                                <p class="mb-0" style="font-size: 0.75rem;">Not Due Interest: <b>TZS {{ number_format($notDueInterest ?? 0, 0) }}</b></p>
-                                <p class="mb-0" style="font-size: 0.75rem;">Paid Interest: <b>TZS {{ number_format($paidInterest ?? 0, 0) }}</b></p>
-                                <p class="mb-0" style="font-size: 0.75rem;">Outstanding Principal: <b>TZS {{ number_format($outstandingPrincipal ?? 0, 0) }}</b></p>
+                                <p class="mb-0">Expected Interest This Year</p>
+                                <h4 class="font-weight-bold text-info">TZS {{ number_format($expectedInterestThisYear ?? 0, 0) }}</h4>
+                                <p class="text-muted mb-0 font-13">{{ now()->format('Y') }}</p>
                             </div>
-                            <div class="widgets-icons bg-gradient-cosmic text-white"><i class='bx bx-hourglass'></i></div>
+                            <div class="widgets-icons bg-gradient-ohhappiness text-white"><i class='bx bx-trending-up'></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endcan
+            @can('view loans')
+            <div class="col">
+                <div class="card radius-10">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <p class="mb-0">Accrued Interest This Year</p>
+                                <h4 class="font-weight-bold text-primary">TZS {{ number_format($accruedInterestThisYear ?? 0, 0) }}</h4>
+                                <p class="text-muted mb-0 font-13">{{ now()->format('Y') }}</p>
+                            </div>
+                            <div class="widgets-icons bg-gradient-blues text-white"><i class='bx bx-calendar'></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endcan
+            @can('view loans')
+            <div class="col">
+                <div class="card radius-10">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <p class="mb-0">Accrued Interest This Month</p>
+                                <h4 class="font-weight-bold text-success">TZS {{ number_format($accruedInterestThisMonth ?? 0, 0) }}</h4>
+                                <p class="text-muted mb-0 font-13">{{ now()->format('F Y') }}</p>
+                            </div>
+                            <div class="widgets-icons bg-gradient-lush text-white"><i class='bx bx-calendar-check'></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endcan
+            @can('view loans')
+            <div class="col">
+                <div class="card radius-10">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <p class="mb-0">Collected Principal This Year</p>
+                                <h4 class="font-weight-bold text-success">TZS {{ number_format($collectedPrincipalThisYear ?? 0, 0) }}</h4>
+                                <p class="text-muted mb-0 font-13">{{ now()->format('Y') }}</p>
+                            </div>
+                            <div class="widgets-icons bg-gradient-success text-white"><i class='bx bx-check-circle'></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endcan
+            @can('view loans')
+            <div class="col">
+                <div class="card radius-10">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <p class="mb-0">Collected Interest This Year</p>
+                                <h4 class="font-weight-bold text-primary">TZS {{ number_format($collectedInterestThisYear ?? 0, 0) }}</h4>
+                                <p class="text-muted mb-0 font-13">{{ now()->format('Y') }}</p>
+                            </div>
+                            <div class="widgets-icons bg-gradient-blues text-white"><i class='bx bx-dollar-circle'></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endcan
+            @can('view loans')
+            <div class="col">
+                <div class="card radius-10">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <p class="mb-0">Fee Collected This Year</p>
+                                <h4 class="font-weight-bold text-warning">TZS {{ number_format($collectedFeeThisYear ?? 0, 0) }}</h4>
+                                <p class="text-muted mb-0 font-13">{{ now()->format('Y') }}</p>
+                            </div>
+                            <div class="widgets-icons bg-gradient-burning text-white"><i class='bx bx-receipt'></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endcan
+            @can('view loans')
+            <div class="col">
+                <div class="card radius-10">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <p class="mb-0">Penalty Collected This Year</p>
+                                <h4 class="font-weight-bold text-danger">TZS {{ number_format($collectedPenaltyThisYear ?? 0, 0) }}</h4>
+                                <p class="text-muted mb-0 font-13">{{ now()->format('Y') }}</p>
+                            </div>
+                            <div class="widgets-icons bg-gradient-cosmic text-white"><i class='bx bx-error'></i></div>
                         </div>
                     </div>
                 </div>
@@ -277,6 +349,58 @@ use Vinkla\Hashids\Facades\Hashids;
             @endcan
         </div>
         <!--end row-->
+
+        <!-- Arrears Classification Buckets -->
+        @can('view loans')
+        @if(isset($arrearsClassifications) && $arrearsClassifications->count() > 0)
+        <div class="row mt-3">
+            <div class="col-12">
+                <h5 class="mb-3"><i class="bx bx-pie-chart-alt me-2"></i>Loan Portfolio by Arrears Classification</h5>
+            </div>
+        </div>
+        <div class="row row-cols-1 row-cols-lg-5">
+            @foreach($arrearsClassifications as $classification)
+            <div class="col">
+                <div class="card radius-10">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <p class="mb-0">{{ $classification['status'] }}</p>
+                                <h4 class="font-weight-bold 
+                                    @if($classification['status'] == 'Current') text-success
+                                    @elseif($classification['status'] == 'Past Due') text-info
+                                    @elseif($classification['status'] == 'Substandard') text-warning
+                                    @elseif($classification['status'] == 'Doubtful') text-danger
+                                    @elseif($classification['status'] == 'Loss/NPL') text-dark
+                                    @else text-secondary
+                                    @endif">TZS {{ number_format($classification['total_amount'], 0) }}</h4>
+                                <p class="text-muted mb-0 font-13">{{ $classification['bucket_label'] }} ({{ $classification['loan_count'] }} Loans)</p>
+                            </div>
+                            <div class="widgets-icons 
+                                @if($classification['status'] == 'Current') bg-gradient-success
+                                @elseif($classification['status'] == 'Past Due') bg-gradient-blues
+                                @elseif($classification['status'] == 'Substandard') bg-gradient-burning
+                                @elseif($classification['status'] == 'Doubtful') bg-gradient-bloody
+                                @elseif($classification['status'] == 'Loss/NPL') bg-gradient-cosmic
+                                @else bg-gradient-ohhappiness
+                                @endif text-white">
+                                <i class='bx 
+                                    @if($classification['status'] == 'Current') bx-check-circle
+                                    @elseif($classification['status'] == 'Past Due') bx-time
+                                    @elseif($classification['status'] == 'Substandard') bx-error
+                                    @elseif($classification['status'] == 'Doubtful') bx-error-circle
+                                    @elseif($classification['status'] == 'Loss/NPL') bx-x-circle
+                                    @else bx-info-circle
+                                    @endif'></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endforeach
+        </div>
+        @endif
+        @endcan
 
         @can('view graphs')
         <!-- Loan Product Disbursement Chart -->
@@ -298,10 +422,73 @@ use Vinkla\Hashids\Facades\Hashids;
                 </div>
             </div>
         </div>
+        <!-- Daily Accrued Interest Line Chart -->
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="card radius-10">
+                    <div class="card-body">
+                        <h5 class="mb-3"><i class="bx bx-line-chart me-2"></i>Daily Accrued Interest (Past 7 Days)</h5>
+                        <canvas id="dailyAccruedInterestChart" height="80"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
         @endcan
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
+                // Daily Accrued Interest Line Chart
+                const dailyAccruedData = @json($dailyAccruedInterest ?? []);
+                const dailyAccruedCtx = document.getElementById('dailyAccruedInterestChart');
+                if (dailyAccruedCtx && dailyAccruedData.length > 0) {
+                    new Chart(dailyAccruedCtx, {
+                        type: 'line',
+                        data: {
+                            labels: dailyAccruedData.map(item => item.date),
+                            datasets: [{
+                                label: 'Accrued Interest (TZS)',
+                                data: dailyAccruedData.map(item => item.amount),
+                                borderColor: '#0d6efd',
+                                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                                borderWidth: 3,
+                                fill: true,
+                                tension: 0.4,
+                                pointBackgroundColor: '#0d6efd',
+                                pointBorderColor: '#fff',
+                                pointBorderWidth: 2,
+                                pointRadius: 5,
+                                pointHoverRadius: 7
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top'
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return 'TZS ' + context.raw.toLocaleString();
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return 'TZS ' + value.toLocaleString();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
                 // Get current branch filter from URL or form
                 const urlParams = new URLSearchParams(window.location.search);
                 const branchId = urlParams.get('branch_id') || '';
@@ -421,6 +608,9 @@ use Vinkla\Hashids\Facades\Hashids;
                 .then(response => response.json())
                 .then(data => {
                     console.log('Monthly Collections Chart Data:', data);
+                    console.log('Expected:', data.expected);
+                    console.log('Collected:', data.collected);
+                    console.log('Arrears:', data.arrears);
                     const ctx = document.getElementById('monthlyCollectionsChart').getContext('2d');
                     const isEmpty = !data.months || !data.expected || !data.collected || !data.arrears ||
                         data.months.length === 0 ||
@@ -445,22 +635,22 @@ use Vinkla\Hashids\Facades\Hashids;
                                     label: 'Expected',
                                     data: data.expected,
                                     backgroundColor: '#f1c40f',
-                                    barPercentage: 0.3,
-                                    categoryPercentage: 0.6
+                                    barPercentage: 0.6,
+                                    categoryPercentage: 0.8
                                 },
                                 {
                                     label: 'Collected',
                                     data: data.collected,
                                     backgroundColor: collectedColors,
-                                    barPercentage: 0.3,
-                                    categoryPercentage: 0.6
+                                    barPercentage: 0.6,
+                                    categoryPercentage: 0.8
                                 },
                                 {
                                     label: 'Arrears',
                                     data: data.arrears,
                                     backgroundColor: '#e74c3c',
-                                    barPercentage: 0.3,
-                                    categoryPercentage: 0.6
+                                    barPercentage: 0.6,
+                                    categoryPercentage: 0.8
                                 }
                             ]
                         },
@@ -489,7 +679,7 @@ use Vinkla\Hashids\Facades\Hashids;
                             },
                             scales: {
                                 x: {
-                                    stacked: true,
+                                    stacked: false,
                                     title: {
                                         display: true,
                                         text: 'Month'
@@ -501,6 +691,11 @@ use Vinkla\Hashids\Facades\Hashids;
                                     title: {
                                         display: true,
                                         text: 'Amount (TZS)'
+                                    },
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value.toLocaleString();
+                                        }
                                     }
                                 }
                             },
@@ -511,65 +706,19 @@ use Vinkla\Hashids\Facades\Hashids;
         </script>
         <!--end row-->
         @can('view graphs')
-        <!-- Balance Sheet Overview -->
+        <!-- Monthly Collections Overview -->
         <div class="row">
-            <div class="col-12 col-lg-8 d-lg-flex align-items-lg-stretch">
+            <div class="col-12">
                 <div class="card radius-10 w-100">
                     <div class="card-body">
-                        <div id="chart3"></div>
-                        <div class="mt-4">
-                            <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
-                                <div class="card-header bg-white border-bottom-0 d-flex align-items-center">
-                                    <i class="bx bx-bar-chart-alt-2 text-primary me-2 font-20"></i>
-                                    <h6 class="mb-0 text-dark">Monthly Collections Overview (This Year)</h6>
-                                </div>
-                                <div class="card-body pt-3 pb-2">
-                                    <canvas id="monthlyCollectionsChart" height="120"></canvas>
-                                </div>
+                        <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+                            <div class="card-header bg-white border-bottom-0 d-flex align-items-center">
+                                <i class="bx bx-bar-chart-alt-2 text-primary me-2 font-20"></i>
+                                <h6 class="mb-0 text-dark">Monthly Collections Overview (This Year)</h6>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-lg-4 d-lg-flex align-items-lg-stretch">
-                <div class="card radius-10 w-100">
-                    <div class="card-header bg-transparent">Account Class Balances</div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Class</th>
-                                        <th>Balance</th>
-                                        <th>Accounts</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse($balanceSheetData as $item)
-                                    <tr>
-                                        <td>
-                                            <div>
-                                                <strong>{{ $item['class_code'] }}</strong>
-                                                <br>
-                                                <small class="text-muted">{{ $item['class_name'] }}</small>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span class="badge {{ $item['balance'] >= 0 ? 'bg-success' : 'bg-danger' }}">
-                                                TZS {{ number_format(abs($item['balance']), 2) }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-info">{{ $item['account_count'] }}</span>
-                                        </td>
-                                    </tr>
-                                    @empty
-                                    <tr>
-                                        <td colspan="3" class="text-center text-muted">No account data available</td>
-                                    </tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
+                            <div class="card-body pt-3 pb-2">
+                                <canvas id="monthlyCollectionsChart" height="80"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -656,11 +805,11 @@ use Vinkla\Hashids\Facades\Hashids;
         <div class="row">
             <div class="col-12">
                 <div class="card radius-10 border-0 shadow-sm">
-                    <div class="card-header bg-transparent border-0">
+                    <div class="card-header border-0" style="background: linear-gradient(135deg, #6c757d 0%, #ffc107 25%, #fd7e14 50%, #0d6efd 100%);">
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
-                                <h5 class="mb-0 text-dark"><i class="bx bx-bar-chart me-2"></i>FINANCIAL REPORT SUMMARY</h5>
-                                <small class="text-muted">
+                                <h5 class="mb-0 text-white"><i class="bx bx-bar-chart me-2"></i>FINANCIAL REPORT SUMMARY</h5>
+                                <small class="text-white-50">
                                     Comprehensive financial overview as of {{ date('d-m-Y') }}
                                     @php
                                     $currentBranchName = null;
@@ -678,15 +827,15 @@ use Vinkla\Hashids\Facades\Hashids;
                             <!-- Balance Sheet Section -->
                             <div class="col-md-6">
                                 <div class="financial-section">
-                                    <div class="section-header bg-light p-3 rounded-top">
-                                        <h4 class="mb-0 text-dark"><i class="bx bx-balance me-2"></i>BALANCE SHEET</h4>
-                                        <small class="text-muted">As of {{ date('d-m-Y') }} vs {{ $previousYearData['year'] }}</small>
+                                    <div class="section-header p-3 rounded-top" style="background: linear-gradient(135deg, #0d6efd 0%, #6c757d 100%);">
+                                        <h4 class="mb-0 text-white"><i class="bx bx-balance me-2"></i>BALANCE SHEET</h4>
+                                        <small class="text-white-50">As of {{ date('d-m-Y') }} vs {{ $previousYearData['year'] }}</small>
                                     </div>
 
                                     <!-- Assets Section -->
                                     <div class="section-content border rounded-bottom">
-                                        <div class="section-title bg-light p-2 border-bottom">
-                                            <h6 class="mb-0 text-dark"><i class="bx bx-trending-up me-1"></i>ASSETS</h6>
+                                        <div class="section-title p-2 border-bottom" style="background: linear-gradient(135deg, #10b981 0%, #34d399 50%, #6ee7b7 100%);">
+                                            <h6 class="mb-0 text-white fw-bold"><i class="bx bx-trending-up me-1"></i>ASSETS</h6>
                                         </div>
                                         <div class="table-responsive">
                                             <table class="table table-striped table-hover mb-0" id="assets-table">
@@ -766,11 +915,11 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     $sumAsset = collect($financialReportData['chartAccountsAssets'])->sum('total');
                                                     $sumAssetPrev = collect($previousYearData['chartAccountsAssets'])->sum('total');
                                                     @endphp
-                                                    <tr class="table-secondary fw-bold">
-                                                        <td>TOTAL ASSETS</td>
-                                                        <td class="text-end">{{ number_format($sumAsset,2) }}</td>
-                                                        <td class="text-end">{{ number_format($sumAssetPrev,2) }}</td>
-                                                        <td class="text-end">
+                                                    <tr class="fw-bold" style="background: rgba(16, 185, 129, 0.25);">
+                                                        <td class="text-dark">TOTAL ASSETS</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumAsset,2) }}</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumAssetPrev,2) }}</td>
+                                                        <td class="text-end text-dark">
                                                             @php $assetChange = $sumAsset - $sumAssetPrev; @endphp
                                                             {{ $assetChange >= 0 ? '+' : '' }}{{ number_format($assetChange,2) }}
                                                         </td>
@@ -780,8 +929,8 @@ use Vinkla\Hashids\Facades\Hashids;
                                         </div>
 
                                         <!-- Equity Section -->
-                                        <div class="section-title bg-light p-2 border-bottom mt-3">
-                                            <h6 class="mb-0 text-dark"><i class="bx bx-user me-1"></i>EQUITY</h6>
+                                        <div class="section-title p-2 border-bottom mt-3" style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 50%, #93c5fd 100%);">
+                                            <h6 class="mb-0 text-white fw-bold"><i class="bx bx-user me-1"></i>EQUITY</h6>
                                         </div>
                                         <div class="table-responsive">
                                             <table class="table table-sm mb-0 table-hover" id="equity-table">
@@ -870,11 +1019,11 @@ use Vinkla\Hashids\Facades\Hashids;
                                                             {{ $profitChange >= 0 ? '+' : '' }}{{ number_format($profitChange,2) }}
                                                         </td>
                                                     </tr>
-                                                    <tr class="table-secondary fw-bold">
-                                                        <td>TOTAL EQUITY</td>
-                                                        <td class="text-end">{{ number_format($sumEquity + ($cumulativeProfitLoss ?? 0),2) }}</td>
-                                                        <td class="text-end">{{ number_format($sumEquityPrev + $previousYearData['profitLoss'],2) }}</td>
-                                                        <td class="text-end">
+                                                    <tr class="fw-bold" style="background: rgba(59, 130, 246, 0.25);">
+                                                        <td class="text-dark">TOTAL EQUITY</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumEquity + ($cumulativeProfitLoss ?? 0),2) }}</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumEquityPrev + $previousYearData['profitLoss'],2) }}</td>
+                                                        <td class="text-end text-dark">
                                                             @php $equityChange = ($sumEquity + ($cumulativeProfitLoss ?? 0)) - ($sumEquityPrev + $previousYearData['profitLoss']); @endphp
                                                             {{ $equityChange >= 0 ? '+' : '' }}{{ number_format($equityChange,2) }}
                                                         </td>
@@ -884,8 +1033,8 @@ use Vinkla\Hashids\Facades\Hashids;
                                         </div>
 
                                         <!-- Liabilities Section -->
-                                        <div class="section-title bg-light p-2 border-bottom mt-3">
-                                            <h6 class="mb-0 text-dark"><i class="bx bx-trending-down me-1"></i>LIABILITIES</h6>
+                                        <div class="section-title p-2 border-bottom mt-3" style="background: linear-gradient(135deg, #ef4444 0%, #f87171 50%, #fca5a5 100%);">
+                                            <h6 class="mb-0 text-white fw-bold"><i class="bx bx-trending-down me-1"></i>LIABILITIES</h6>
                                         </div>
                                         <div class="table-responsive">
                                             <table class="table table-sm mb-0 table-hover" id="liabilities-table">
@@ -964,20 +1113,20 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     $sumLiability = collect($financialReportData['chartAccountsLiabilities'])->sum('total');
                                                     $sumLiabilityPrev = collect($previousYearData['chartAccountsLiabilities'])->sum('total');
                                                     @endphp
-                                                    <tr class="fw-bold">
-                                                        <td>TOTAL LIABILITIES</td>
-                                                        <td class="text-end">{{ number_format($sumLiability,2) }}</td>
-                                                        <td class="text-end">{{ number_format($sumLiabilityPrev, 2) }}</td>
-                                                        <td class="text-end">
+                                                    <tr class="fw-bold" style="background: rgba(239, 68, 68, 0.25);">
+                                                        <td class="text-dark">TOTAL LIABILITIES</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumLiability,2) }}</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumLiabilityPrev, 2) }}</td>
+                                                        <td class="text-end text-dark">
                                                             @php $liabilityChange = $sumLiability - $sumLiabilityPrev; @endphp
                                                             {{ $liabilityChange >= 0 ? '+' : '' }}{{ number_format(abs($liabilityChange),2) }}
                                                         </td>
                                                     </tr>
-                                                    <tr class="table-secondary fw-bold">
-                                                        <td>TOTAL EQUITY & LIABILITY</td>
-                                                        <td class="text-end">{{ number_format($sumLiability + $sumEquity + ($cumulativeProfitLoss ?? 0),2) }}</td>
-                                                        <td class="text-end">{{ number_format($sumLiabilityPrev + $sumEquityPrev + $previousYearData['profitLoss'],2) }}</td>
-                                                        <td class="text-end">
+                                                    <tr class="fw-bold" style="background: rgba(99, 102, 241, 0.25);">
+                                                        <td class="text-dark">TOTAL EQUITY & LIABILITY</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumLiability + $sumEquity + ($cumulativeProfitLoss ?? 0),2) }}</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumLiabilityPrev + $sumEquityPrev + $previousYearData['profitLoss'],2) }}</td>
+                                                        <td class="text-end text-dark">
                                                             @php $totalChange = ($sumLiability + $sumEquity + ($cumulativeProfitLoss ?? 0)) - ($sumLiabilityPrev + $sumEquityPrev + $previousYearData['profitLoss']); @endphp
                                                             {{ $totalChange >= 0 ? '+' : '' }}{{ number_format($totalChange,2) }}
 
@@ -993,15 +1142,15 @@ use Vinkla\Hashids\Facades\Hashids;
                             <!-- Profit & Loss Section -->
                             <div class="col-md-6">
                                 <div class="financial-section">
-                                    <div class="section-header bg-light p-3 rounded-top">
-                                        <h4 class="mb-0 text-dark"><i class="bx bx-line-chart me-2"></i>PROFIT & LOSS STATEMENT</h4>
-                                        <small class="text-muted">From 01-01-{{date('Y')}} to {{ date('d-m-Y') }} vs {{ $previousYearData['year'] }}</small>
+                                    <div class="section-header p-3 rounded-top" style="background: linear-gradient(135deg, #fd7e14 0%, #ffc107 100%);">
+                                        <h4 class="mb-0 text-white"><i class="bx bx-line-chart me-2"></i>PROFIT & LOSS STATEMENT</h4>
+                                        <small class="text-white-50">From 01-01-{{date('Y')}} to {{ date('d-m-Y') }} vs {{ $previousYearData['year'] }}</small>
                                     </div>
 
                                     <div class="section-content border rounded-bottom">
                                         <!-- Revenue Section -->
-                                        <div class="section-title bg-light p-2 border-bottom">
-                                            <h6 class="mb-0 text-dark"><i class="bx bx-trending-up me-1"></i>INCOME</h6>
+                                        <div class="section-title p-2 border-bottom" style="background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);">
+                                            <h6 class="mb-0 text-white fw-bold"><i class="bx bx-trending-up me-1"></i>INCOME</h6>
                                         </div>
                                         <div class="table-responsive">
                                             <table class="table table-striped">
@@ -1078,11 +1227,11 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     @endforeach
                                                     @endif
                                                     @endforeach
-                                                    <tr class="fw-bold">
-                                                        <td>TOTAL INCOME</td>
-                                                        <td class="text-end">{{ number_format($sumRevenue,2) }}</td>
-                                                        <td class="text-end">{{ number_format($sumRevenuePrev,2) }}</td>
-                                                        <td class="text-end">
+                                                    <tr class="fw-bold" style="background: rgba(5, 150, 105, 0.25);">
+                                                        <td class="text-dark">TOTAL INCOME</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumRevenue,2) }}</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumRevenuePrev,2) }}</td>
+                                                        <td class="text-end text-dark">
                                                             @php $revenueChange = $sumRevenue - $sumRevenuePrev; @endphp
 
                                                             {{ $revenueChange >= 0 ? '+' : '' }}{{ number_format($revenueChange,2) }}
@@ -1094,8 +1243,8 @@ use Vinkla\Hashids\Facades\Hashids;
                                         </div>
 
                                         <!-- Expenses Section -->
-                                        <div class="section-title bg-light p-2 border-bottom mt-3">
-                                            <h6 class="mb-0 text-dark"><i class="bx bx-trending-down me-1"></i>EXPENSES</h6>
+                                        <div class="section-title p-2 border-bottom mt-3" style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 50%, #fcd34d 100%);">
+                                            <h6 class="mb-0 text-white fw-bold"><i class="bx bx-trending-down me-1"></i>EXPENSES</h6>
                                         </div>
                                         <div class="table-responsive">
                                             <table class="table table-striped">
@@ -1173,22 +1322,22 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     @endforeach
                                                     @endif
                                                     @endforeach
-                                                    <tr class="table-secondary fw-bold">
-                                                        <td>TOTAL EXPENSES</td>
-                                                        <td class="text-end">{{ number_format($sumExpense,2) }}</td>
-                                                        <td class="text-end">{{ number_format($sumExpensePrev,2) }}</td>
-                                                        <td class="text-end">
+                                                    <tr class="fw-bold" style="background: rgba(245, 158, 11, 0.25);">
+                                                        <td class="text-dark">TOTAL EXPENSES</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumExpense,2) }}</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumExpensePrev,2) }}</td>
+                                                        <td class="text-end text-dark">
                                                             @php $expenseChange = $sumExpense - $sumExpensePrev; @endphp
 
                                                             {{ $expenseChange >= 0 ? '+' : '' }}{{ number_format($expenseChange,2) }}
 
                                                         </td>
                                                     </tr>
-                                                    <tr class="table-secondary">
-                                                        <td>NET PROFIT/LOSS</td>
-                                                        <td class="text-end">{{ number_format($sumRevenue - $sumExpense,2) }}</td>
-                                                        <td class="text-end">{{ number_format($sumRevenuePrev - $sumExpensePrev,2) }}</td>
-                                                        <td class="text-end">
+                                                    <tr class="fw-bold" style="background: rgba(139, 92, 246, 0.25);">
+                                                        <td class="text-dark">NET PROFIT/LOSS</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumRevenue - $sumExpense,2) }}</td>
+                                                        <td class="text-end text-dark">{{ number_format($sumRevenuePrev - $sumExpensePrev,2) }}</td>
+                                                        <td class="text-end text-dark">
                                                             @php $netProfitChange = ($sumRevenue - $sumExpense) - ($sumRevenuePrev - $sumExpensePrev); @endphp
 
                                                             {{ $netProfitChange >= 0 ? '+' : '' }}{{ number_format($netProfitChange,2) }}
