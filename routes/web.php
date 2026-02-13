@@ -163,6 +163,12 @@ Route::post('/verify-otp-password', [AuthController::class, 'verifyPasswordCode'
 Route::get('/reset-password', [AuthController::class, 'showNewPasswordForm'])->name('new-password-form');
 Route::post('/reset-password', [AuthController::class, 'storeNewPassword'])->middleware('throttle:password_reset');
 
+// First-login / forced password change (must be authenticated)
+Route::middleware(['auth'])->group(function () {
+    Route::get('/password/change', [AuthController::class, 'showFirstLoginChangePassword'])->name('password.change');
+    Route::post('/password/first-login', [AuthController::class, 'storeFirstLoginPassword'])->name('password.first-login.update');
+});
+
 Route::get('/resend-otp/{phone}', [AuthController::class, 'resendOtp'])->name('resend.otp')->middleware('throttle:otp');
 
 // Subscription expired page
@@ -428,6 +434,9 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     // Backup Settings
     Route::get('/backup', [SettingsController::class, 'backupSettings'])->name('backup');
     Route::post('/backup/create', [SettingsController::class, 'createBackup'])->name('backup.create');
+    Route::get('/backup/status/{jobLogId}', [SettingsController::class, 'backupJobStatus'])->name('backup.status');
+    Route::get('/backup/history/data', [SettingsController::class, 'backupHistoryData'])->name('backup.history.data');
+    Route::get('/backup/jobs/data', [SettingsController::class, 'backupJobsData'])->name('backup.jobs.data');
     Route::post('/backup/restore', [SettingsController::class, 'restoreBackup'])->name('backup.restore');
     Route::get('/backup/{hash_id}/download', [SettingsController::class, 'downloadBackup'])->name('backup.download');
     Route::delete('/backup/{hash_id}', [SettingsController::class, 'deleteBackup'])->name('backup.delete');

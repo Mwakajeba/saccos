@@ -379,6 +379,11 @@ class AuthController extends Controller
                 'activity_time' => now(),
             ]);
 
+            // Redirect to password change if user must change password on first login
+            if ($user->must_change_password) {
+                return redirect()->route('password.change');
+            }
+
             return redirect()->intended('/change-branch');
         }
 
@@ -601,5 +606,39 @@ class AuthController extends Controller
         session()->forget('verified_phone');
 
         return redirect()->route('login')->with('success', 'Password reset successfully. You can now login.');
+    }
+
+    /**
+     * Show the first-login / forced password change form.
+     */
+    public function showFirstLoginChangePassword()
+    {
+        if (!Auth::check()) {
+            return redirect()->route('login');
+        }
+        $user = Auth::user();
+        if (!$user->must_change_password) {
+            return redirect()->intended('/change-branch')->with('info', 'Your password is already set.');
+        }
+        return view('auth.first-login-change-password');
+    }
+
+    /**
+     * Process the first-login / forced password change.
+     */
+    public function storeFirstLoginPassword(Request $request)
+    {
+        if (!Auth::check()) {
+            return redirect()->route('login');
+        }
+        $request->validate([
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+        $user = Auth::user();
+        $user->update([
+            'password' => Hash::make($request->password),
+            'must_change_password' => false,
+        ]);
+        return redirect()->route('change-branch')->with('success', 'Password changed successfully. Please select your branch to continue.');
     }
 }

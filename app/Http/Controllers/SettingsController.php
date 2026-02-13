@@ -1,25 +1,22 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Company;
 use App\Models\Branch;
+use App\Models\Sector;
 use App\Models\Backup;
-use App\Models\ChartAccount;
-use App\Models\SystemSetting;
+use App\Models\JobLog;
+use App\Jobs\BackupJob;
 use App\Services\BackupService;
 use App\Services\AiAssistantService;
-use App\Services\PasswordService;
-use App\Rules\PasswordValidation;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Vinkla\Hashids\Facades\Hashids;
-use App\Models\ApprovalLevel;
-use App\Models\ApprovalLevelAssignment;
-use App\Jobs\CalculateDailyInterestJob;
-use App\Models\ArrearsClassification;
+use Yajra\DataTables\Facades\DataTables;
 
 class SettingsController extends Controller
 {
@@ -1015,6 +1012,7 @@ class SettingsController extends Controller
         }
     }
 
+ 
     public function backupSettings()
     {
         // Check permissions for backup settings
@@ -1025,10 +1023,69 @@ class SettingsController extends Controller
         }
 
         $backupService = new BackupService();
-        $backups = Backup::forCompany()->orderBy('created_at', 'desc')->paginate(10);
         $stats = $backupService->getBackupStats();
 
-        return view('settings.backup', compact('backups', 'stats'));
+        return view('settings.backup', compact('stats'));
+    }
+
+    /**
+     * DataTables AJAX: Backup history (server-side).
+     */
+    public function backupHistoryData(Request $request)
+    {
+        if (!$request->ajax()) {
+            return response()->json([], 400);
+        }
+        $query = Backup::forCompany()->with('creator')->orderBy('created_at', 'desc');
+        return DataTables::eloquent($query)
+            ->addColumn('name_cell', function ($backup) {
+                $html = '<div class="fw-bold">' . e($backup->name) . '</div>';
+                if ($backup->description) {
+                    $html .= '<small class="text-muted">' . e($backup->description) . '</small>';
+                }
+                return $html;
+            })
+            ->addColumn('type_badge', function ($backup) {
+                if ($backup->type === 'database') {
+                    return '<span class="badge bg-primary">Database</span>';
+                }
+                if ($backup->type === 'files') {
+                    return '<span class="badge bg-success">Files</span>';
+                }
+                return '<span class="badge bg-info">Full</span>';
+            })
+            ->addColumn('formatted_size', function ($backup) {
+                return $backup->formatted_size;
+            })
+            ->addColumn('status_badge', function ($backup) {
+                if ($backup->status === 'completed') {
+                    return '<span class="badge bg-success">Completed</span>';
+                }
+                if ($backup->status === 'failed') {
+                    return '<span class="badge bg-danger">Failed</span>';
+                }
+                return '<span class="badge bg-warning">In Progress</span>';
+            })
+            ->addColumn('creator_name', function ($backup) {
+                return $backup->creator ? e($backup->creator->name) : 'Unknown';
+            })
+            ->addColumn('created_at_fmt', function ($backup) {
+                return $backup->created_at->format('Y-m-d H:i:s');
+            })
+            ->addColumn('actions', function ($backup) {
+                if ($backup->status !== 'completed') {
+                    return '<span class="text-muted">No actions available</span>';
+                }
+                $downloadUrl = route('settings.backup.download', $backup->hash_id);
+                $actions = '<div class="btn-group" role="group">';
+                $actions .= '<a href="' . e($downloadUrl) . '" class="btn btn-sm btn-info" title="Download"><i class="bx bx-download"></i></a>';
+                $actions .= '<button type="button" class="btn btn-sm btn-warning backup-restore-btn" data-backup-id="' . (int) $backup->id . '" data-name="' . e($backup->name) . '" title="Restore"><i class="bx bx-reset"></i></button>';
+                $actions .= '<button type="button" class="btn btn-sm btn-danger backup-delete-btn" data-hash-id="' . e($backup->hash_id) . '" data-name="' . e($backup->name) . '" title="Delete"><i class="bx bx-trash"></i></button>';
+                $actions .= '</div>';
+                return $actions;
+            })
+            ->rawColumns(['name_cell', 'type_badge', 'status_badge', 'actions'])
+            ->make(true);
     }
 
     public function createBackup(Request $request)
@@ -1041,36 +1098,175 @@ class SettingsController extends Controller
         }
 
         $request->validate([
-            'type' => 'required|in:database,files,full',
+            'type' => 'required|in:database,full',
             'description' => 'nullable|string|max:500',
         ]);
 
-        try {
-            // Create backup record with 'in_progress' status immediately
-            $backup = Backup::create([
-                'name' => ucfirst($request->type) . ' Backup - ' . date('Y-m-d H:i:s'),
-                'filename' => 'pending',
-                'file_path' => 'pending',
-                'type' => $request->type,
-                'size' => 0,
-                'description' => $request->description,
-                'status' => 'in_progress',
-                'created_by' => auth()->id(),
-                'company_id' => current_company_id(),
-            ]);
+         $jobLog = JobLog::create([
+            'job_name' => 'BackupJob',
+            'status' => 'running',
+            'processed' => 0,
+            'successful' => 0,
+            'failed' => 0,
+            'started_at' => now(),
+            'result_details' => ['type' => $request->type],
+        ]);
 
-            // Dispatch job to process backup in background
-            \App\Jobs\CreateBackupJob::dispatch(
-                $backup->id,
-                $request->type,
-                $request->description
-            );
+        $this->ensureQueueWorkerRunning();
 
-            return redirect()->route('settings.backup')->with('success', ucfirst($request->type) . ' backup is being created in the background. Please refresh the page in a few moments to see the status.');
+        BackupJob::dispatch(
+            $request->type,
+            auth()->id(),
+            current_company_id(),
+            $request->description,
+            $jobLog->id
+        );
 
-        } catch (\Exception $e) {
-            return redirect()->route('settings.backup')->with('error', 'Failed to initiate backup: ' . $e->getMessage());
+        Log::info('Backup job dispatched', ['job_log_id' => $jobLog->id, 'user_id' => auth()->id()]);
+
+        return redirect()->route('settings.backup')
+            ->with('success', ucfirst($request->type) . ' backup has been queued and will run in the background.')
+            ->with('job_log_id', $jobLog->id);
+    }
+
+    /**
+     * Backup job status (JSON for polling), like loans reminder-sms.
+     */
+    public function backupJobStatus($jobLogId)
+    {
+        $jobLog = JobLog::findOrFail($jobLogId);
+        if ($jobLog->job_name !== 'BackupJob') {
+            return response()->json(['error' => 'Invalid job'], 404);
         }
+        return response()->json([
+            'status' => $jobLog->status,
+            'processed' => $jobLog->processed,
+            'successful' => $jobLog->successful,
+            'failed' => $jobLog->failed,
+            'summary' => $jobLog->summary,
+            'error_message' => $jobLog->error_message,
+            'started_at' => $jobLog->started_at?->format('Y-m-d H:i:s'),
+            'completed_at' => $jobLog->completed_at?->format('Y-m-d H:i:s'),
+            'duration' => $jobLog->duration_seconds ? (floor($jobLog->duration_seconds / 60) . 'm ' . ($jobLog->duration_seconds % 60) . 's') : null,
+        ]);
+    }
+
+    /**
+     * DataTables AJAX: Backup job logs (like reminder SMS jobs table).
+     */
+    public function backupJobsData(Request $request)
+    {
+        if (!$request->ajax()) {
+            return response()->json([], 400);
+        }
+        $query = JobLog::where('job_name', 'BackupJob')->orderBy('id', 'desc');
+        return DataTables::eloquent($query)
+            ->addColumn('status_badge', function ($log) {
+                $displayStatus = $log->status;
+                if ($log->status === 'running') {
+                    $details = is_array($log->result_details ?? null) ? $log->result_details : [];
+                    $backup = null;
+                    if (!empty($details['backup_id'])) {
+                        $backup = Backup::forCompany()->find($details['backup_id']);
+                    }
+                    if (!$backup && !empty($details['type'])) {
+                        $started = $log->started_at ?? $log->created_at;
+                        $backup = Backup::forCompany()
+                            ->where('type', $details['type'])
+                            ->where('status', 'completed')
+                            ->where('created_at', '>=', $started->copy()->subMinutes(2))
+                            ->where('created_at', '<=', $started->copy()->addMinutes(30))
+                            ->orderByDesc('id')
+                            ->first();
+                    }
+                    if ($backup && $backup->status === 'completed') {
+                        $displayStatus = 'completed';
+                    }
+                }
+                if ($displayStatus === 'running') {
+                    return '<span class="badge bg-primary">Running</span>';
+                }
+                if ($displayStatus === 'completed') {
+                    return '<span class="badge bg-success">Completed</span>';
+                }
+                if ($displayStatus === 'failed') {
+                    return '<span class="badge bg-danger">Failed</span>';
+                }
+                return '<span class="badge bg-secondary">' . e($displayStatus) . '</span>';
+            })
+            ->addColumn('type_badge', function ($log) {
+                $details = $log->result_details;
+                $type = is_array($details) && isset($details['type']) ? $details['type'] : '—';
+                return '<span class="badge bg-info">' . e(ucfirst($type)) . '</span>';
+            })
+            ->addColumn('started_at_fmt', function ($log) {
+                return $log->started_at ? $log->started_at->format('d/m/Y H:i') : '—';
+            })
+            ->addColumn('duration_fmt', function ($log) {
+                if (!$log->duration_seconds) {
+                    return 'N/A';
+                }
+                $m = floor($log->duration_seconds / 60);
+                $s = $log->duration_seconds % 60;
+                return $m > 0 ? "{$m}m {$s}s" : "{$s}s";
+            })
+            ->rawColumns(['status_badge', 'type_badge'])
+            ->make(true);
+    }
+
+    /**
+     * Ensure queue worker is running in the background (same pattern as LoanController reminder SMS).
+     */
+    private function ensureQueueWorkerRunning(): void
+    {
+        if (config('queue.default') === 'sync') {
+            return;
+        }
+        if (!$this->isQueueWorkerRunning()) {
+            $this->startQueueWorker();
+        }
+    }
+
+    private function isQueueWorkerRunning(): bool
+    {
+        $command = "ps aux | grep '[a]rtisan queue:work' | grep -v grep";
+        exec($command, $output, $returnCode);
+        if (config('queue.default') === 'database') {
+            $pendingJobs = DB::table('jobs')->count();
+            if ($pendingJobs > 0 && empty($output)) {
+                return false;
+            }
+        }
+        return !empty($output) && $returnCode === 0;
+    }
+
+    private function startQueueWorker(): void
+    {
+        $artisanPath = base_path('artisan');
+        $logPath = storage_path('logs/queue-worker.log');
+        $pidFile = storage_path('logs/queue-worker.pid');
+
+        if (file_exists($pidFile)) {
+            $pid = trim(file_get_contents($pidFile));
+            if ($pid) {
+                exec("ps -p " . escapeshellarg($pid) . " > /dev/null 2>&1", $output, $returnCode);
+                if ($returnCode === 0) {
+                    Log::info('Queue worker already running', ['pid' => $pid]);
+                    return;
+                }
+            }
+        }
+
+        $command = sprintf(
+            'cd %s && nohup php %s queue:work --tries=3 --timeout=3600 --max-time=3600 >> %s 2>&1 & echo $! > %s',
+            escapeshellarg(base_path()),
+            escapeshellarg($artisanPath),
+            escapeshellarg($logPath),
+            escapeshellarg($pidFile)
+        );
+        exec($command);
+        usleep(1000000);
+        Log::info('Queue worker started for backup', ['user_id' => auth()->id(), 'pid_file' => $pidFile]);
     }
 
     public function restoreBackup(Request $request)
@@ -2715,62 +2911,7 @@ class SettingsController extends Controller
         }
     }
 
-    /**
-     * Start Queue Worker
-     * Allows starting queue worker from web interface
-     */
-    public function startQueueWorker(Request $request)
-    {
-        // Check permission
-        if (!auth()->user()->can('manage system settings')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You do not have permission to start queue worker.'
-            ], 403);
-        }
 
-        try {
-            $basePath = base_path();
-            $command = 'php artisan queue:work --tries=15 --timeout=180 --max-jobs=1000 --max-time=3600';
-            
-            // Check if running on Windows
-            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                // Windows: Start process in background using PowerShell
-                $psCommand = "Start-Process powershell -ArgumentList '-NoProfile', '-Command', 'cd \"$basePath\"; $command' -WindowStyle Hidden";
-                $fullCommand = "powershell -Command \"$psCommand\"";
-            } else {
-                // Linux/Mac: Start process in background
-                $fullCommand = "cd $basePath && nohup $command > /dev/null 2>&1 &";
-            }
-
-            // Execute command
-            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                // Windows: Use exec with output
-                exec($fullCommand, $output, $returnVar);
-            } else {
-                // Linux/Mac: Use shell_exec
-                shell_exec($fullCommand);
-                $returnVar = 0;
-            }
-
-            \Log::info('Queue worker start command executed', [
-                'command' => $fullCommand,
-                'return_var' => $returnVar,
-                'output' => $output ?? []
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Queue worker started successfully. It will process jobs in the background.'
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Failed to start queue worker: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to start queue worker: ' . $e->getMessage()
-            ], 500);
-        }
-    }
 
     /**
      * Job Logs Index

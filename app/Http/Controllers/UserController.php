@@ -7,10 +7,12 @@ use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Role;
 use App\Rules\PasswordValidation;
+use App\Helpers\SmsHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 
@@ -134,15 +136,16 @@ class UserController extends Controller
                 'phone' => $this->formatPhoneNumber($request->phone),
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
+                'must_change_password' => true,
                 'company_id' => current_company_id(),
                 'branch_id' => $request->branch_id,
                 'status' => $request->status ?? 'active',
                 'is_active' => $request->status === 'active' ? 'yes' : 'no',
             ]);
 
-            // Generate user_id like US00001 (saveQuietly to avoid duplicate activity log)
+            // Generate user_id like US00001
             $user->user_id = 'US' . str_pad($user->id, 5, '0', STR_PAD_LEFT);
-            $user->saveQuietly();
+            $user->save();
 
             \Log::info('User created successfully', [
                 'user_id' => $user->id,
@@ -157,6 +160,39 @@ class UserController extends Controller
                 'role_id' => $role->id,
                 'role_name' => $role->name
             ]);
+
+            // Assign the selected cluster as the user's accessible branches (default branch already set via branch_id)
+            $user->branches()->sync([$request->branch_id]);
+
+            // Send credentials to user (username = phone, password)
+            $plainPassword = $request->password;
+            $username = $user->phone;
+            try {
+                $smsMessage = "Your account has been created. Username: {$username}, Password: {$plainPassword}. Please change your password after first login.";
+                SmsHelper::send($user->phone, $smsMessage);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to send credentials SMS to new user', [
+                    'user_id' => $user->id,
+                    'phone' => $user->phone,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+            if ($user->email) {
+                try {
+                    Mail::raw(
+                        "Your account has been created.\n\nUsername: {$username}\nPassword: {$plainPassword}\n\nPlease change your password after first login.",
+                        function ($message) use ($user) {
+                            $message->to($user->email)->subject('Your account credentials');
+                        }
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to send credentials email to new user', [
+                        'user_id' => $user->id,
+                        'email' => $user->email,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
 
             return redirect()->route('users.index')
                 ->with('success', 'User created successfully!');
@@ -312,8 +348,11 @@ class UserController extends Controller
             ];
 
             if ($request->filled('password')) {
-                $userData['password'] = Hash::make($request->password);
-                \Log::info('Password will be updated for user', ['user_id' => $user->id]);
+            // When admin updates a user's password, force the user to change it
+            // on next login so they can set their own secret.
+            $userData['password'] = Hash::make($request->password);
+            $userData['must_change_password'] = true;
+            \Log::info('Password will be updated for user and must_change_password re-enabled', ['user_id' => $user->id]);
             }
 
             $user->update($userData);
@@ -398,12 +437,27 @@ class UserController extends Controller
             $emailRules .= '|unique:users,email,' . $user->id . ',id,company_id,' . current_company_id();
         }
 
-        $request->validate([
+        $rules = [
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:20|unique:users,phone,' . $user->id . ',id,company_id,' . current_company_id(),
             'email' => $emailRules,
-            'password' => 'nullable|string|min:8|confirmed',
-        ]);
+            'new_password' => 'nullable|string|min:8|confirmed',
+        ];
+        $request->validate($rules);
+
+        // When changing password, require current password
+        if ($request->filled('new_password')) {
+            if (!$request->filled('current_password')) {
+                return redirect()->back()
+                    ->withErrors(['current_password' => 'Current password is required to change your password.'])
+                    ->withInput($request->except(['current_password', 'new_password', 'new_password_confirmation']));
+            }
+            if (!Hash::check($request->current_password, $user->password)) {
+                return redirect()->back()
+                    ->withErrors(['current_password' => 'Current password is incorrect.'])
+                    ->withInput($request->except(['current_password', 'new_password', 'new_password_confirmation']));
+            }
+        }
 
         $userData = [
             'name' => $request->name,
@@ -411,8 +465,9 @@ class UserController extends Controller
             'email' => $request->email,
         ];
 
-        if ($request->filled('password')) {
-            $userData['password'] = Hash::make($request->password);
+        if ($request->filled('new_password')) {
+            $userData['password'] = Hash::make($request->new_password);
+            $userData['must_change_password'] = false;
         }
 
         $user->update($userData);
