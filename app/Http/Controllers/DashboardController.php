@@ -33,23 +33,56 @@ class DashboardController extends Controller
         for ($m = 1; $m <= 12; $m++) {
             $monthLabel = date('M', mktime(0, 0, 0, $m, 1));
             $months[] = $monthLabel;
-            // Expected: sum of all schedules due in this month (no branch/company filter)
-            $exp = \App\Models\LoanSchedule::whereYear('due_date', $year)
+            
+            // Expected: sum of all schedules due in this month
+            // Use accrued_interest instead of interest for accurate calculation
+            $principal = \App\Models\LoanSchedule::whereYear('due_date', $year)
                 ->whereMonth('due_date', $m)
                 ->sum('principal');
-            $exp += \App\Models\LoanSchedule::whereYear('due_date', $year)
+            
+            // Get schedules for this month to calculate interest (accrued_interest or interest)
+            $schedules = \App\Models\LoanSchedule::whereYear('due_date', $year)
                 ->whereMonth('due_date', $m)
-                ->sum('interest');
+                ->get();
+            
+            // Calculate expected interest using accrued_interest if available, otherwise use interest
+            $expectedInterest = $schedules->sum(function ($schedule) {
+                return $schedule->accrued_interest ?? $schedule->interest ?? 0;
+            });
+            
+            $exp = $principal + $expectedInterest;
             $expected[] = $exp;
-            // Collected: sum of repayments made for schedules due in this month (no branch/company filter)
+            
+            // Collected: sum of repayments made for schedules due in this month
             $repayments = \DB::table('repayments')
                 ->join('loan_schedules', 'repayments.loan_schedule_id', '=', 'loan_schedules.id')
                 ->whereYear('loan_schedules.due_date', $year)
                 ->whereMonth('loan_schedules.due_date', $m)
                 ->sum(\DB::raw('repayments.principal + repayments.interest'));
             $collected[] = $repayments;
-            // Arrears: expected - collected
-            $arrears[] = max(0, $exp - $repayments);
+            
+            // Arrears: Calculate actual arrears for overdue schedules in this month
+            // Only count schedules that are overdue (due_date < today) and have remaining amount
+            $today = now();
+            $arrearsAmount = 0;
+            foreach ($schedules as $schedule) {
+                $dueDate = \Carbon\Carbon::parse($schedule->due_date);
+                // Only count if schedule is overdue
+                if ($dueDate->lt($today)) {
+                    // Calculate remaining amount using accrued_interest
+                    $scheduleInterest = $schedule->accrued_interest ?? $schedule->interest ?? 0;
+                    $totalDue = $schedule->principal + $scheduleInterest + ($schedule->fee_amount ?? 0) + ($schedule->penalty_amount ?? 0);
+                    
+                    // Get paid amount for this schedule
+                    $paidAmount = \DB::table('repayments')
+                        ->where('loan_schedule_id', $schedule->id)
+                        ->sum(\DB::raw('principal + interest + fee_amount + penalt_amount'));
+                    
+                    $remaining = max(0, $totalDue - $paidAmount);
+                    $arrearsAmount += $remaining;
+                }
+            }
+            $arrears[] = $arrearsAmount;
         }
         return response()->json([
             'months' => $months,
@@ -226,12 +259,23 @@ class DashboardController extends Controller
         }, function($query) use ($userBranchIds) {
             return $query->whereIn('branch_id', $userBranchIds);
         })
-        ->whereRaw("DATE_FORMAT(date, '%Y-%m') = ?", [$currentMonth])
+        ->whereYear('date', now()->year)
         ->with(['user', 'branch'])
         ->latest()
-        ->take(5)
         ->get();
         
+        // Receipts this year for total sum
+        $receiptsThisYear = Receipt::whereHas('branch', function($query) use ($company) {
+            $query->where('company_id', $company->id);
+        })->when($selectedBranchId, function($query) use ($selectedBranchId) {
+            return $query->where('branch_id', $selectedBranchId);
+        }, function($query) use ($userBranchIds) {
+            return $query->whereIn('branch_id', $userBranchIds);
+        })
+        ->whereYear('date', now()->year)
+        ->get();
+        
+        // Recent receipts (last 5) for display
         $recentReceipts = Receipt::whereHas('branch', function($query) use ($company) {
             $query->where('company_id', $company->id);
         })->when($selectedBranchId, function($query) use ($selectedBranchId) {
@@ -239,9 +283,8 @@ class DashboardController extends Controller
         }, function($query) use ($userBranchIds) {
             return $query->whereIn('branch_id', $userBranchIds);
         })
-        ->whereRaw("DATE_FORMAT(date, '%Y-%m') = ?", [$currentMonth])
         ->with(['user', 'branch', 'customer'])
-        ->latest()
+        ->latest('date')
         ->take(5)
         ->get();
         
@@ -347,6 +390,140 @@ class DashboardController extends Controller
             $paidInterest += $loanPaidInterest;
         }
 
+        // Calculate Accrued Interest This Month and This Year from loan_schedules
+        $currentYear = $currentDate->year;
+        $currentMonthNum = $currentDate->month;
+        
+        // Expected Interest This Year - sum of interest from all schedules with due_date in current year
+        $expectedInterestThisYear = \App\Models\LoanSchedule::whereHas('loan', function($q) use ($company, $selectedBranchId, $userBranchIds) {
+            $q->whereHas('branch', function($bq) use ($company) {
+                $bq->where('company_id', $company->id);
+            })->when($selectedBranchId, function($q2) use ($selectedBranchId) {
+                return $q2->where('branch_id', $selectedBranchId);
+            }, function($q2) use ($userBranchIds) {
+                if (!empty($userBranchIds)) {
+                    return $q2->whereIn('branch_id', $userBranchIds);
+                }
+                return $q2;
+            })->whereIn('status', ['active', 'written_off', 'defaulted']);
+        })->whereYear('due_date', $currentYear)
+          ->sum('interest');
+        
+        // Accrued Interest This Year - sum of accrued_interest from all schedules with due_date in current year
+        $accruedInterestThisYear = \App\Models\LoanSchedule::whereHas('loan', function($q) use ($company, $selectedBranchId, $userBranchIds) {
+            $q->whereHas('branch', function($bq) use ($company) {
+                $bq->where('company_id', $company->id);
+            })->when($selectedBranchId, function($q2) use ($selectedBranchId) {
+                return $q2->where('branch_id', $selectedBranchId);
+            }, function($q2) use ($userBranchIds) {
+                if (!empty($userBranchIds)) {
+                    return $q2->whereIn('branch_id', $userBranchIds);
+                }
+                return $q2;
+            })->whereIn('status', ['active', 'written_off', 'defaulted']);
+        })->whereYear('due_date', $currentYear)
+          ->sum('accrued_interest');
+        
+        // Accrued Interest This Month - sum of accrued_interest from schedules with due_date in current month
+        $accruedInterestThisMonth = \App\Models\LoanSchedule::whereHas('loan', function($q) use ($company, $selectedBranchId, $userBranchIds) {
+            $q->whereHas('branch', function($bq) use ($company) {
+                $bq->where('company_id', $company->id);
+            })->when($selectedBranchId, function($q2) use ($selectedBranchId) {
+                return $q2->where('branch_id', $selectedBranchId);
+            }, function($q2) use ($userBranchIds) {
+                if (!empty($userBranchIds)) {
+                    return $q2->whereIn('branch_id', $userBranchIds);
+                }
+                return $q2;
+            })->whereIn('status', ['active', 'written_off', 'defaulted']);
+        })->whereYear('due_date', $currentYear)
+          ->whereMonth('due_date', $currentMonthNum)
+          ->sum('accrued_interest');
+
+        // Collected amounts this year from repayments table
+        $collectedPrincipalThisYear = \App\Models\Repayment::whereHas('loan', function($q) use ($company, $selectedBranchId, $userBranchIds) {
+            $q->whereHas('branch', function($bq) use ($company) {
+                $bq->where('company_id', $company->id);
+            })->when($selectedBranchId, function($q2) use ($selectedBranchId) {
+                return $q2->where('branch_id', $selectedBranchId);
+            }, function($q2) use ($userBranchIds) {
+                if (!empty($userBranchIds)) {
+                    return $q2->whereIn('branch_id', $userBranchIds);
+                }
+                return $q2;
+            });
+        })->whereYear('payment_date', $currentYear)
+          ->sum('principal');
+        
+        $collectedInterestThisYear = \App\Models\Repayment::whereHas('loan', function($q) use ($company, $selectedBranchId, $userBranchIds) {
+            $q->whereHas('branch', function($bq) use ($company) {
+                $bq->where('company_id', $company->id);
+            })->when($selectedBranchId, function($q2) use ($selectedBranchId) {
+                return $q2->where('branch_id', $selectedBranchId);
+            }, function($q2) use ($userBranchIds) {
+                if (!empty($userBranchIds)) {
+                    return $q2->whereIn('branch_id', $userBranchIds);
+                }
+                return $q2;
+            });
+        })->whereYear('payment_date', $currentYear)
+          ->sum('interest');
+        
+        $collectedFeeThisYear = \App\Models\Repayment::whereHas('loan', function($q) use ($company, $selectedBranchId, $userBranchIds) {
+            $q->whereHas('branch', function($bq) use ($company) {
+                $bq->where('company_id', $company->id);
+            })->when($selectedBranchId, function($q2) use ($selectedBranchId) {
+                return $q2->where('branch_id', $selectedBranchId);
+            }, function($q2) use ($userBranchIds) {
+                if (!empty($userBranchIds)) {
+                    return $q2->whereIn('branch_id', $userBranchIds);
+                }
+                return $q2;
+            });
+        })->whereYear('payment_date', $currentYear)
+          ->sum('fee_amount');
+        
+        $collectedPenaltyThisYear = \App\Models\Repayment::whereHas('loan', function($q) use ($company, $selectedBranchId, $userBranchIds) {
+            $q->whereHas('branch', function($bq) use ($company) {
+                $bq->where('company_id', $company->id);
+            })->when($selectedBranchId, function($q2) use ($selectedBranchId) {
+                return $q2->where('branch_id', $selectedBranchId);
+            }, function($q2) use ($userBranchIds) {
+                if (!empty($userBranchIds)) {
+                    return $q2->whereIn('branch_id', $userBranchIds);
+                }
+                return $q2;
+            });
+        })->whereYear('payment_date', $currentYear)
+          ->sum('penalt_amount');
+
+        // Daily Accrued Interest for the past 7 days
+        $dailyAccruedInterest = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $date = now()->subDays($i);
+            $dayLabel = $date->format('D, M d');
+            
+            // Sum accrued_interest from schedules with due_date on this day
+            $dayAccrued = \App\Models\LoanSchedule::whereHas('loan', function($q) use ($company, $selectedBranchId, $userBranchIds) {
+                $q->whereHas('branch', function($bq) use ($company) {
+                    $bq->where('company_id', $company->id);
+                })->when($selectedBranchId, function($q2) use ($selectedBranchId) {
+                    return $q2->where('branch_id', $selectedBranchId);
+                }, function($q2) use ($userBranchIds) {
+                    if (!empty($userBranchIds)) {
+                        return $q2->whereIn('branch_id', $userBranchIds);
+                    }
+                    return $q2;
+                })->whereIn('status', ['active', 'written_off', 'defaulted']);
+            })->whereDate('due_date', $date->toDateString())
+              ->sum('accrued_interest');
+            
+            $dailyAccruedInterest[] = [
+                'date' => $dayLabel,
+                'amount' => (float) $dayAccrued,
+            ];
+        }
+
         $penaltyBalance = LoanPenaltyService::getTotalPenaltyBalance($selectedBranchId);
         info('penaltyBalance'.$penaltyBalance);
 
@@ -417,6 +594,83 @@ class DashboardController extends Controller
             ];
         });
 
+        // Get Arrears Classifications with loan amounts for each bucket
+        $arrearsClassifications = \App\Models\ArrearsClassification::where('company_id', $company->id)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get()
+            ->map(function($classification) use ($company, $selectedBranchId, $userBranchIds) {
+                // Get loans in this classification bucket
+                $loansQuery = \App\Models\Loan::with(['schedule.repayments'])
+                    ->whereHas('branch', function($q) use ($company) {
+                        $q->where('company_id', $company->id);
+                    })
+                    ->when($selectedBranchId, function($q) use ($selectedBranchId) {
+                        return $q->where('branch_id', $selectedBranchId);
+                    }, function($q) use ($userBranchIds) {
+                        if (!empty($userBranchIds)) {
+                            return $q->whereIn('branch_id', $userBranchIds);
+                        }
+                        return $q;
+                    })
+                    ->whereIn('status', ['active', 'disbursed', 'defaulted'])
+                    ->get();
+                
+                $totalAmount = 0;
+                $loanCount = 0;
+                
+                foreach ($loansQuery as $loan) {
+                    // Calculate days in arrears for this loan
+                    $oldestUnpaidSchedule = $loan->schedule
+                        ->filter(function($s) {
+                            $paidAmount = $s->repayments->sum(fn($r) => $r->principal + $r->interest);
+                            $totalDue = $s->principal + ($s->accrued_interest ?? $s->interest);
+                            return $paidAmount < $totalDue;
+                        })
+                        ->filter(function($s) {
+                            return \Carbon\Carbon::parse($s->due_date)->lt(now());
+                        })
+                        ->sortBy('due_date')
+                        ->first();
+                    
+                    $daysInArrears = 0;
+                    if ($oldestUnpaidSchedule) {
+                        $daysInArrears = \Carbon\Carbon::parse($oldestUnpaidSchedule->due_date)->diffInDays(now());
+                    }
+                    
+                    // Check if loan falls in this bucket
+                    $daysFrom = $classification->days_from;
+                    $daysTo = $classification->days_to;
+                    
+                    $inBucket = false;
+                    if ($daysTo === null) {
+                        // For buckets like "181+ days" where days_to is null
+                        $inBucket = $daysInArrears >= $daysFrom;
+                    } else {
+                        $inBucket = $daysInArrears >= $daysFrom && $daysInArrears <= $daysTo;
+                    }
+                    
+                    if ($inBucket) {
+                        // Calculate outstanding balance
+                        $totalPaid = $loan->repayments?->sum(fn($r) => $r->principal + $r->interest) ?? 0;
+                        $outstandingBalance = $loan->amount_total - $totalPaid;
+                        $totalAmount += max(0, $outstandingBalance);
+                        $loanCount++;
+                    }
+                }
+                
+                return [
+                    'id' => $classification->id,
+                    'bucket_label' => $classification->bucket_label,
+                    'status' => $classification->status,
+                    'days_from' => $classification->days_from,
+                    'days_to' => $classification->days_to,
+                    'provision_percentage' => $classification->provision_percentage,
+                    'total_amount' => $totalAmount,
+                    'loan_count' => $loanCount,
+                ];
+            });
+
         // Get Shares data - products with their total balances (amount in TZS)
         // Note: ShareProduct doesn't have branch_id, so we filter by accounts' branch_id
         $shareProducts = ShareProduct::where('is_active', true)->get();
@@ -444,6 +698,9 @@ class DashboardController extends Controller
             ];
         })->values();
 
+        // Calculate cumulative profit/loss (YTD) for balance sheet equity section
+        $cumulativeProfitLoss = $this->getCumulativeProfitLoss($selectedBranchId, $userBranchIds, now()->toDateString());
+
         // Get previous year comparative data
         $previousYearData = $this->getPreviousYearData($selectedBranchId, $userBranchIds);
 
@@ -453,8 +710,10 @@ class DashboardController extends Controller
             'recentJournals',
             'recentPayments', 
             'recentReceipts',
+            'receiptsThisYear',
             'penaltyBalance',
             'previousYearData',
+            'cumulativeProfitLoss',
             'totalLoanAmount',
             'totalPrincipal',
             'totalInterest',
@@ -463,13 +722,22 @@ class DashboardController extends Controller
             'outstandingPrincipal',
             'outstandingInterest',
             'accruedInterest',
+            'expectedInterestThisYear',
+            'accruedInterestThisMonth',
+            'accruedInterestThisYear',
+            'collectedPrincipalThisYear',
+            'collectedInterestThisYear',
+            'collectedFeeThisYear',
+            'collectedPenaltyThisYear',
             'notDueInterest',
             'paidInterest',
             'outstandingInterestDetailed',
             'branches',
             'selectedBranchId',
             'contributions',
-            'shares'
+            'shares',
+            'arrearsClassifications',
+            'dailyAccruedInterest'
         ));
     }
     
