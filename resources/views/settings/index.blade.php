@@ -476,6 +476,27 @@
                                 </div>
                             </div>
                             @endcan
+
+                            <!-- Loan Write-off Approval -->
+                            @can('manage system settings')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-danger">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-x-circle fs-1 text-danger"></i>
+                                        </div>
+                                        <h5 class="card-title">Loan Write-off Approval</h5>
+                                        <p class="card-text">
+                                            Configure approval workflows for loan write-offs.
+                                            Set approval levels by role or user, and amount thresholds.
+                                        </p>
+                                        <a href="{{ route('settings.loan-writeoff-approval') }}" class="btn btn-danger">
+                                            <i class="bx bx-x-circle me-1"></i> Configure Approval
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
                             <!-- Period-End Closing -->
                             @can('manage system settings')
                             <div class="col-md-6 col-lg-4 mb-4">

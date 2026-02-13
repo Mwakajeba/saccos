@@ -155,12 +155,24 @@ if (!function_exists('update_env_file')) {
     }
 }
 
+if (!function_exists('get_default_vat_type')) {
+    /**
+     * Get default VAT type from system settings
+     */
+    function get_default_vat_type()
+    {
+        return setting('inventory_default_vat_type', 'inclusive');
+    }
+}
+
 if (!function_exists('get_default_vat_rate')) {
     /**
-     * Get the default VAT rate from system settings
+     * Get default VAT rate from system settings
      */
     function get_default_vat_rate()
     {
-        return (float) setting('default_vat_rate', 18);
+        return (float) setting('inventory_default_vat_rate', 18.00);
     }
 }
+
+

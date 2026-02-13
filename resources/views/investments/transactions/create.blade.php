@@ -7,7 +7,7 @@
     <div class="page-content">
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
-            ['label' => 'Investment', 'url' => '#', 'icon' => 'bx bx-trending-up'],
+            ['label' => 'Investment Management', 'url' => route('investments.index'), 'icon' => 'bx bx-trending-up'],
             ['label' => 'Transactions', 'url' => route('investments.transactions.index'), 'icon' => 'bx bx-transfer'],
             ['label' => 'Create Transaction', 'url' => '#', 'icon' => 'bx bx-plus']
         ]" />
@@ -108,7 +108,7 @@
                                 <select class="form-select" id="bank_account_id" name="bank_account_id" required>
                                     <option value="">Select Bank Account</option>
                                     @foreach($bankAccounts as $account)
-                                        <option value="{{ $account->id }}" {{ old('bank_account_id') == $account->id ? 'selected' : '' }}>{{ $account->account_name }} - {{ $account->account_number }}</option>
+                                        <option value="{{ $account->id }}" {{ old('bank_account_id') == $account->id ? 'selected' : '' }}>{{ $account->name }} - {{ $account->account_number }}</option>
                                     @endforeach
                                 </select>
                             </div>

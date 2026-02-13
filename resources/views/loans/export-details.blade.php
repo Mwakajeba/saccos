@@ -334,8 +334,20 @@
                     <td class="amount">TZS {{ number_format($schedule->penalty_amount, 2) }}</td>
                     <td class="amount">TZS {{ number_format($schedule->principal + $schedule->interest + $schedule->fee_amount + $schedule->penalty_amount, 2) }}</td>
                     <td class="amount">TZS {{ number_format($schedule->paid_amount, 2) }}</td>
-                    <td class="amount">TZS {{ number_format($schedule->remaining_amount, 2) }}</td>
-                    <td>{{ $schedule->is_fully_paid ? 'Paid' : 'Pending' }}</td>
+                    @php
+                        $scheduleWrittenOff = ($loan->status === 'written_off') || (!empty($schedule->written_off));
+                        $remainingAmount = $scheduleWrittenOff ? 0 : ($schedule->remaining_amount ?? 0);
+                    @endphp
+                    <td class="amount">TZS {{ number_format($remainingAmount, 2) }}</td>
+                    <td>
+                        @if($scheduleWrittenOff)
+                            Written Off
+                        @elseif($schedule->is_fully_paid)
+                            Paid
+                        @else
+                            Pending
+                        @endif
+                    </td>
                 </tr>
                 @endforeach
             </tbody>

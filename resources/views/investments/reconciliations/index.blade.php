@@ -7,7 +7,7 @@
     <div class="page-content">
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
-            ['label' => 'Investment', 'url' => '#', 'icon' => 'bx bx-trending-up'],
+            ['label' => 'Investment Management', 'url' => route('investments.index'), 'icon' => 'bx bx-trending-up'],
             ['label' => 'Reconciliations', 'url' => '#', 'icon' => 'bx bx-check-square']
         ]" />
 
@@ -39,6 +39,7 @@
                                 <th>Variance</th>
                                 <th>Status</th>
                                 <th>Reconciled By</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -78,7 +79,8 @@
                 { data: 'system_units_formatted', name: 'system_units', title: 'System Units' },
                 { data: 'variance_formatted', name: 'variance', title: 'Variance' },
                 { data: 'status_badge', name: 'status', title: 'Status' },
-                { data: 'reconciled_by', name: 'reconciled_by', title: 'Reconciled By' }
+                { data: 'reconciled_by', name: 'reconciled_by', title: 'Reconciled By' },
+                { data: 'actions', name: 'actions', title: 'Actions', orderable: false, searchable: false }
             ],
             responsive: true,
             order: [[1, 'desc']],
@@ -89,6 +91,40 @@
                 searchPlaceholder: "Search reconciliations...",
                 processing: '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>'
             }
+        });
+
+        $(document).on('click', '.approve-recon-btn', function() {
+            var reconId = $(this).data('id');
+            Swal.fire({
+                title: 'Approve Reconciliation?',
+                text: 'This will mark the reconciliation as approved.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Approve',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '{{ route("investments.reconciliations.approve", ":id") }}'.replace(':id', reconId),
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                Swal.fire('Success', response.message, 'success');
+                                table.ajax.reload();
+                            } else {
+                                Swal.fire('Error', response.error || 'Failed to approve', 'error');
+                            }
+                        },
+                        error: function(xhr) {
+                            var msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Failed to approve reconciliation';
+                            Swal.fire('Error', msg, 'error');
+                        }
+                    });
+                }
+            });
         });
     });
 </script>

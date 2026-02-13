@@ -267,6 +267,76 @@ class PurchaseInvoiceController extends Controller
         return view('purchases.purchase-invoices.create', compact('suppliers','items','assets','assetCategories','prefill','suggestedInvoiceNumber','currencies'));
     }
 
+    public function grnDetails(string $grnId): JsonResponse
+    {
+        $grnLookupId = is_numeric($grnId)
+            ? (int) $grnId
+            : (Hashids::decode($grnId)[0] ?? null);
+
+        if (!$grnLookupId) {
+            return response()->json(['success' => false, 'message' => 'Invalid GRN identifier'], 404);
+        }
+
+        $grn = GoodsReceipt::with(['items.inventoryItem', 'purchaseOrder.supplier'])->find($grnLookupId);
+        if (!$grn) {
+            return response()->json(['success' => false, 'message' => 'GRN not found'], 404);
+        }
+
+        $grnItemIds = $grn->items->pluck('id')->toArray();
+        $alreadyConverted = PurchaseInvoiceItem::whereIn('grn_item_id', $grnItemIds)->exists();
+        if ($alreadyConverted) {
+            return response()->json(['success' => false, 'message' => 'This GRN has already been converted to an invoice'], 400);
+        }
+
+        $po = $grn->purchaseOrder;
+        $supplier = $po?->supplier;
+
+        $items = $grn->items->map(function ($pi) {
+            $qty = (float) ($pi->quantity_received ?? 0);
+            $price = (float) ($pi->unit_cost ?? 0);
+            $vatType = $pi->vat_type ?? 'no_vat';
+            $vatRate = (float) ($pi->vat_rate ?? 0);
+            $subtotal = $qty * $price;
+            $vatAmount = 0;
+            $lineTotal = $subtotal;
+            if ($vatType === 'inclusive' && $vatRate > 0) {
+                $vatAmount = $subtotal * ($vatRate / (100 + $vatRate));
+                $lineTotal = $subtotal;
+            } elseif ($vatType === 'exclusive' && $vatRate > 0) {
+                $vatAmount = $subtotal * ($vatRate / 100);
+                $lineTotal = $subtotal + $vatAmount;
+            }
+            return [
+                'item_name' => optional($pi->inventoryItem)->name ?? '-',
+                'item_code' => optional($pi->inventoryItem)->code ?? '',
+                'inventory_item_id' => $pi->inventory_item_id,
+                'grn_item_id' => $pi->id,
+                'vat_type' => $vatType,
+                'vat_rate' => $vatRate,
+                'vat_amount' => round($vatAmount, 2),
+                'discount_type' => '',
+                'discount_rate' => 0,
+                'discount_amount' => 0,
+                'line_total' => round($lineTotal, 2),
+                'notes' => $pi->remarks ?? '',
+                'quantity' => $qty,
+                'unit_price' => $price,
+            ];
+        })->values()->toArray();
+
+        $order = [
+            'supplier' => $supplier ? ['id' => $supplier->id] : null,
+            'payment_terms' => $po?->payment_terms ?? 'net_30',
+            'payment_days' => $po?->payment_days ?? 30,
+            'notes' => $grn->notes ?? ($po?->notes ?? ''),
+            'terms_conditions' => $po?->terms_conditions ?? '',
+            'order_number' => $grn->grn_number ?? ('GRN-' . str_pad($grn->id, 6, '0', STR_PAD_LEFT)),
+            'items' => $items,
+        ];
+
+        return response()->json(['success' => true, 'order' => $order]);
+    }
+
     public function store(Request $request)
     {
         \Log::info('Purchase Invoice Store: Starting', [

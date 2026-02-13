@@ -16,11 +16,11 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h4 class="fw-bold text-dark mb-0">Loan Details for {{ $loan->customer->name }}</h4>
                     <div class="d-flex gap-2" style="margin-left: 16px;">
-                        @if($loan->status !== 'restructured' && $loan->status !== 'completed')
-                            @if($loan->days_in_arrears > 90)
+                        @if($loan->status !== 'restructured' && $loan->status !== 'completed' && $loan->status !== 'written_off')
+                            @can('write off loan')
                                 <a href="{{ route('loans.writeoff', Vinkla\Hashids\Facades\Hashids::encode($loan->id)) }}"
-                                    class="btn btn-danger">Write Off Loans</a>
-                            @endif
+                                    class="btn btn-danger">Write Off Loan</a>
+                            @endcan
 
                             @if($loan->isEligibleForTopUp())
                                 <button type="button" class="btn btn-success" onclick="showTopUpModal()">
@@ -875,15 +875,21 @@
                                                     
                                                     // Remaining balance uses accrued interest
                                                     $remainingAmount = max(0, $actualDue - $paidAmount);
+
+                                                    // If loan has been written off or schedule is flagged as written off, treat remaining as zero
+                                                    $scheduleWrittenOff = ($loan->status === 'written_off') || (!empty($item->written_off));
+                                                    if ($scheduleWrittenOff) {
+                                                        $remainingAmount = 0;
+                                                    }
                                                     
-                                                    $isFullyPaid = $item->fullPrincipalPaid();
+                                                    $isFullyPaid = $scheduleWrittenOff ? true : $item->fullPrincipalPaid();
                                                     $paymentPercentage = $item->payment_percentage;
-                                                    $completed = $loan->status === 'completed';
+                                                    $completed = in_array($loan->status, ['completed', 'written_off']);
                                                     $penaltyPaid = $item->PenaltyPaid();
                                                     
                                                     // Check if schedule is in arrears (overdue and not fully paid)
                                                     $isInArrears = false;
-                                                    if ($item->due_date && \Carbon\Carbon::parse($item->due_date)->isPast() && $remainingAmount > 0) {
+                                                    if (!$scheduleWrittenOff && $item->due_date && \Carbon\Carbon::parse($item->due_date)->isPast() && $remainingAmount > 0) {
                                                         $isInArrears = true;
                                                     }
                                                 @endphp
@@ -977,7 +983,9 @@
                                                         @endif
                                                     </td>
                                                     <td class="text-center">
-                                                        @if($isFullyPaid)
+                                                        @if($scheduleWrittenOff)
+                                                            <span class="badge bg-danger">Written Off</span>
+                                                        @elseif($isFullyPaid)
                                                             <span class="badge bg-success">Paid</span>
                                                         @elseif($paidAmount > 0)
                                                             <span class="badge bg-warning text-dark">{{ $paymentPercentage }}%</span>
