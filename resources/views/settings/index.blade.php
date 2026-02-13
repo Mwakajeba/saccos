@@ -617,22 +617,22 @@
                             </div>
                             @endcan
 
-                            <!-- Run Daily Accrued Interest Job -->
-                            @can('manage system settings')
+                            <!-- Penalty Accrual Trigger Button -->
+                            @can('manage system configurations')
                             <div class="col-md-6 col-lg-4 mb-4">
-                                <div class="card border-warning">
+                                <div class="card border-dark">
                                     <div class="card-body text-center">
                                         <div class="mb-3">
-                                            <i class="bx bx-calculator fs-1 text-warning"></i>
+                                            <i class="bx bx-error fs-1 text-dark"></i>
                                         </div>
-                                        <h5 class="card-title">Daily Accrued Interest Job</h5>
-                                        <p class="card-text">
-                                            Manually run the daily accrued interest calculation job if it didn't run automatically.
-                                            This updates accrued interest on all active loans.
-                                        </p>
-                                        <button type="button" class="btn btn-warning" id="runAccruedInterestJobBtn" onclick="runAccruedInterestJob()">
-                                            <i class="bx bx-play-circle me-1"></i> Run Job Now
-                                        </button>
+                                        <h5 class="card-title">Run Penalty Accrual</h5>
+                                        <p class="card-text">Kokotoa adhabu za mikopo iliyochelewa (run penalty accrual for overdue loans).</p>
+                                        <form method="POST" action="{{ route('settings.runPenaltyAccrual') }}">
+                                            @csrf
+                                            <button type="submit" class="btn btn-dark">
+                                                <i class="bx bx-play-circle me-1"></i> Run Penalty Accrual
+                                            </button>
+                                        </form>
                                     </div>
                                 </div>
                             </div>

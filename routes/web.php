@@ -539,6 +539,9 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
 
     // Run Accrued Interest Job Manually
     Route::post('/run-accrued-interest-job', [SettingsController::class, 'runAccruedInterestJob'])->name('run-accrued-interest-job');
+    
+    // Manual Penalty Accrual Trigger
+    Route::post('/run-penalty-accrual', [SettingsController::class, 'runPenaltyAccrual'])->name('runPenaltyAccrual');
 
     // Arrears Classifications
     Route::get('/arrears-classifications', [SettingsController::class, 'arrearsClassificationsIndex'])->name('arrears-classifications.index');
@@ -2357,6 +2360,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/loans/{loan}/guarantors/{guarantor}', [LoanController::class, 'removeGuarantor'])->name('loans.removeGuarantor');
     Route::get('/loans/{encodedId}/export-details', [LoanController::class, 'exportLoanDetails'])->name('loans.export-details');
     Route::get('/loans/{id}/daily-interest-export/{format}', [LoanController::class, 'exportDailyInterest'])->name('loans.daily-interest-export');
+    Route::post('/loans/penalties/{penaltyId}/reverse', [LoanController::class, 'reversePenalty'])->name('loans.penalties.reverse');
 
     // Loan Restructuring Routes
     Route::get('/loans/{encodedId}/restructure', [LoanController::class, 'restructure'])->name('loans.restructure');

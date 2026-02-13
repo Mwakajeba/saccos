@@ -34,14 +34,17 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('settings.loan-writeoff-approval.update') }}" method="POST">
+                        <form action="{{ route('settings.loan-writeoff-approval.update') }}" method="POST" id="loanWriteoffApprovalForm">
                             @csrf
                             @method('PUT')
+                            
+                            <!-- Hidden input to ensure value is always sent when checkbox is unchecked -->
+                            <input type="hidden" name="require_approval_for_all" value="0" id="require_approval_for_all_hidden">
 
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="require_approval_for_all" name="require_approval_for_all" value="1" {{ old('require_approval_for_all', $settings->require_approval_for_all ?? false) ? 'checked' : '' }}>
+                                        <input class="form-check-input" type="checkbox" id="require_approval_for_all" value="1" {{ old('require_approval_for_all', $settings->require_approval_for_all ?? false) ? 'checked' : '' }}>
                                         <label class="form-check-label" for="require_approval_for_all">Require Approval for All Write-offs</label>
                                         <small class="form-text text-muted d-block">If checked, all write-offs require approval regardless of amount</small>
                                     </div>
@@ -135,6 +138,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const reqAll = document.getElementById('require_approval_for_all');
+    const reqAllHidden = document.getElementById('require_approval_for_all_hidden');
     const approvalConfig = document.getElementById('approval_config');
     const directNote = document.getElementById('direct_post_note');
     const levelsSelect = document.getElementById('approval_levels');
@@ -145,16 +149,46 @@ document.addEventListener('DOMContentLoaded', function() {
         directNote.style.display = enabled ? 'none' : 'block';
         approvalConfig.querySelectorAll('input, select').forEach(el => { el.disabled = !enabled; });
         if (enabled) toggleLevels();
+        
+        // Update hidden input value to ensure it's always sent
+        if (reqAllHidden) {
+            reqAllHidden.value = enabled ? '1' : '0';
+        }
     }
+    
     function toggleLevels() {
         const n = parseInt(levelsSelect.value) || 5;
         document.querySelectorAll('.level-card').forEach(card => {
             card.style.display = parseInt(card.dataset.level) <= n ? 'block' : 'none';
         });
     }
+    
+    // Update hidden input when checkbox changes
+    if (reqAll && reqAllHidden) {
+        reqAll.addEventListener('change', function() {
+            reqAllHidden.value = this.checked ? '1' : '0';
+            toggle();
+        });
+        
+        // Initialize hidden input value based on checkbox state
+        reqAllHidden.value = reqAll.checked ? '1' : '0';
+    }
+    
+    // Ensure hidden input is updated before form submission
+    const form = document.getElementById('loanWriteoffApprovalForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (reqAll && reqAllHidden) {
+                reqAllHidden.value = reqAll.checked ? '1' : '0';
+            }
+        });
+    }
+    
+    // Initialize
     toggle();
-    reqAll.addEventListener('change', toggle);
-    levelsSelect.addEventListener('change', toggleLevels);
+    if (levelsSelect) {
+        levelsSelect.addEventListener('change', toggleLevels);
+    }
 });
 </script>
 @endpush

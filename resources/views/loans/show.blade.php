@@ -304,6 +304,11 @@
                         <i class="bx bx-trending-up me-2 font-18"></i>Daily Interest Accrued
                     </a>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="tab" href="#accrued_penalties" role="tab">
+                        <i class="bx bx-error-circle me-2 font-18"></i>Accrued Penalties
+                    </a>
+                </li>
             </ul>
 
             <div class="tab-content py-3">
@@ -1736,6 +1741,144 @@
                                     <i class="bx bx-trending-up fs-1 text-muted mb-3"></i>
                                     <h6 class="text-muted">No daily interest accruals found</h6>
                                     <p class="text-muted">Daily interest accruals will appear here once the interest calculation job runs for this loan.</p>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+                <!-- Accrued Penalties Tab -->
+                <div class="tab-pane fade" id="accrued_penalties" role="tabpanel">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bx bx-error-circle me-2"></i>ACCRUED PENALTIES</h6>
+                        </div>
+                        <div class="card-body">
+                            @php
+                                // Get all accrued penalties for this loan
+                                $accruedPenalties = \App\Models\AccruedPenalty::where('loan_id', $loan->id)
+                                    ->with(['loanSchedule', 'journal', 'reversalJournal', 'branch', 'user'])
+                                    ->orderBy('accrual_date', 'desc')
+                                    ->orderBy('created_at', 'desc')
+                                    ->get();
+
+                                $totalPenalties = $accruedPenalties->sum('penalty_amount');
+                                $totalReversed = $accruedPenalties->where('reversed_at', '!=', null)->sum('penalty_amount');
+                                $totalActive = $totalPenalties - $totalReversed;
+                            @endphp
+
+                            @if($accruedPenalties->count())
+                                <!-- Summary Cards -->
+                                <div class="row mb-4">
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light-danger">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Total Penalties</h6>
+                                                <h4 class="mb-0 text-danger">TZS {{ number_format($totalPenalties, 2) }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light-success">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Active Penalties</h6>
+                                                <h4 class="mb-0 text-success">TZS {{ number_format($totalActive, 2) }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light-warning">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-1">Reversed Penalties</h6>
+                                                <h4 class="mb-0 text-warning">TZS {{ number_format($totalReversed, 2) }}</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Penalties Table -->
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-striped mb-0" id="accruedPenaltiesTable">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Accrual Date</th>
+                                                <th>Due Date</th>
+                                                <th class="text-end">Penalty Amount</th>
+                                                <th>Penalty Type</th>
+                                                <th>Rate</th>
+                                                <th>Calculation Basis</th>
+                                                <th>Days Overdue</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($accruedPenalties as $index => $penalty)
+                                                <tr class="{{ $penalty->isReversed() ? 'table-secondary' : '' }}">
+                                                    <td>{{ $index + 1 }}</td>
+                                                    <td>{{ \Carbon\Carbon::parse($penalty->accrual_date)->format('d-m-Y') }}</td>
+                                                    <td>{{ $penalty->loanSchedule ? \Carbon\Carbon::parse($penalty->loanSchedule->due_date)->format('d-m-Y') : 'N/A' }}</td>
+                                                    <td class="text-end">
+                                                        <strong class="{{ $penalty->isReversed() ? 'text-muted' : 'text-danger' }}">
+                                                            TZS {{ number_format($penalty->penalty_amount, 2) }}
+                                                        </strong>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-info">{{ ucfirst($penalty->penalty_type ?? 'N/A') }}</span>
+                                                    </td>
+                                                    <td class="text-end">{{ number_format($penalty->penalty_rate ?? 0, 2) }}%</td>
+                                                    <td>
+                                                        @php
+                                                            $basisLabels = [
+                                                                'over_due_principal_amount' => 'Overdue Principal',
+                                                                'over_due_interest_amount' => 'Overdue Interest',
+                                                                'over_due_principal_and_interest' => 'Principal + Interest',
+                                                                'total_principal_amount_released' => 'Total Principal'
+                                                            ];
+                                                        @endphp
+                                                        <small>{{ $basisLabels[$penalty->calculation_basis] ?? $penalty->calculation_basis }}</small>
+                                                    </td>
+                                                    <td class="text-center">{{ $penalty->days_overdue ?? 0 }}</td>
+                                                    <td>
+                                                        @if($penalty->isReversed())
+                                                            <span class="badge bg-warning">Reversed</span>
+                                                            <br><small class="text-muted">{{ $penalty->reversed_at ? \Carbon\Carbon::parse($penalty->reversed_at)->format('d-m-Y H:i') : 'N/A' }}</small>
+                                                        @else
+                                                            <span class="badge bg-danger">Active</span>
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        @if(!$penalty->isReversed())
+                                                            <button type="button" 
+                                                                    class="btn btn-sm btn-warning" 
+                                                                    onclick="reversePenalty({{ $penalty->id }}, '{{ Vinkla\Hashids\Facades\Hashids::encode($loan->id) }}')"
+                                                                    title="Reverse this penalty">
+                                                                <i class="bx bx-undo me-1"></i>Reverse
+                                                            </button>
+                                                        @else
+                                                            <span class="text-muted">-</span>
+                                                        @endif
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                        <tfoot class="table-secondary">
+                                            <tr>
+                                                <th colspan="3" class="text-end">TOTAL PENALTIES:</th>
+                                                <th class="text-end text-danger">TZS {{ number_format($totalPenalties, 2) }}</th>
+                                                <th colspan="2"></th>
+                                                <th class="text-end">Active:</th>
+                                                <th class="text-success">TZS {{ number_format($totalActive, 2) }}</th>
+                                                <th colspan="2"></th>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            @else
+                                <div class="text-center py-4">
+                                    <i class="bx bx-error-circle fs-1 text-muted mb-3"></i>
+                                    <h6 class="text-muted">No accrued penalties found</h6>
+                                    <p class="text-muted">Accrued penalties will appear here once the penalty accrual job runs for this loan.</p>
                                 </div>
                             @endif
                         </div>
@@ -4923,6 +5066,58 @@
         });
 
         // Loan change status helper
+        function reversePenalty(penaltyId, loanEncodedId) {
+            Swal.fire({
+                title: 'Reverse Penalty',
+                html: `Are you sure you want to reverse this penalty?<br><br>
+                       <label for="penalty_reason_input">Reason (optional)</label>
+                       <textarea id="penalty_reason_input" class="swal2-textarea" placeholder="Enter reason for reversal"></textarea>`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, reverse it',
+                cancelButtonText: 'Cancel',
+                preConfirm: () => {
+                    const reason = document.getElementById('penalty_reason_input') ? document.getElementById('penalty_reason_input').value : '';
+                    return fetch(`/loans/penalties/${penaltyId}/reverse`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ reason: reason })
+                    }).then(response => {
+                        if (!response.ok) {
+                            return response.json().then(err => Promise.reject(err));
+                        }
+                        return response.json();
+                    }).catch(err => {
+                        Swal.showValidationMessage(err.message || 'Failed to reverse penalty');
+                    });
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            }).then((result) => {
+                if (result.isConfirmed && result.value && result.value.success) {
+                    Swal.fire({
+                        title: 'Reversed!',
+                        text: 'Penalty has been reversed successfully.',
+                        icon: 'success',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        // Reload the page to show updated penalty status
+                        window.location.reload();
+                    });
+                } else if (result.isConfirmed && result.value && !result.value.success) {
+                    Swal.fire({
+                        title: 'Error!',
+                        text: result.value.message || 'Failed to reverse penalty',
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                }
+            });
+        }
+
         function changeLoanStatus(encodedId, newStatus) {
             Swal.fire({
                 title: 'Change Loan Status',
