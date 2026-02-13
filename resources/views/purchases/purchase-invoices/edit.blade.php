@@ -1373,7 +1373,7 @@ function calculateTotals() {
         }
     });
 
-    // Handle sales order selection
+    // Handle GRN selection
     $('#grn_id').on('change', function() {
         const orderId = $(this).val();
         
@@ -1387,9 +1387,9 @@ function calculateTotals() {
         $(this).prop('disabled', true);
         $('#order-loading').show();
         
-        // Fetch sales order details
+        // Fetch GRN details
         $.ajax({
-            url: `{{ route('sales.invoices.sales-order-details', ':orderId') }}`.replace(':orderId', orderId),
+            url: `{{ route('purchases.purchase-invoices.grn-details', ':orderId') }}`.replace(':orderId', orderId),
             type: 'GET',
             success: function(response) {
                 if (response.success) {
@@ -1399,7 +1399,7 @@ function calculateTotals() {
                 }
             },
             error: function(xhr) {
-                Swal.fire('Error', 'Failed to fetch sales order details', 'error');
+                Swal.fire('Error', 'Failed to fetch GRN details', 'error');
             },
             complete: function() {
                 $('#grn_id').prop('disabled', false);
@@ -1410,21 +1410,23 @@ function calculateTotals() {
 
     function populateFormFromOrder(order) {
         // Populate supplier
-        $('#supplier_id').val(grn.supplier.id).trigger('change');
+        if (order.supplier && order.supplier.id) {
+            $('#supplier_id').val(order.supplier.id).trigger('change');
+        }
         
         // Populate payment terms
-        $('#payment_terms').val(order.payment_terms);
-        $('#payment_days').val(order.payment_days);
+        $('#payment_terms').val(order.payment_terms || 'net_30');
+        $('#payment_days').val(order.payment_days || 30);
         
         // Populate notes and terms
-        $('#notes').val(order.notes);
-        $('#terms_conditions').val(order.terms_conditions);
+        $('#notes').val(order.notes || '');
+        $('#terms_conditions').val(order.terms_conditions || '');
         
         // Clear existing items
         $('#items-tbody').empty();
         itemCounter = 0;
         
-        // Add items from sales order
+        // Add items from GRN
         order.items.forEach(function(item) {
             addItemFromOrder(item);
         });
@@ -1435,7 +1437,7 @@ function calculateTotals() {
         // Show success message
         Swal.fire({
             title: 'Success!',
-            text: `Sales order "${order.order_number}" details loaded successfully`,
+            text: `GRN "${order.order_number}" details loaded successfully`,
             icon: 'success',
             timer: 2000,
             showConfirmButton: false
@@ -1456,7 +1458,8 @@ function calculateTotals() {
                         ${item.item_name}
                     </div>
                     <small class="text-muted">${item.item_code || ''}</small>
-                    <input type="hidden" name="items[${itemCounter}][inventory_item_id]" value="${item.inventory_item_id}">
+                    <input type="hidden" name="items[${itemCounter}][inventory_item_id]" value="${item.inventory_item_id || ''}">
+                    ${item.grn_item_id ? `<input type="hidden" name="items[${itemCounter}][grn_item_id]" value="${item.grn_item_id}">` : ''}
                     <input type="hidden" name="items[${itemCounter}][vat_type]" value="${item.vat_type}">
                     <input type="hidden" name="items[${itemCounter}][vat_rate]" value="${item.vat_rate}">
                     <input type="hidden" name="items[${itemCounter}][vat_amount]" value="${item.vat_amount}">
@@ -1473,7 +1476,7 @@ function calculateTotals() {
                 </td>
                 <td>
                     <input type="number" class="form-control item-price" 
-                           name="items[${itemCounter}][unit_cost]" value="${item.unit_price}" 
+                           name="items[${itemCounter}][unit_cost]" value="${item.unit_price || item.unit_cost || 0}" 
                            step="0.01" min="0" data-row="${itemCounter}">
                 </td>
                 <td>
@@ -1494,8 +1497,8 @@ function calculateTotals() {
     }
 
     function clearForm() {
-        // Clear customer
-        $('#customer_id').val('').trigger('change');
+        // Clear supplier
+        $('#supplier_id').val('').trigger('change');
         
         // Reset payment terms to defaults
         $('#payment_terms').val('net_30');

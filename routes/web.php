@@ -126,8 +126,10 @@ Route::post('/change-branch', [\App\Http\Controllers\ChangeBranchController::cla
 Route::get('group-loans-ajax/{group}', [\App\Http\Controllers\GroupLoanAjaxController::class, 'index'])->name('group.loans.ajax');
 //     // Add other main app routes here
 // });
-Route::post('/loans/{hashid}/writeoff', [\App\Http\Controllers\LoanController::class, 'confirmWriteoff'])->name('loans.writeoff.confirm');
-Route::get('/loans/{hashid}/writeoff', [\App\Http\Controllers\LoanController::class, 'writeoff'])->name('loans.writeoff');
+Route::middleware(['auth'])->group(function () {
+    Route::post('/loans/{hashid}/writeoff', [\App\Http\Controllers\LoanController::class, 'writeoff'])->name('loans.writeoff.confirm');
+    Route::get('/loans/{hashid}/writeoff', [\App\Http\Controllers\LoanController::class, 'writeoff'])->name('loans.writeoff');
+});
 // // ...existing code...
 
 Route::get('loans/data', [LoanController::class, 'getLoansData'])->name('loans.data');
@@ -557,6 +559,10 @@ Route::put('/provision-approval', [SettingsController::class, 'updateProvisionAp
 // Journal Entry Approval Settings
 Route::get('/journal-entry-approval', [SettingsController::class, 'journalEntryApprovalSettings'])->name('settings.journal-entry-approval');
 Route::put('/journal-entry-approval', [SettingsController::class, 'updateJournalEntryApprovalSettings'])->name('settings.journal-entry-approval.update');
+
+// Loan Write-off Approval Settings
+Route::get('/loan-writeoff-approval', [SettingsController::class, 'loanWriteoffApprovalSettings'])->name('settings.loan-writeoff-approval');
+Route::put('/loan-writeoff-approval', [SettingsController::class, 'updateLoanWriteoffApprovalSettings'])->name('settings.loan-writeoff-approval.update');
 
 // Period-End Closing Routes
 Route::prefix('period-closing')->name('settings.period-closing.')->group(function () {
@@ -1670,6 +1676,9 @@ Route::get('/contributions/reports/transactions', [ContributionController::class
 use App\Http\Controllers\InvestmentController;
 
 Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(function () {
+    // Investment Management Index (landing page)
+    Route::get('/', [InvestmentController::class, 'index'])->name('index');
+
     // Funds Management
     Route::get('/funds', [InvestmentController::class, 'fundsIndex'])->name('funds.index');
     Route::get('/funds/data', [InvestmentController::class, 'getFundsData'])->name('funds.data');
@@ -1703,12 +1712,15 @@ Route::middleware(['auth'])->prefix('investments')->name('investments.')->group(
     // Cash Flows Management
     Route::get('/cash-flows', [InvestmentController::class, 'cashFlowsIndex'])->name('cash-flows.index');
     Route::get('/cash-flows/data', [InvestmentController::class, 'getCashFlowsData'])->name('cash-flows.data');
+    Route::get('/cash-flows/income-distribution/create', [InvestmentController::class, 'incomeDistributionCreate'])->name('cash-flows.income-distribution.create');
+    Route::post('/cash-flows/income-distribution', [InvestmentController::class, 'incomeDistributionStore'])->name('cash-flows.income-distribution.store');
 
     // Reconciliations Management
     Route::get('/reconciliations', [InvestmentController::class, 'reconciliationsIndex'])->name('reconciliations.index');
     Route::get('/reconciliations/data', [InvestmentController::class, 'getReconciliationsData'])->name('reconciliations.data');
     Route::get('/reconciliations/create', [InvestmentController::class, 'reconciliationsCreate'])->name('reconciliations.create');
     Route::post('/reconciliations', [InvestmentController::class, 'reconciliationsStore'])->name('reconciliations.store');
+    Route::post('/reconciliations/{encodedId}/approve', [InvestmentController::class, 'reconciliationsApprove'])->name('reconciliations.approve');
 
     // Valuation & Reports
     Route::get('/valuation', [InvestmentController::class, 'getPortfolioValuation'])->name('valuation');
@@ -2153,6 +2165,7 @@ Route::prefix('purchases/reports')->name('purchases.reports.')->middleware(['aut
 Route::middleware(['auth', 'company.scope'])->group(function () {
     Route::get('/purchases/purchase-invoices', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'index'])->name('purchases.purchase-invoices.index');
     Route::get('/purchases/purchase-invoices/create', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'create'])->name('purchases.purchase-invoices.create');
+    Route::get('/purchases/purchase-invoices/grn-details/{grnId}', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'grnDetails'])->name('purchases.purchase-invoices.grn-details');
     Route::post('/purchases/purchase-invoices', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'store'])->name('purchases.purchase-invoices.store');
     // Import routes must come BEFORE parameterized routes to avoid route conflicts
     Route::get('/purchases/purchase-invoices/import', [\App\Http\Controllers\Purchase\PurchaseInvoiceController::class, 'showImportForm'])->name('purchases.purchase-invoices.import');
@@ -2283,6 +2296,13 @@ Route::middleware(['auth'])->group(function () {
             ->get();
         return view('loans.written_off', compact('loans'));
     })->name('loans.writtenoff');
+    Route::get('loans/writeoffs', [LoanController::class, 'writeoffsIndex'])->name('loans.writeoffs.index');
+    Route::get('loans/writeoffs/{writeoff}', [LoanController::class, 'writeoffShow'])->name('loans.writeoffs.show');
+    Route::post('loans/writeoffs/{writeoff}/approve', [LoanController::class, 'writeoffApprove'])->name('loans.writeoffs.approve');
+    Route::post('loans/writeoffs/{writeoff}/reject', [LoanController::class, 'writeoffReject'])->name('loans.writeoffs.reject');
+    Route::post('loans/writeoffs/{writeoff}/reverse', [LoanController::class, 'writeoffReverse'])->name('loans.writeoffs.reverse');
+    Route::get('loans/writeoffs/{writeoff}/receipt', [LoanController::class, 'writeoffReceiptForm'])->name('loans.writeoffs.receipt.create');
+    Route::post('loans/writeoffs/{writeoff}/receipt', [LoanController::class, 'writeoffReceiptStore'])->name('loans.writeoffs.receipt.store');
     Route::get('loans/chart-accounts/{type}', [LoanController::class, 'getChartAccountsByType'])->name('loans.chart-accounts');
     Route::post('loans/import', [LoanController::class, 'importLoans'])->name('loans.import');
     Route::get('loans/import-template', [LoanController::class, 'downloadTemplate'])->name('loans.import-template');

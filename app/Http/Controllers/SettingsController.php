@@ -2138,6 +2138,99 @@ class SettingsController extends Controller
     }
 
     /**
+     * Loan Write-off Approval Settings
+     */
+    public function loanWriteoffApprovalSettings()
+    {
+        $user = Auth::user();
+        $roles = \Spatie\Permission\Models\Role::all();
+        $users = \App\Models\User::where('company_id', $user->company_id)->get();
+        $settings = \App\Models\LoanWriteoffApprovalSetting::where('company_id', $user->company_id)->first();
+        return view('settings.loan-writeoff-approval', compact('roles', 'users', 'settings'));
+    }
+
+    /**
+     * Update Loan Write-off Approval Settings
+     */
+    public function updateLoanWriteoffApprovalSettings(Request $request)
+    {
+        $requireAll = $request->has('require_approval_for_all');
+        $baseRules = ['require_approval_for_all' => 'boolean', 'auto_approval_limit' => 'nullable|numeric|min:0'];
+        $approvalRules = $requireAll ? [
+            'approval_levels' => 'required|integer|min:1|max:5',
+            'level1_approval_type' => 'required|in:role,user',
+            'level1_approvers' => 'required|array|min:1',
+            'level2_approval_type' => 'nullable|in:role,user',
+            'level2_approvers' => 'nullable|array',
+            'level3_approval_type' => 'nullable|in:role,user',
+            'level3_approvers' => 'nullable|array',
+            'level4_approval_type' => 'nullable|in:role,user',
+            'level4_approvers' => 'nullable|array',
+            'level5_approval_type' => 'nullable|in:role,user',
+            'level5_approvers' => 'nullable|array',
+        ] : [];
+        $rules = array_merge($baseRules, $approvalRules);
+        $request->validate($rules);
+
+        try {
+            $user = Auth::user();
+            $companyId = $user->company_id;
+            $settings = \App\Models\LoanWriteoffApprovalSetting::firstOrCreate(
+                ['company_id' => $companyId],
+                ['approval_levels' => 1, 'require_approval_for_all' => false, 'auto_approval_limit' => 0]
+            );
+            $updateData = [
+                'require_approval_for_all' => $requireAll,
+                'auto_approval_limit' => $request->auto_approval_limit ?? 0,
+            ];
+            if ($requireAll) {
+                $updateData['approval_levels'] = $request->approval_levels;
+            }
+            $settings->update($updateData);
+
+            if ($requireAll) {
+                $approvalLevels = (int) $request->approval_levels;
+                for ($level = 1; $level <= $approvalLevels; $level++) {
+                    $approvalType = $request->{"level{$level}_approval_type"};
+                    $approvers = $request->{"level{$level}_approvers"} ?? [];
+                    if ($approvalType && !empty($approvers)) {
+                        $processed = [];
+                        foreach ($approvers as $a) {
+                            if (str_starts_with($a, 'user_')) {
+                                $processed[] = (int) str_replace('user_', '', $a);
+                            } elseif (str_starts_with($a, 'role_')) {
+                                $processed[] = str_replace('role_', '', $a);
+                            }
+                        }
+                        $settings->update([
+                            "level{$level}_approval_type" => $approvalType,
+                            "level{$level}_approvers" => $processed,
+                        ]);
+                    }
+                }
+                for ($level = $approvalLevels + 1; $level <= 5; $level++) {
+                    $settings->update([
+                        "level{$level}_approval_type" => null,
+                        "level{$level}_approvers" => null,
+                    ]);
+                }
+            } else {
+                $settings->update([
+                    'approval_levels' => 1,
+                    'level1_approval_type' => null, 'level1_approvers' => null,
+                    'level2_approval_type' => null, 'level2_approvers' => null,
+                    'level3_approval_type' => null, 'level3_approvers' => null,
+                    'level4_approval_type' => null, 'level4_approvers' => null,
+                    'level5_approval_type' => null, 'level5_approvers' => null,
+                ]);
+            }
+            return redirect()->route('settings.loan-writeoff-approval')->with('success', 'Loan write-off approval settings updated successfully!');
+        } catch (\Exception $e) {
+            return redirect()->route('settings.loan-writeoff-approval')->with('error', 'Failed to update: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * IAS 37 Provision Approval Settings
      */
     public function provisionApprovalSettings()

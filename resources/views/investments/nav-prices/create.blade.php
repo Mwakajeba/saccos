@@ -7,7 +7,7 @@
     <div class="page-content">
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
-            ['label' => 'Investment', 'url' => '#', 'icon' => 'bx bx-trending-up'],
+            ['label' => 'Investment Management', 'url' => route('investments.index'), 'icon' => 'bx bx-trending-up'],
             ['label' => 'NAV Prices', 'url' => route('investments.nav-prices.index'), 'icon' => 'bx bx-line-chart'],
             ['label' => 'Enter NAV Price', 'url' => '#', 'icon' => 'bx bx-plus']
         ]" />

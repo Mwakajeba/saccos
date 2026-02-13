@@ -18,6 +18,8 @@ use App\Models\LoanSchedule;
 use App\Models\ChartAccount;
 use App\Models\Payment;
 use App\Models\PaymentItem;
+use App\Models\Receipt;
+use App\Models\ReceiptItem;
 use App\Models\Penalty;
 use App\Models\Journal;
 use App\Models\JournalItem;
@@ -3834,77 +3836,428 @@ class LoanController extends Controller
     }
 
     /**
-     * Write off a loan (show confirmation or perform action)
+     * Write off a loan (show confirmation or perform action).
+     * Full write-off only - no partial write-offs.
      */
     public function writeoff($hashid)
     {
+        $this->authorize('write off loan');
+
         $loanId = Hashids::decode($hashid)[0] ?? null;
         if (!$loanId) {
             abort(404, 'Invalid loan ID');
         }
-        $loan = Loan::findOrFail($loanId);
+        $loan = Loan::with(['product', 'schedule.repayments'])->findOrFail($loanId);
 
         if (request()->isMethod('post')) {
             $validated = request()->validate([
                 'outstanding' => 'required|numeric|min:0',
                 'reason' => 'required|string|max:255',
-                'writeoff_type' => 'required|string|max:50',
+                'writeoff_type' => 'required|in:direct,provision',
+                'writeoff_date' => 'required|date|before_or_equal:today',
+                'policy_reference' => 'nullable|string|max:255',
+                'external_reference' => 'nullable|string|max:255',
+                'document' => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png,doc,docx',
             ]);
 
-            $userId = auth()->id();
-            $writeoff = \App\Models\LoanWriteoff::create([
-                'loan_id' => $loan->id,
-                'customer_id' => $loan->customer_id,
-                'outstanding' => $validated['outstanding'],
-                'reason' => $validated['reason'],
-                'writeoff_type' => $validated['writeoff_type'],
-                'createdby' => $userId,
-            ]);
+            $actualOutstanding = $loan->getTotalOutstandingAmount();
 
-            // Get loan product accounts
+            // Full write-off only: submitted amount must match actual outstanding
+            if ($actualOutstanding <= 0) {
+                return redirect()->back()->withErrors(['outstanding' => 'This loan has no outstanding balance and cannot be written off.']);
+            }
+            if (abs((float) $validated['outstanding'] - $actualOutstanding) > 0.01) {
+                return redirect()->back()->withErrors(['outstanding' => 'Write-off amount must equal the full outstanding balance. Partial write-offs are not allowed.']);
+            }
+
             $product = $loan->product;
-            $amount = $validated['outstanding'];
+            $breakdown = $loan->getOutstandingBreakdown();
+            $amount = $breakdown['total'];
             $branchId = auth()->user()->branch_id;
+            $userId = auth()->id();
 
             if ($validated['writeoff_type'] === 'direct') {
                 $debitAccount = $product->direct_writeoff_account_id;
             } else {
                 $debitAccount = $product->provision_writeoff_account_id;
             }
-            $creditAccount = $product->principal_receivable_account_id;
+            $chartAccounts = $product->getWriteoffChartAccounts();
+            $principalAccountId = $chartAccounts['principal'];
 
-            // Create GL transactions using writeoff_id
-            \App\Models\GlTransaction::create([
-                'chart_account_id' => $debitAccount,
-                'customer_id' => $loan->customer_id,
-                'amount' => $amount,
-                'nature' => 'debit',
-                'transaction_id' => $writeoff->id,
-                'transaction_type' => 'Loan Writeoff',
-                'date' => now(),
-                'description' => 'Loan write-off',
-                'branch_id' => $branchId,
-                'user_id' => $userId,
-            ]);
-            \App\Models\GlTransaction::create([
-                'chart_account_id' => $creditAccount,
-                'customer_id' => $loan->customer_id,
-                'amount' => $amount,
-                'nature' => 'credit',
-                'transaction_id' => $writeoff->id,
-                'transaction_type' => 'Loan Writeoff',
-                'date' => now(),
-                'description' => 'Loan write-off',
-                'branch_id' => $branchId,
-                'user_id' => $userId,
-            ]);
+            if (!$debitAccount || !$principalAccountId) {
+                return redirect()->back()->withErrors(['writeoff' => 'Loan product is missing required write-off accounts. Please configure direct/provision write-off and principal receivable accounts in the loan product settings.']);
+            }
 
-            $loan->update(['status' => 'written_off']);
+            $writeoffDate = \Carbon\Carbon::parse($validated['writeoff_date']);
+            $settings = \App\Models\LoanWriteoffApprovalSetting::where('company_id', auth()->user()->company_id)->first();
+            $requiredLevel = $settings ? $settings->getRequiredApprovalLevel($breakdown['total']) : 0;
+
+            $documentPath = null;
+            if (request()->hasFile('document')) {
+                $documentPath = request()->file('document')->store('loan_writeoffs', 'public');
+            }
+
+            $writeoffData = [
+                'loan_id' => $loan->id,
+                'customer_id' => $loan->customer_id,
+                'outstanding' => $breakdown['total'],
+                'reason' => $validated['reason'],
+                'policy_reference' => $validated['policy_reference'] ?? null,
+                'external_reference' => $validated['external_reference'] ?? null,
+                'document_path' => $documentPath,
+                'writeoff_type' => $validated['writeoff_type'],
+                'writeoff_date' => $writeoffDate,
+                'status' => 'pending',
+                'createdby' => $userId,
+            ];
+
+            if ($requiredLevel > 0) {
+                // Approval required: create writeoff as pending, initialize workflow
+                DB::transaction(function () use ($writeoffData) {
+                    $writeoff = \App\Models\LoanWriteoff::create($writeoffData);
+                    $writeoff->initializeApprovalWorkflow();
+                });
+                return redirect()->route('loans.writeoffs.index')
+                    ->with('success', 'Loan write-off submitted for approval. It will be posted once fully approved.');
+            }
+
+            // No approval: post immediately
+            $writeoffData['status'] = 'posted';
+            DB::transaction(function () use ($loan, $writeoffData, $breakdown, $debitAccount, $chartAccounts, $principalAccountId, $branchId, $userId, $writeoffDate) {
+                $writeoff = \App\Models\LoanWriteoff::create($writeoffData);
+
+                $glBase = [
+                    'customer_id' => $loan->customer_id,
+                    'transaction_id' => $writeoff->id,
+                    'transaction_type' => 'Loan Writeoff',
+                    'date' => $writeoffDate,
+                    'branch_id' => $branchId,
+                    'user_id' => $userId,
+                ];
+
+                \App\Models\GlTransaction::create(array_merge($glBase, [
+                    'chart_account_id' => $debitAccount,
+                    'amount' => $breakdown['total'],
+                    'nature' => 'debit',
+                    'description' => 'Loan write-off',
+                ]));
+
+                $components = [
+                    'principal' => $breakdown['principal'],
+                    'interest' => $breakdown['interest'],
+                    'fee_amount' => $breakdown['fee_amount'],
+                    'penalty_amount' => $breakdown['penalty_amount'],
+                ];
+                foreach ($components as $component => $componentAmount) {
+                    if ($componentAmount <= 0) continue;
+                    $accountId = $chartAccounts[$component] ?? $principalAccountId;
+                    if (!$accountId) $accountId = $principalAccountId;
+                    \App\Models\GlTransaction::create(array_merge($glBase, [
+                        'chart_account_id' => $accountId,
+                        'amount' => $componentAmount,
+                        'nature' => 'credit',
+                        'description' => 'Loan write-off (' . str_replace('_', ' ', $component) . ')',
+                    ]));
+                }
+
+                // Update loan status
+                $loan->update(['status' => 'written_off']);
+
+                // Mark all remaining schedule items as written off so they no longer show pending
+                $loan->loadMissing('schedule.repayments');
+                foreach ($loan->schedule as $schedule) {
+                    $remaining = $schedule->remaining_amount ?? 0;
+                    if ($remaining > 0) {
+                        $schedule->update([
+                            'written_off' => true,
+                            'written_off_at' => $writeoffDate,
+                        ]);
+                    }
+                }
+            });
 
             return redirect()->route('loans.list')->with('success', 'Loan written off successfully.');
         }
 
         return view('loans.writeoff', compact('loan', 'hashid'));
+    }
+
+    /**
+     * List all loan write-off transactions
+     */
+    public function writeoffsIndex(Request $request)
+    {
+        $this->authorize('view writeoff loans');
+
+        $branchId = auth()->user()->branch_id;
+
+        $writeoffs = \App\Models\LoanWriteoff::with(['loan', 'customer', 'createdBy', 'reversalOf', 'reversedBy'])
+            ->whereHas('loan', fn ($q) => $q->where('branch_id', $branchId))
+            ->latest()
+            ->paginate(25);
+
+        $totalAmount = \App\Models\LoanWriteoff::whereHas('loan', fn ($q) => $q->where('branch_id', $branchId))
+            ->where('status', 'posted')
+            ->whereNull('reversed_by_id')
+            ->sum('outstanding');
+
+        return view('loans.writeoffs.index', compact('writeoffs', 'totalAmount'));
+    }
+
+    /**
+     * Show write-off details and approval form
+     */
+    public function writeoffShow(\App\Models\LoanWriteoff $writeoff)
+    {
+        $this->authorize('view writeoff loans');
+
+        $branchId = auth()->user()->branch_id;
+        if ($writeoff->loan->branch_id !== $branchId) {
+            abort(403, 'Unauthorized access to this write-off.');
+        }
+
+        $writeoff->load(['loan.product', 'customer', 'createdBy', 'approvals.approver', 'reversalOf', 'reversedBy']);
+        $settings = \App\Models\LoanWriteoffApprovalSetting::where('company_id', auth()->user()->company_id)->first();
+        $currentApproval = $writeoff->currentApproval();
+        $canApprove = $currentApproval && $settings && $settings->canUserApproveAtLevel(auth()->user(), $currentApproval->approval_level);
+
+        return view('loans.writeoffs.show', compact('writeoff', 'settings', 'currentApproval', 'canApprove'));
+    }
+
+    /**
+     * Approve a pending write-off
+     */
+    public function writeoffApprove(Request $request, \App\Models\LoanWriteoff $writeoff)
+    {
+        $this->authorize('write off loan');
+
+        $user = auth()->user();
+        $branchId = $user->branch_id;
+        if ($writeoff->loan->branch_id !== $branchId) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $settings = \App\Models\LoanWriteoffApprovalSetting::where('company_id', $user->company_id)->first();
+        if (!$settings) {
+            return redirect()->back()->withErrors(['error' => 'No approval settings configured.']);
+        }
+
+        $currentApproval = $writeoff->currentApproval();
+        if (!$currentApproval) {
+            return redirect()->back()->withErrors(['error' => 'No pending approval found.']);
+        }
+
+        if (!$settings->canUserApproveAtLevel($user, $currentApproval->approval_level)) {
+            return redirect()->back()->withErrors(['error' => 'You do not have permission to approve this write-off.']);
+        }
+
+        $request->validate(['notes' => 'nullable|string|max:1000']);
+
+        DB::transaction(function () use ($writeoff, $currentApproval, $user) {
+            $currentApproval->update([
+                'status' => 'approved',
+                'approver_id' => $user->id,
+                'notes' => request('notes'),
+                'approved_at' => now(),
+            ]);
+
+            if ($writeoff->isFullyApproved()) {
+                $writeoff->postGlAndCompleteWriteoff();
+            }
+        });
+
+        return redirect()->route('loans.writeoffs.show', $writeoff)
+            ->with('success', $writeoff->fresh()->status === 'posted' ? 'Write-off approved and posted successfully.' : 'Write-off approved. Awaiting further approvals.');
+    }
+
+    /**
+     * Reject a pending write-off
+     */
+    public function writeoffReject(Request $request, \App\Models\LoanWriteoff $writeoff)
+    {
+        $this->authorize('write off loan');
+
+        $user = auth()->user();
+        if ($writeoff->loan->branch_id !== $user->branch_id) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $settings = \App\Models\LoanWriteoffApprovalSetting::where('company_id', $user->company_id)->first();
+        if (!$settings) {
+            return redirect()->back()->withErrors(['error' => 'No approval settings configured.']);
+        }
+
+        $currentApproval = $writeoff->currentApproval();
+        if (!$currentApproval) {
+            return redirect()->back()->withErrors(['error' => 'No pending approval found.']);
+        }
+
+        if (!$settings->canUserApproveAtLevel($user, $currentApproval->approval_level)) {
+            return redirect()->back()->withErrors(['error' => 'You do not have permission to reject this write-off.']);
+        }
+
+        $request->validate(['notes' => 'required|string|max:1000']);
+
+        $currentApproval->update([
+            'status' => 'rejected',
+            'approver_id' => $user->id,
+            'notes' => $request->notes,
+            'rejected_at' => now(),
+        ]);
+        $writeoff->update(['status' => 'rejected']);
+
+        return redirect()->route('loans.writeoffs.show', $writeoff)->with('success', 'Write-off rejected.');
+    }
+
+    /**
+     * Reverse a posted write-off
+     */
+    public function writeoffReverse(Request $request, \App\Models\LoanWriteoff $writeoff)
+    {
+        $this->authorize('write off loan');
+
+        $user = auth()->user();
+        if ($writeoff->loan->branch_id !== $user->branch_id) {
+            abort(403, 'Unauthorized.');
+        }
+
+        if (!$writeoff->isReversible()) {
+            return redirect()->back()->withErrors(['error' => 'This write-off cannot be reversed.']);
+        }
+
+        $request->validate(['reason' => 'required|string|max:255']);
+
+        try {
+            $reversal = $writeoff->reverseWriteoff($request->reason);
+            return redirect()->route('loans.writeoffs.show', $writeoff)
+                ->with('success', 'Write-off reversed successfully. Loan status restored.');
+        } catch (\Exception $e) {
+            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Show form to add a recovery receipt for a written-off loan (provision write-off).
+     * GL: Debit Bank, Credit Loan provision income (income_provision_account_id from loan product).
+     */
+    public function writeoffReceiptForm(\App\Models\LoanWriteoff $writeoff)
+    {
+        $this->authorize('view writeoff loans');
+
+        $branchId = auth()->user()->branch_id;
+        if ($writeoff->loan->branch_id !== $branchId) {
+            abort(403, 'Unauthorized access to this write-off.');
+        }
+
+        if ($writeoff->writeoff_type !== 'provision') {
+            return redirect()->route('loans.writeoffs.index')->withErrors(['error' => 'Recovery receipts are only available for write-offs using provision.']);
+        }
+        if ($writeoff->status !== 'posted' || $writeoff->reversed_by_id) {
+            return redirect()->route('loans.writeoffs.index')->withErrors(['error' => 'Recovery receipt can only be added for posted, non-reversed write-offs.']);
+        }
+
+        $writeoff->load(['loan.product', 'customer']);
+        $product = $writeoff->loan->product;
+        if (!$product || !$product->income_provision_account_id) {
+            return redirect()->route('loans.writeoffs.index')->withErrors(['error' => 'Loan product is missing income provision account. Configure it in loan product settings.']);
+        }
+
+        $bankAccounts = BankAccount::forCurrentBranch()->with('chartAccount')->orderBy('name')->get();
+
+        return view('loans.writeoffs.receipt', compact('writeoff', 'bankAccounts'));
+    }
+
+    /**
+     * Store recovery receipt for a written-off loan (provision). Debit Bank, Credit income_provision_account.
+     */
+    public function writeoffReceiptStore(Request $request, \App\Models\LoanWriteoff $writeoff)
+    {
+        $this->authorize('view writeoff loans');
+
+        $branchId = auth()->user()->branch_id;
+        if ($writeoff->loan->branch_id !== $branchId) {
+            abort(403, 'Unauthorized access to this write-off.');
+        }
+
+        if ($writeoff->writeoff_type !== 'provision') {
+            return redirect()->route('loans.writeoffs.index')->withErrors(['error' => 'Recovery receipts are only available for write-offs using provision.']);
+        }
+        if ($writeoff->status !== 'posted' || $writeoff->reversed_by_id) {
+            return redirect()->route('loans.writeoffs.index')->withErrors(['error' => 'Recovery receipt can only be added for posted, non-reversed write-offs.']);
+        }
+
+        $writeoff->load(['loan.product', 'customer']);
+        $product = $writeoff->loan->product;
+        if (!$product || !$product->income_provision_account_id) {
+            return redirect()->route('loans.writeoffs.index')->withErrors(['error' => 'Loan product is missing income provision account.']);
+        }
+
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'payment_date' => 'required|date|before_or_equal:today',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        $bankAccount = BankAccount::findOrFail($validated['bank_account_id']);
+        $user = auth()->user();
+        $description = $validated['description'] ?: 'Loan write-off recovery - ' . ($writeoff->loan->loanNo ?? 'Loan #' . $writeoff->loan_id);
+
+        DB::transaction(function () use ($writeoff, $validated, $bankAccount, $user, $description) {
+            $receipt = Receipt::create([
+                'reference' => $writeoff->id,
+                'reference_type' => 'loan_writeoff_recovery',
+                'reference_number' => $writeoff->loan->loanNo ?? null,
+                'amount' => $validated['amount'],
+                'date' => $validated['payment_date'],
+                'description' => $description,
+                'user_id' => $user->id,
+                'bank_account_id' => $bankAccount->id,
+                'payee_type' => 'customer',
+                'payee_id' => $writeoff->customer_id,
+                'payee_name' => optional($writeoff->customer)->name,
+                'customer_id' => $writeoff->customer_id,
+                'branch_id' => $user->branch_id,
+                'approved' => true,
+                'approved_by' => $user->id,
+                'approved_at' => now(),
+            ]);
+
+            ReceiptItem::create([
+                'receipt_id' => $receipt->id,
+                'chart_account_id' => $writeoff->loan->product->income_provision_account_id,
+                'amount' => $validated['amount'],
+                'description' => $description,
+            ]);
+
+            GlTransaction::create([
+                'chart_account_id' => $bankAccount->chart_account_id,
+                'customer_id' => $writeoff->customer_id,
+                'amount' => $validated['amount'],
+                'nature' => 'debit',
+                'transaction_id' => $receipt->id,
+                'transaction_type' => 'receipt',
+                'date' => $validated['payment_date'],
+                'description' => $description,
+                'branch_id' => $user->branch_id,
+                'user_id' => $user->id,
+            ]);
+
+            GlTransaction::create([
+                'chart_account_id' => $writeoff->loan->product->income_provision_account_id,
+                'customer_id' => $writeoff->customer_id,
+                'amount' => $validated['amount'],
+                'nature' => 'credit',
+                'transaction_id' => $receipt->id,
+                'transaction_type' => 'receipt',
+                'date' => $validated['payment_date'],
+                'description' => $description,
+                'branch_id' => $user->branch_id,
+                'user_id' => $user->id,
+            ]);
+        });
+
+        return redirect()->route('loans.writeoffs.show', $writeoff)->with('success', 'Recovery receipt recorded successfully.');
     }
 
     /**

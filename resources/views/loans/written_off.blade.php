@@ -10,7 +10,14 @@
             ['label' => 'Loans', 'url' => route('loans.index'), 'icon' => 'bx bx-credit-card'],
             ['label' => 'Written Off Loans', 'url' => '#', 'icon' => 'bx bx-x-circle'],
         ]" />
-        <h6 class="mb-0 text-uppercase">Written Off Loans</h6>
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <h6 class="mb-0 text-uppercase">Written Off Loans</h6>
+            @can('view writeoff loans')
+            <a href="{{ route('loans.writeoffs.index') }}" class="btn btn-outline-danger">
+                <i class="bx bx-list-ul me-1"></i> Write-off History
+            </a>
+            @endcan
+        </div>
         <hr />
         <div class="card">
             <div class="card-body">
