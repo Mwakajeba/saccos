@@ -39,6 +39,7 @@ class UserSeeder extends Seeder
                 'company_id' => $branch->company_id,
                 'role' => $role,
                 'is_active' => 'yes',
+                'must_change_password' => false,
                 'sms_verification_code' => '654321',
                 'sms_verified_at' => now(),
             ]);

@@ -57,6 +57,14 @@ class ScheduleServiceProvider extends ServiceProvider
                 ->withoutOverlapping()
                 ->onOneServer()
                 ->appendOutputTo(storage_path('logs/contribution-interest-calculation.log'));
+
+             // Scheduled backups from System Configuration (backup_enabled, backup_frequency).
+            // Command runs every hour and decides internally whether to run based on frequency (no app restart needed).
+            $schedule->command('backup:run-scheduled')
+                ->hourly()
+                ->withoutOverlapping(55)
+                ->onOneServer()
+                ->appendOutputTo(storage_path('logs/scheduled-backup.log'));
         });
     }
 }

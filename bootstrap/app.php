@@ -12,6 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'password.changed' => \App\Http\Middleware\EnsurePasswordChanged::class,
             'company.scope' => \App\Http\Middleware\CompanyScopeMiddleware::class,
             'role' => \App\Http\Middleware\CheckRole::class,
             'apply.settings' => \App\Http\Middleware\ApplySystemSettings::class,
@@ -39,6 +40,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Check subscription status globally (except for auth routes)
         $middleware->append(\App\Http\Middleware\CheckSubscriptionStatus::class);
+        // Redirect authenticated users with must_change_password to password change page
+        $middleware->append(\App\Http\Middleware\EnsurePasswordChanged::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

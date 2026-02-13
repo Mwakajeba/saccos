@@ -77,8 +77,8 @@ class LoanController extends Controller
             }
         }
 
-        // Fetch required data for the receipt form
-        $bankAccounts = BankAccount::all();
+        // Fetch required data for the receipt form (branch-scoped)
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
         $customers = Customer::all();
         
         // Get fees with include_in_schedule = true for default line items
@@ -327,7 +327,7 @@ class LoanController extends Controller
         // Get data for import modal
         $branches = Branch::all();
         $loanProducts = LoanProduct::all();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         return view('loans.list', compact('loans', 'branches', 'loanProducts', 'bankAccounts'));
     }
@@ -581,8 +581,9 @@ class LoanController extends Controller
     {
         try {
             if ($type === 'new') {
-                // For new loans, get bank accounts linked to cash and bank chart accounts (assets)
-                $accounts = BankAccount::whereHas('chartAccount.accountClassGroup', function ($query) {
+                // For new loans, get bank accounts linked to cash and bank chart accounts (assets, branch-scoped)
+                $accounts = BankAccount::forCurrentBranch()
+                    ->whereHas('chartAccount.accountClassGroup', function ($query) {
                     $query->where('name', 'LIKE', '%cash%')
                         ->orWhere('name', 'LIKE', '%bank%')
                         ->orWhere('name', 'LIKE', '%Cash%')
@@ -609,8 +610,9 @@ class LoanController extends Controller
                     'type' => 'Bank Accounts (Cash & Bank)'
                 ]);
             } elseif ($type === 'old') {
-                // For old loans, get bank accounts linked to equity chart accounts
-                $accounts = BankAccount::whereHas('chartAccount.accountClassGroup', function ($query) {
+                // For old loans, get bank accounts linked to equity chart accounts (branch-scoped)
+                $accounts = BankAccount::forCurrentBranch()
+                    ->whereHas('chartAccount.accountClassGroup', function ($query) {
                     $query->where('name', 'LIKE', '%equity%')
                         ->orWhere('name', 'LIKE', '%Equity%')
                         ->orWhere('name', 'LIKE', '%Retained Earnings%')
@@ -1284,7 +1286,7 @@ class LoanController extends Controller
         // Get data for import modal
         $branches = \App\Models\Branch::all();
         $loanProducts = \App\Models\LoanProduct::all();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         return view('loans.list', compact('loans', 'pageTitle', 'status', 'branches', 'loanProducts', 'bankAccounts'));
     }
@@ -1313,7 +1315,7 @@ class LoanController extends Controller
             'annually' => 'Annually',
             'one_payment_off' => 'Bullet Payment (Single Payment at End)',
         ];
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
         $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
         return view('loans.create', compact('customers', 'products', 'sectors', 'bankAccounts', 'loanOfficers', 'interestCycles'));
     }
@@ -1642,7 +1644,7 @@ class LoanController extends Controller
             ->select('groups.*')
             ->get();
         $products = LoanProduct::where('is_active', true)->get();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
         $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
 
         return view('loans.edit', [
@@ -2334,7 +2336,7 @@ class LoanController extends Controller
         $filetypes = Filetype::all();
 
         // Get bank accounts for repayment modal
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         // Set the encoded ID for the loan object
         $loan->encodedId = $encodedId;
@@ -2510,7 +2512,7 @@ class LoanController extends Controller
             ->get();
         $groups = Group::where('branch_id', $branchId)->get();
         $products = LoanProduct::where('is_active', true)->get();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
         $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
 
         return view('loans.application.create', compact('customers', 'groups', 'products', 'sectors', 'bankAccounts'));
@@ -2705,7 +2707,7 @@ class LoanController extends Controller
 
         $filetypes = Filetype::all();
 
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
 
         // Set the encoded ID for the loan object
         $loan->encodedId = $encodedId;
@@ -2742,7 +2744,7 @@ class LoanController extends Controller
             ->get();
         $groups = Group::where('branch_id', $branchId)->get();
         $products = LoanProduct::all();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forCurrentBranch()->orderBy('name')->get();
         $sectors = \App\Models\Sector::where('status', 'active')->orderBy('name')->get();
 
         return view('loans.application.edit', compact('loanApplication', 'customers', 'groups', 'products', 'sectors', 'bankAccounts'));
