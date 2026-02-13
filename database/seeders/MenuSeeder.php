@@ -177,12 +177,7 @@ class MenuSeeder extends Seeder
             'Investment' => [
                 'icon' => 'bx bx-trending-up',
                 'visibleRoutes' => [
-                    ['name' => 'UTT Funds', 'route' => 'investments.funds.index'],
-                    ['name' => 'Holdings Register', 'route' => 'investments.holdings.index'],
-                    ['name' => 'Transactions', 'route' => 'investments.transactions.index'],
-                    ['name' => 'NAV Prices', 'route' => 'investments.nav-prices.index'],
-                    ['name' => 'Cash Flows', 'route' => 'investments.cash-flows.index'],
-                    ['name' => 'Reconciliations', 'route' => 'investments.reconciliations.index'],
+                    ['name' => 'Investment Management', 'route' => 'investments.index'],
                 ],
                 'hiddenRoutes' => [
                     'investments.funds.create',
@@ -195,6 +190,8 @@ class MenuSeeder extends Seeder
                     'investments.transactions.cancel',
                     'investments.nav-prices.create',
                     'investments.reconciliations.create',
+                    'investments.reconciliations.approve',
+                    'investments.cash-flows.income-distribution.create',
                     'investments.valuation',
                     'investments.member-view',
                 ],

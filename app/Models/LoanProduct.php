@@ -364,6 +364,44 @@ class LoanProduct extends Model
     }
 
     /**
+     * Get chart account IDs for write-off GL posting by component.
+     * Returns account IDs for principal, interest, fee_amount, penalty_amount.
+     * Uses principal_receivable as fallback when fee/penalty account is not configured.
+     *
+     * @return array{principal: int|null, interest: int|null, fee_amount: int|null, penalty_amount: int|null}
+     */
+    public function getWriteoffChartAccounts(): array
+    {
+        $principalId = $this->principal_receivable_account_id;
+        $interestId = $this->interest_receivable_account_id ?? $this->interest_revenue_account_id;
+
+        $feeAccountId = null;
+        if ($this->fees_ids) {
+            $feeIds = is_array($this->fees_ids) ? $this->fees_ids : [$this->fees_ids];
+            foreach ($feeIds as $feeId) {
+                $fee = Fee::find($feeId);
+                if ($fee && $fee->include_in_schedule && $fee->chart_account_id) {
+                    $feeAccountId = $fee->chart_account_id;
+                    break;
+                }
+            }
+        }
+
+        $penaltyAccountId = null;
+        $penalty = $this->penalty;
+        if ($penalty && $penalty->penalty_receivables_account_id) {
+            $penaltyAccountId = $penalty->penalty_receivables_account_id;
+        }
+
+        return [
+            'principal' => $principalId,
+            'interest' => $interestId,
+            'fee_amount' => $feeAccountId,
+            'penalty_amount' => $penaltyAccountId,
+        ];
+    }
+
+    /**
      * Get all loans using this product
      */
     public function loans()

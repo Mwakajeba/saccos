@@ -7,12 +7,15 @@
     <div class="page-content">
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
-            ['label' => 'Investment', 'url' => '#', 'icon' => 'bx bx-trending-up'],
-            ['label' => 'Cash Flows', 'url' => '#', 'icon' => 'bx bx-money']
+            ['label' => 'Investment Management', 'url' => route('investments.index'), 'icon' => 'bx bx-trending-up'],
+            ['label' => 'Cash Flows', 'url' => '#', 'icon' => 'bx bx-dollar-circle']
         ]" />
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0 text-uppercase">UTT INVESTMENT CASH FLOWS</h6>
+            <a href="{{ route('investments.cash-flows.income-distribution.create') }}" class="btn btn-primary">
+                <i class="bx bx-plus me-1"></i> Record Income Distribution
+            </a>
         </div>
         <hr />
 

@@ -10,7 +10,21 @@ class LoanSchedule extends Model
 {
     use HasFactory, LogsActivity;
     protected $table = 'loan_schedules';
-    protected $fillable = ['loan_id', 'interest', 'accrued_interest', 'principal', 'end_date', 'end_grace_date', 'end_pernalty_date', 'customer_id', 'due_date', 'fee_amount', 'penalty_amount'];
+    protected $fillable = [
+        'loan_id',
+        'interest',
+        'accrued_interest',
+        'principal',
+        'end_date',
+        'end_grace_date',
+        'end_pernalty_date',
+        'customer_id',
+        'due_date',
+        'fee_amount',
+        'penalty_amount',
+        'written_off',
+        'written_off_at',
+    ];
 
     public function loan()
     {
@@ -44,6 +58,11 @@ class LoanSchedule extends Model
      */
     public function getRemainingAmountAttribute()
     {
+        // If this schedule has been written off, treat remaining amount as 0
+        if (!empty($this->written_off)) {
+            return 0;
+        }
+
         // Use accrued_interest if available, otherwise fall back to interest
         $interestAmount = $this->accrued_interest ?? $this->interest ?? 0;
         $totalDue = $this->principal + $interestAmount + $this->fee_amount + $this->penalty_amount;

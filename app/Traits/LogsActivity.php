@@ -450,6 +450,27 @@ trait LogsActivity
             if (isset($this->location_id) && method_exists($this, 'location') && $this->location) {
                 $description .= " | Location: {$this->location->name}";
             }
+        } elseif ($modelName === 'LoanWriteoff') {
+            $description = "{$action}d Loan Write-off";
+            if (isset($this->loan_id) && method_exists($this, 'loan') && $this->loan) {
+                $description .= " | Loan: " . ($this->loan->loanNo ?? $this->loan_id);
+            }
+            if (isset($this->customer_id) && method_exists($this, 'customer') && $this->customer) {
+                $description .= " | Customer: {$this->customer->name}";
+            }
+            if (isset($this->outstanding)) {
+                $description .= " | Amount: " . number_format($this->outstanding, 2);
+            }
+            if (isset($this->writeoff_type)) {
+                $description .= " | Type: " . ucfirst($this->writeoff_type);
+            }
+            if (isset($this->writeoff_date)) {
+                $date = $this->writeoff_date instanceof \DateTimeInterface ? $this->writeoff_date->format('Y-m-d') : $this->writeoff_date;
+                $description .= " | Date: {$date}";
+            }
+            if (isset($this->reason)) {
+                $description .= " | Reason: " . \Str::limit($this->reason, 50);
+            }
         } elseif ($modelName === 'InvestmentTrade') {
             $description = "{$action}d Investment Trade";
             if (isset($this->investment_id) && method_exists($this, 'investment') && $this->investment) {

@@ -7,8 +7,8 @@
     <div class="page-content">
         <x-breadcrumbs-with-icons :links="[
             ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => 'bx bx-home'],
-            ['label' => 'Investment', 'url' => '#', 'icon' => 'bx bx-trending-up'],
-            ['label' => 'Holdings Register', 'url' => '#', 'icon' => 'bx bx-bar-chart']
+            ['label' => 'Investment Management', 'url' => route('investments.index'), 'icon' => 'bx bx-trending-up'],
+            ['label' => 'Holdings Register', 'url' => '#', 'icon' => 'bx bx-book']
         ]" />
 
         <div class="d-flex justify-content-between align-items-center mb-3">

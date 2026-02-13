@@ -1449,6 +1449,58 @@ class Loan extends Model
     }
 
     /**
+     * Get outstanding balance breakdown by component (principal, interest, fees, penalties).
+     * Used for write-off GL posting to credit each receivable account correctly.
+     *
+     * @return array{principal: float, interest: float, fee_amount: float, penalty_amount: float, total: float}
+     */
+    public function getOutstandingBreakdown(): array
+    {
+        $schedules = $this->schedule;
+        if (!$schedules) {
+            $schedules = $this->schedule()->get();
+        }
+        if (!$schedules || !($schedules instanceof \Illuminate\Database\Eloquent\Collection)) {
+            return [
+                'principal' => 0,
+                'interest' => 0,
+                'fee_amount' => 0,
+                'penalty_amount' => 0,
+                'total' => 0,
+            ];
+        }
+
+        $principal = 0;
+        $interest = 0;
+        $feeAmount = 0;
+        $penaltyAmount = 0;
+
+        foreach ($schedules as $schedule) {
+            $principalPaid = $schedule->repayments->sum('principal');
+            $interestPaid = $schedule->repayments->sum('interest');
+            $feePaid = $schedule->repayments->sum('fee_amount');
+            $penaltyPaid = $schedule->repayments->sum('penalt_amount');
+
+            $interestDue = $schedule->accrued_interest ?? $schedule->interest ?? 0;
+
+            $principal += max(0, ($schedule->principal ?? 0) - $principalPaid);
+            $interest += max(0, $interestDue - $interestPaid);
+            $feeAmount += max(0, ($schedule->fee_amount ?? 0) - $feePaid);
+            $penaltyAmount += max(0, ($schedule->penalty_amount ?? 0) - $penaltyPaid);
+        }
+
+        $total = round($principal + $interest + $feeAmount + $penaltyAmount, 2);
+
+        return [
+            'principal' => round($principal, 2),
+            'interest' => round($interest, 2),
+            'fee_amount' => round($feeAmount, 2),
+            'penalty_amount' => round($penaltyAmount, 2),
+            'total' => $total,
+        ];
+    }
+
+    /**
      * Get the total paid amount across all schedules
      *
      * @return float

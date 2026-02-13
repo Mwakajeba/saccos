@@ -25,6 +25,14 @@ use Carbon\Carbon;
 
 class InvestmentController extends Controller
 {
+    /**
+     * Investment Management index - landing page with section cards
+     */
+    public function index()
+    {
+        return view('investments.index');
+    }
+
     // ==================== FUNDS MANAGEMENT ====================
 
     /**
@@ -646,8 +654,9 @@ class InvestmentController extends Controller
             ->where('status', 'Active')
             ->get();
         
-        // Bank accounts are linked to companies through chart_account -> account_class_group
-        $bankAccounts = BankAccount::whereHas('chartAccount.accountClassGroup', function ($query) use ($companyId) {
+        // Bank accounts scoped by branch (session or user's branch)
+        $bankAccounts = BankAccount::forCurrentBranch()
+            ->whereHas('chartAccount.accountClassGroup', function ($query) use ($companyId) {
                 $query->where('company_id', $companyId);
             })
             ->with('chartAccount')
@@ -891,6 +900,15 @@ class InvestmentController extends Controller
                 'approved_at' => now(),
             ]);
 
+            // Link payment approval to transaction approval
+            Payment::where('reference_type', 'UTT Investment Transaction')
+                ->where('reference', $transaction->id)
+                ->update([
+                    'approved' => true,
+                    'approved_by' => $user->id,
+                    'approved_at' => now(),
+                ]);
+
             DB::commit();
 
             return response()->json(['success' => true, 'message' => 'Transaction approved successfully']);
@@ -1113,6 +1131,71 @@ class InvestmentController extends Controller
     // ==================== CASH FLOWS MANAGEMENT ====================
 
     /**
+     * Show form to record income distribution
+     */
+    public function incomeDistributionCreate()
+    {
+        $user = auth()->user();
+        $companyId = $user->company_id;
+        $branchId = session('branch_id') ?? $user->branch_id;
+
+        $funds = UTTFund::where('company_id', $companyId)->where('status', 'Active')->get();
+        $bankAccounts = BankAccount::forCurrentBranch()
+            ->whereHas('chartAccount.accountClassGroup', fn($q) => $q->where('company_id', $companyId))
+            ->with('chartAccount')
+            ->orderBy('name')
+            ->get();
+
+        return view('investments.cash-flows.income-distribution-create', compact('funds', 'bankAccounts'));
+    }
+
+    /**
+     * Store income distribution
+     */
+    public function incomeDistributionStore(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'utt_fund_id' => 'required|exists:utt_funds,id',
+            'transaction_date' => 'required|date|before_or_equal:today',
+            'amount' => 'required|numeric|min:0.01',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator)->withInput();
+        }
+
+        try {
+            $user = auth()->user();
+            $referenceNumber = 'UTT-INCDIST-' . date('Ymd') . '-' . str_pad(UTTCashFlow::whereDate('created_at', today())->count() + 1, 4, '0', STR_PAD_LEFT);
+
+            UTTCashFlow::create([
+                'utt_fund_id' => $request->utt_fund_id,
+                'utt_transaction_id' => null,
+                'cash_flow_type' => 'Income Distribution',
+                'transaction_date' => $request->transaction_date,
+                'amount' => $request->amount,
+                'flow_direction' => 'IN',
+                'reference_number' => $referenceNumber,
+                'description' => $request->description ?? 'Income distribution received',
+                'classification' => 'Income',
+                'bank_account_id' => $request->bank_account_id,
+                'company_id' => $user->company_id,
+                'branch_id' => $user->branch_id,
+                'created_by' => $user->id,
+            ]);
+
+            return redirect()->route('investments.cash-flows.index')
+                ->with('success', 'Income distribution recorded successfully.');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Failed to record income distribution: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    /**
      * Display cash flows listing
      */
     public function cashFlowsIndex()
@@ -1201,6 +1284,16 @@ class InvestmentController extends Controller
             }
 
             return DataTables::eloquent($reconciliations)
+                ->addColumn('actions', function ($reconciliation) {
+                    $encodedId = Hashids::encode($reconciliation->id);
+                    $actions = '';
+                    if ($reconciliation->canBeApproved()) {
+                        $actions .= '<button type="button" class="btn btn-sm btn-outline-success approve-recon-btn" data-id="' . e($encodedId) . '" title="Approve"><i class="bx bx-check-circle"></i></button>';
+                    } elseif ($reconciliation->approved_at) {
+                        $actions .= '<span class="badge bg-success">Approved</span>';
+                    }
+                    return $actions ?: '-';
+                })
                 ->addColumn('fund_name', function ($reconciliation) {
                     return $reconciliation->uttFund->fund_name ?? 'N/A';
                 })
@@ -1230,7 +1323,7 @@ class InvestmentController extends Controller
                 ->editColumn('reconciliation_date', function ($reconciliation) {
                     return $reconciliation->reconciliation_date ? Carbon::parse($reconciliation->reconciliation_date)->format('M d, Y') : 'N/A';
                 })
-                ->rawColumns(['variance_formatted', 'status_badge'])
+                ->rawColumns(['variance_formatted', 'status_badge', 'actions'])
                 ->make(true);
         }
 
@@ -1284,6 +1377,8 @@ class InvestmentController extends Controller
                 'variance' => $request->statement_units - $holding->total_units,
                 'status' => abs($request->statement_units - $holding->total_units) < 0.0001 ? 'Completed' : 'Variance Identified',
                 'reconciliation_notes' => $request->reconciliation_notes,
+                'reconciled_by' => $user->id,
+                'reconciled_at' => now(),
                 'company_id' => $user->company_id,
                 'branch_id' => $user->branch_id,
             ]);
@@ -1299,6 +1394,35 @@ class InvestmentController extends Controller
             return redirect()->back()
                 ->with('error', 'Failed to create reconciliation: ' . $e->getMessage())
                 ->withInput();
+        }
+    }
+
+    /**
+     * Approve a reconciliation
+     */
+    public function reconciliationsApprove($encodedId)
+    {
+        $decoded = Hashids::decode($encodedId);
+        if (empty($decoded)) {
+            return response()->json(['error' => 'Invalid reconciliation ID'], 400);
+        }
+
+        try {
+            $reconciliation = UTTReconciliation::findOrFail($decoded[0]);
+
+            if (!$reconciliation->canBeApproved()) {
+                return response()->json(['error' => 'Reconciliation cannot be approved (already approved or invalid status)'], 400);
+            }
+
+            $user = auth()->user();
+            $reconciliation->update([
+                'approved_by' => $user->id,
+                'approved_at' => now(),
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Reconciliation approved successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to approve reconciliation: ' . $e->getMessage()], 500);
         }
     }
 
@@ -1344,15 +1468,14 @@ class InvestmentController extends Controller
         $totalUnrealizedGain = $totalValue - $totalCost;
         $totalReturnPct = $totalCost > 0 ? ($totalUnrealizedGain / $totalCost) * 100 : 0;
 
-        return response()->json([
-            'portfolio' => $portfolio,
-            'summary' => [
-                'total_value' => $totalValue,
-                'total_cost' => $totalCost,
-                'total_unrealized_gain' => $totalUnrealizedGain,
-                'total_return_pct' => $totalReturnPct,
-            ],
-        ]);
+        $summary = [
+            'total_value' => $totalValue,
+            'total_cost' => $totalCost,
+            'total_unrealized_gain' => $totalUnrealizedGain,
+            'total_return_pct' => $totalReturnPct,
+        ];
+
+        return view('investments.valuation', compact('portfolio', 'summary'));
     }
 
     /**

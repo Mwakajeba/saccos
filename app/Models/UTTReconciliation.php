@@ -88,6 +88,11 @@ class UTTReconciliation extends Model
         return abs($this->variance) > 0.0001; // Account for floating point precision
     }
 
+    public function canBeApproved()
+    {
+        return !$this->approved_at && in_array($this->status, ['Draft', 'Variance Identified', 'Completed', 'In Progress']);
+    }
+
     public function calculateVariance()
     {
         $this->variance = $this->statement_units - $this->system_units;
