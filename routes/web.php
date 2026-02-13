@@ -2360,6 +2360,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/loans/{loan}/guarantors/{guarantor}', [LoanController::class, 'removeGuarantor'])->name('loans.removeGuarantor');
     Route::get('/loans/{encodedId}/export-details', [LoanController::class, 'exportLoanDetails'])->name('loans.export-details');
     Route::get('/loans/{id}/daily-interest-export/{format}', [LoanController::class, 'exportDailyInterest'])->name('loans.daily-interest-export');
+    Route::post('/loans/penalties/{penaltyId}/reverse', [LoanController::class, 'reversePenalty'])->name('loans.penalties.reverse');
 
     // Loan Restructuring Routes
     Route::get('/loans/{encodedId}/restructure', [LoanController::class, 'restructure'])->name('loans.restructure');

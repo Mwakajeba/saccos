@@ -27,6 +27,8 @@ class AccruedPenalty extends Model
         'posted_to_gl',
         'description',
         'user_id',
+        'reversed_at',
+        'reversal_journal_id',
     ];
 
     protected $casts = [
@@ -34,6 +36,7 @@ class AccruedPenalty extends Model
         'penalty_amount' => 'decimal:2',
         'penalty_rate' => 'decimal:4',
         'posted_to_gl' => 'boolean',
+        'reversed_at' => 'datetime',
     ];
 
     /**
@@ -74,6 +77,22 @@ class AccruedPenalty extends Model
     public function journal()
     {
         return $this->belongsTo(Journal::class);
+    }
+
+    /**
+     * Get the reversal journal entry associated with this accrued penalty
+     */
+    public function reversalJournal()
+    {
+        return $this->belongsTo(Journal::class, 'reversal_journal_id');
+    }
+
+    /**
+     * Check if this penalty has been reversed
+     */
+    public function isReversed(): bool
+    {
+        return $this->reversed_at !== null;
     }
 
     /**

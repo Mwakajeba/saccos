@@ -2143,9 +2143,14 @@ class SettingsController extends Controller
     public function loanWriteoffApprovalSettings()
     {
         $user = Auth::user();
+        
+        // Load roles and users for dropdowns
         $roles = \Spatie\Permission\Models\Role::all();
         $users = \App\Models\User::where('company_id', $user->company_id)->get();
+        
+        // Load existing approval settings
         $settings = \App\Models\LoanWriteoffApprovalSetting::where('company_id', $user->company_id)->first();
+        
         return view('settings.loan-writeoff-approval', compact('roles', 'users', 'settings'));
     }
 
@@ -2154,9 +2159,23 @@ class SettingsController extends Controller
      */
     public function updateLoanWriteoffApprovalSettings(Request $request)
     {
-        $requireAll = $request->has('require_approval_for_all');
-        $baseRules = ['require_approval_for_all' => 'boolean', 'auto_approval_limit' => 'nullable|numeric|min:0'];
-        $approvalRules = $requireAll ? [
+        // Check checkbox value - hidden input always sends the value (0 or 1)
+        $checkboxValue = $request->input('require_approval_for_all');
+        $requireAll = ($checkboxValue === '1' || $checkboxValue === 1 || $checkboxValue === true);
+
+        \Log::info('Loan writeoff approval settings update request', [
+            'require_approval_for_all' => $requireAll,
+            'has_checkbox' => $request->has('require_approval_for_all'),
+            'checkbox_value' => $request->input('require_approval_for_all'),
+            'all_request_data' => $request->except(['_token', '_method']),
+        ]);
+
+        $baseRules = [
+            'require_approval_for_all' => 'boolean',
+            'auto_approval_limit' => 'nullable|numeric|min:0',
+        ];
+
+        $approvalRules = [
             'approval_levels' => 'required|integer|min:1|max:5',
             'level1_approval_type' => 'required|in:role,user',
             'level1_approvers' => 'required|array|min:1',
@@ -2168,65 +2187,98 @@ class SettingsController extends Controller
             'level4_approvers' => 'nullable|array',
             'level5_approval_type' => 'nullable|in:role,user',
             'level5_approvers' => 'nullable|array',
-        ] : [];
-        $rules = array_merge($baseRules, $approvalRules);
+        ];
+
+        $rules = $requireAll ? array_merge($baseRules, $approvalRules) : $baseRules;
         $request->validate($rules);
 
         try {
             $user = Auth::user();
             $companyId = $user->company_id;
+
+            // Find or create approval settings for the company
             $settings = \App\Models\LoanWriteoffApprovalSetting::firstOrCreate(
                 ['company_id' => $companyId],
-                ['approval_levels' => 1, 'require_approval_for_all' => false, 'auto_approval_limit' => 0]
+                [
+                    'approval_levels' => 1,
+                    'require_approval_for_all' => false,
+                    'auto_approval_limit' => 0,
+                ]
             );
+
+            \Log::info('Before update', [
+                'settings_id' => $settings->id,
+                'current_require_approval_for_all' => $settings->require_approval_for_all,
+                'new_require_approval_for_all' => $requireAll,
+            ]);
+
+            // Build complete update data array - update everything in one call
             $updateData = [
                 'require_approval_for_all' => $requireAll,
                 'auto_approval_limit' => $request->auto_approval_limit ?? 0,
             ];
-            if ($requireAll) {
-                $updateData['approval_levels'] = $request->approval_levels;
-            }
-            $settings->update($updateData);
 
             if ($requireAll) {
                 $approvalLevels = (int) $request->approval_levels;
+                $updateData['approval_levels'] = $approvalLevels;
+                
+                // Process each level
                 for ($level = 1; $level <= $approvalLevels; $level++) {
                     $approvalType = $request->{"level{$level}_approval_type"};
                     $approvers = $request->{"level{$level}_approvers"} ?? [];
+
                     if ($approvalType && !empty($approvers)) {
-                        $processed = [];
-                        foreach ($approvers as $a) {
-                            if (str_starts_with($a, 'user_')) {
-                                $processed[] = (int) str_replace('user_', '', $a);
-                            } elseif (str_starts_with($a, 'role_')) {
-                                $processed[] = str_replace('role_', '', $a);
+                        // Process approver IDs - extract actual IDs from "user_X" or "role_X" format
+                        $processedApprovers = [];
+                        foreach ($approvers as $approver) {
+                            if (str_starts_with($approver, 'user_')) {
+                                $userId = (int) str_replace('user_', '', $approver);
+                                $processedApprovers[] = $userId;
+                            } elseif (str_starts_with($approver, 'role_')) {
+                                $roleName = str_replace('role_', '', $approver);
+                                $processedApprovers[] = $roleName;
                             }
                         }
-                        $settings->update([
-                            "level{$level}_approval_type" => $approvalType,
-                            "level{$level}_approvers" => $processed,
-                        ]);
+
+                        $updateData["level{$level}_approval_type"] = $approvalType;
+                        $updateData["level{$level}_approvers"] = $processedApprovers;
                     }
                 }
+                
+                // Clear unused levels
                 for ($level = $approvalLevels + 1; $level <= 5; $level++) {
-                    $settings->update([
-                        "level{$level}_approval_type" => null,
-                        "level{$level}_approvers" => null,
-                    ]);
+                    $updateData["level{$level}_approval_type"] = null;
+                    $updateData["level{$level}_approvers"] = null;
                 }
             } else {
-                $settings->update([
-                    'approval_levels' => 1,
-                    'level1_approval_type' => null, 'level1_approvers' => null,
-                    'level2_approval_type' => null, 'level2_approvers' => null,
-                    'level3_approval_type' => null, 'level3_approvers' => null,
-                    'level4_approval_type' => null, 'level4_approvers' => null,
-                    'level5_approval_type' => null, 'level5_approvers' => null,
-                ]);
+                // When approvals disabled, clear approval configuration
+                // Note: level1_approval_type cannot be null (has NOT NULL constraint with default 'role')
+                $updateData['approval_levels'] = 0;
+                $updateData['level1_approval_type'] = 'role'; // Keep default value instead of null
+                $updateData['level1_approvers'] = null;
+                $updateData['level2_approval_type'] = null;
+                $updateData['level2_approvers'] = null;
+                $updateData['level3_approval_type'] = null;
+                $updateData['level3_approvers'] = null;
+                $updateData['level4_approval_type'] = null;
+                $updateData['level4_approvers'] = null;
+                $updateData['level5_approval_type'] = null;
+                $updateData['level5_approvers'] = null;
             }
+            
+            \Log::info('Update data', ['updateData' => $updateData]);
+            
+            // Update all at once
+            $updated = $settings->update($updateData);
+            
+            \Log::info('After update', [
+                'updated' => $updated,
+                'settings_refreshed' => $settings->fresh()->require_approval_for_all,
+            ]);
+
             return redirect()->route('settings.loan-writeoff-approval')->with('success', 'Loan write-off approval settings updated successfully!');
         } catch (\Exception $e) {
-            return redirect()->route('settings.loan-writeoff-approval')->with('error', 'Failed to update: ' . $e->getMessage());
+            return redirect()->route('settings.loan-writeoff-approval')->with('error', 'Failed to update loan write-off approval settings: ' . $e->getMessage());
         }
     }
 

@@ -39,6 +39,7 @@ class LoanWriteoffApprovalSetting extends Model
         'approval_threshold_4' => 'decimal:2',
         'approval_threshold_5' => 'decimal:2',
         'require_approval_for_all' => 'boolean',
+        'approval_levels' => 'integer',
         'level1_approvers' => 'array',
         'level2_approvers' => 'array',
         'level3_approvers' => 'array',
