@@ -1,9 +1,5 @@
 @extends('layouts.main')
 
-@php
-use Vinkla\Hashids\Facades\Hashids;
-@endphp
-
 @section('title', 'Edit Receipt Voucher')
 
 @section('content')
@@ -49,7 +45,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                 </div>
                             @endif
 
-                            <form id="receiptVoucherForm" action="{{ route('accounting.receipt-vouchers.update', Hashids::encode($receiptVoucher->id)) }}"
+                            <form id="receiptVoucherForm" action="{{ route('accounting.receipt-vouchers.update', $receiptVoucher->hash_id) }}"
                                 method="POST" enctype="multipart/form-data">
                                 @csrf
                                 @method('PUT')
@@ -390,7 +386,8 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     <i class="bx bx-calculator me-2"></i>Withholding Tax (WHT)
                                                 </h6>
                                                 <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" id="wht_enabled_switch" name="wht_enabled" value="1" {{ old('wht_enabled', ($receiptVoucher->wht_treatment && $receiptVoucher->wht_treatment != 'NONE' && $receiptVoucher->wht_rate > 0) ? true : false) ? 'checked' : '' }}>
+                                                    <input type="hidden" name="wht_enabled" id="wht_enabled_value" value="{{ old('wht_enabled', ($receiptVoucher->wht_treatment && $receiptVoucher->wht_treatment != 'NONE' && $receiptVoucher->wht_rate > 0) ? '1' : '0') }}">
+                                                    <input class="form-check-input" type="checkbox" id="wht_enabled_switch" value="1" {{ old('wht_enabled', ($receiptVoucher->wht_treatment && $receiptVoucher->wht_treatment != 'NONE' && $receiptVoucher->wht_rate > 0) ? true : false) ? 'checked' : '' }}>
                                                     <label class="form-check-label" for="wht_enabled_switch">
                                                         Enable WHT
                                                     </label>
@@ -551,7 +548,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     <div class="d-flex align-items-center">
                                                         <i class="bx bx-file-pdf me-2 text-danger"></i>
                                                         <span class="me-3">{{ basename($receiptVoucher->attachment) }}</span>
-                                                        <a href="{{ route('accounting.receipt-vouchers.download-attachment', Hashids::encode($receiptVoucher->id)) }}" 
+                                                        <a href="{{ route('accounting.receipt-vouchers.download-attachment', $receiptVoucher->hash_id) }}" 
                                                            class="btn btn-sm btn-outline-primary me-2">
                                                             <i class="bx bx-download"></i> Download
                                                         </a>
@@ -693,7 +690,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                 <div class="row">
                                     <div class="col-lg-6">
                                         <div class="d-flex justify-content-start">
-                                            <a href="{{ route('accounting.receipt-vouchers.show', Hashids::encode($receiptVoucher->id)) }}"
+                                            <a href="{{ route('accounting.receipt-vouchers.show', $receiptVoucher->hash_id) }}"
                                                 class="btn btn-secondary me-2">
                                                 <i class="bx bx-arrow-back me-2"></i>Cancel
                                             </a>
@@ -970,31 +967,26 @@ use Vinkla\Hashids\Facades\Hashids;
                 });
             }
 
-            // Handle payment method change
+            // Handle payment method change: show Bank Account only for bank transfer
             $('#payment_method').on('change', function() {
                 const paymentMethod = $(this).val();
                 
-                // Hide all sections
+                // Hide all sections first
                 $('#bank_account_section, #cheque_section').hide();
                 $('#bank_account_id, #cheque_number, #cheque_date').removeAttr('required');
                 
-                if (paymentMethod === 'bank_transfer' || paymentMethod === 'cheque') {
+                if (paymentMethod === 'bank_transfer') {
                     $('#bank_account_section').show();
                     $('#bank_account_id').attr('required', 'required');
-                    
-                    if (paymentMethod === 'cheque') {
-                        $('#cheque_section').show();
-                        $('#cheque_number').attr('required', 'required');
-                        $('#cheque_date').attr('required', 'required');
-                        // Set default cheque date if empty
-                        if (!$('#cheque_date').val()) {
-                            $('#cheque_date').val('{{ date('Y-m-d') }}');
-                        }
+                } else if (paymentMethod === 'cheque') {
+                    $('#cheque_section').show();
+                    $('#cheque_number').attr('required', 'required');
+                    $('#cheque_date').attr('required', 'required');
+                    if (!$('#cheque_date').val()) {
+                        $('#cheque_date').val('{{ date('Y-m-d') }}');
                     }
-                } else if (paymentMethod === 'cash') {
-                    // For cash, bank account is optional
-                    $('#bank_account_section').show();
                 }
+                // For cash or any other method: bank account section stays hidden
             });
             
             // Trigger change on page load if value exists
@@ -1112,19 +1104,22 @@ use Vinkla\Hashids\Facades\Hashids;
                 calculateWHT();
             });
 
-            // WHT Switch Toggle
+            // WHT Switch Toggle: sync hidden input so server always receives wht_enabled (0 or 1) on update
             $('#wht_enabled_switch').on('change', function() {
                 const isEnabled = $(this).is(':checked');
+                $('#wht_enabled_value').val(isEnabled ? '1' : '0');
                 if (isEnabled) {
                     $('#wht_fields_container').slideDown(300);
+                    calculateWHT();
                 } else {
                     $('#wht_fields_container').slideUp(300);
-                    // Reset WHT values when disabled
                     $('#wht_treatment').val('NONE');
                     $('#wht_rate').val('0');
                     calculateWHT();
                 }
             });
+            // Set hidden input from checkbox state on page load
+            $('#wht_enabled_value').val($('#wht_enabled_switch').is(':checked') ? '1' : '0');
 
             // Calculate WHT when treatment or rate changes (only if enabled)
             $('#wht_treatment, #wht_rate, #vat_mode, #vat_rate').on('change input', function() {

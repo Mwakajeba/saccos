@@ -34,21 +34,25 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('settings.loan-writeoff-approval.update') }}" method="POST">
+                        @php
+                            $requireApprovalEnabled = filter_var(old('require_approval_for_all', $settings->require_approval_for_all ?? false), FILTER_VALIDATE_BOOLEAN);
+                        @endphp
+                        <form action="{{ route('settings.loan-writeoff-approval.update') }}" method="POST" id="loan_writeoff_approval_form">
                             @csrf
                             @method('PUT')
+                            <input type="hidden" name="require_approval_for_all" id="require_approval_for_all_value" value="{{ $requireApprovalEnabled ? '1' : '0' }}">
 
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="require_approval_for_all" name="require_approval_for_all" value="1" {{ old('require_approval_for_all', $settings->require_approval_for_all ?? false) ? 'checked' : '' }}>
+                                        <input class="form-check-input" type="checkbox" id="require_approval_for_all" value="1" {{ $requireApprovalEnabled ? 'checked' : '' }} aria-label="Require Approval for All Write-offs">
                                         <label class="form-check-label" for="require_approval_for_all">Require Approval for All Write-offs</label>
                                         <small class="form-text text-muted d-block">If checked, all write-offs require approval regardless of amount</small>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="row" id="direct_post_note" style="display:none;">
+                            <div class="row" id="direct_post_note" style="display:{{ $requireApprovalEnabled ? 'none' : 'block' }};">
                                 <div class="col-12">
                                     <div class="alert alert-info">
                                         <i class="bx bx-info-circle me-2"></i>
@@ -57,7 +61,7 @@
                                 </div>
                             </div>
 
-                            <div id="approval_config">
+                            <div id="approval_config" style="display:{{ $requireApprovalEnabled ? 'block' : 'none' }};">
                                 <div class="row mb-3">
                                     <div class="col-md-6" id="auto_limit_block">
                                         <label for="auto_approval_limit" class="form-label">Auto-approval Limit (TZS)</label>
@@ -77,6 +81,16 @@
                                 <div class="row mt-4" id="assignments_block">
                                     <div class="col-12">
                                         <h6 class="mb-3">Approval Assignments (by Role or User)</h6>
+                                        @php
+                                            $initialApproversByLevel = [];
+                                            for ($lev = 1; $lev <= 5; $lev++) {
+                                                $typ = old("level{$lev}_approval_type", optional($settings)->{"level{$lev}_approval_type"} ?? 'role');
+                                                $appr = (array) old("level{$lev}_approvers", optional($settings)->{"level{$lev}_approvers"} ?? []);
+                                                $initialApproversByLevel[$lev] = array_map(function ($a) use ($typ) {
+                                                    return $typ === 'role' ? 'role_' . $a : 'user_' . $a;
+                                                }, $appr);
+                                            }
+                                        @endphp
                                         @foreach([1,2,3,4,5] as $level)
                                         <div class="card mb-3 level-card" data-level="{{ $level }}">
                                             <div class="card-header"><h6 class="mb-0">Level {{ $level }} Approvers</h6></div>
@@ -84,24 +98,15 @@
                                                 <div class="row">
                                                     <div class="col-md-6 mb-3">
                                                         <label class="form-label">Approval Type</label>
-                                                        <select class="form-select level_approval_type" name="level{{ $level }}_approval_type">
+                                                        <select class="form-select level_approval_type" id="level{{ $level }}_approval_type" name="level{{ $level }}_approval_type">
                                                             <option value="role" {{ old("level{$level}_approval_type", $settings->{"level{$level}_approval_type"} ?? 'role') == 'role' ? 'selected' : '' }}>By Role</option>
                                                             <option value="user" {{ old("level{$level}_approval_type", $settings->{"level{$level}_approval_type"} ?? 'role') == 'user' ? 'selected' : '' }}>By User</option>
                                                         </select>
                                                     </div>
                                                     <div class="col-md-6 mb-3">
                                                         <label class="form-label">Approvers</label>
-                                                        <select class="form-select level_approvers" name="level{{ $level }}_approvers[]" multiple>
-                                                            @if(isset($roles))
-                                                            @foreach($roles as $role)
-                                                            <option value="role_{{ $role->name }}" {{ in_array('role_'.$role->name, (array)old("level{$level}_approvers", $settings->{"level{$level}_approvers"} ?? [])) ? 'selected' : '' }}>{{ ucfirst($role->name) }} (Role)</option>
-                                                            @endforeach
-                                                            @endif
-                                                            @if(isset($users))
-                                                            @foreach($users as $u)
-                                                            <option value="user_{{ $u->id }}" {{ in_array('user_'.$u->id, (array)old("level{$level}_approvers", $settings->{"level{$level}_approvers"} ?? [])) ? 'selected' : '' }}>{{ $u->name }} ({{ $u->email }})</option>
-                                                            @endforeach
-                                                            @endif
+                                                        <select class="form-select level_approvers" id="level{{ $level }}_approvers" name="level{{ $level }}_approvers[]" multiple>
+                                                            {{-- Options filled by JS based on approval type (role vs user) --}}
                                                         </select>
                                                         <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple</small>
                                                     </div>
@@ -135,9 +140,23 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const reqAll = document.getElementById('require_approval_for_all');
+    const requireApprovalHidden = document.getElementById('require_approval_for_all_value');
     const approvalConfig = document.getElementById('approval_config');
     const directNote = document.getElementById('direct_post_note');
     const levelsSelect = document.getElementById('approval_levels');
+    const form = document.getElementById('loan_writeoff_approval_form');
+
+    function syncRequireApprovalHidden() {
+        if (requireApprovalHidden && reqAll) {
+            requireApprovalHidden.value = reqAll.checked ? '1' : '0';
+        }
+    }
+    if (form) {
+        form.addEventListener('submit', function() {
+            syncRequireApprovalHidden();
+        });
+    }
+    reqAll.addEventListener('change', syncRequireApprovalHidden);
 
     function toggle() {
         const enabled = reqAll.checked;
@@ -155,6 +174,74 @@ document.addEventListener('DOMContentLoaded', function() {
     toggle();
     reqAll.addEventListener('change', toggle);
     levelsSelect.addEventListener('change', toggleLevels);
+
+    // Dynamic approver options: show roles or users based on approval type (like payment voucher)
+    @php
+        $rolesNames = isset($roles) ? $roles->pluck('name')->values() : collect();
+        $usersArr = isset($users) ? $users->map(function($u) { return ['id' => $u->id, 'name' => $u->name, 'email' => $u->email ?? '']; })->values() : collect();
+    @endphp
+    const rolesData = @json($rolesNames);
+    const usersData = @json($usersArr);
+    const initialApproversByLevel = @json($initialApproversByLevel);
+
+    function updateApproverOptions(level) {
+        const typeSelect = document.getElementById('level' + level + '_approval_type');
+        const approverSelect = document.getElementById('level' + level + '_approvers');
+        if (!typeSelect || !approverSelect) return;
+        const selectedType = typeSelect.value;
+        const previouslySelected = Array.from(approverSelect.selectedOptions).map(function(o) { return o.value; });
+        approverSelect.innerHTML = '';
+        if (selectedType === 'role') {
+            rolesData.forEach(function(name) {
+                var opt = document.createElement('option');
+                opt.value = 'role_' + name;
+                opt.textContent = (name.charAt(0).toUpperCase() + name.slice(1)) + ' (Role)';
+                if (previouslySelected.indexOf(opt.value) !== -1) opt.selected = true;
+                approverSelect.appendChild(opt);
+            });
+        } else if (selectedType === 'user') {
+            usersData.forEach(function(u) {
+                var opt = document.createElement('option');
+                opt.value = 'user_' + u.id;
+                opt.textContent = u.name + ' (' + (u.email || '') + ')';
+                if (previouslySelected.indexOf(opt.value) !== -1) opt.selected = true;
+                approverSelect.appendChild(opt);
+            });
+        }
+    }
+
+    function initApproverOptions(level) {
+        const typeSelect = document.getElementById('level' + level + '_approval_type');
+        const approverSelect = document.getElementById('level' + level + '_approvers');
+        if (!typeSelect || !approverSelect) return;
+        const selectedType = typeSelect.value;
+        const initialSelected = initialApproversByLevel[level] || [];
+        approverSelect.innerHTML = '';
+        if (selectedType === 'role') {
+            rolesData.forEach(function(name) {
+                var opt = document.createElement('option');
+                opt.value = 'role_' + name;
+                opt.textContent = (name.charAt(0).toUpperCase() + name.slice(1)) + ' (Role)';
+                if (initialSelected.indexOf(opt.value) !== -1) opt.selected = true;
+                approverSelect.appendChild(opt);
+            });
+        } else if (selectedType === 'user') {
+            usersData.forEach(function(u) {
+                var opt = document.createElement('option');
+                opt.value = 'user_' + u.id;
+                opt.textContent = u.name + ' (' + (u.email || '') + ')';
+                if (initialSelected.indexOf(opt.value) !== -1) opt.selected = true;
+                approverSelect.appendChild(opt);
+            });
+        }
+        typeSelect.addEventListener('change', function() {
+            updateApproverOptions(level);
+        });
+    }
+
+    for (var l = 1; l <= 5; l++) {
+        initApproverOptions(l);
+    }
 });
 </script>
 @endpush

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankReconciliation;
 use App\Models\BankReconciliationItem;
+use App\Models\Branch;
 use App\Models\GlTransaction;
 use App\Models\ApprovalHistory;
 use App\Services\ApprovalService;
@@ -13,6 +14,7 @@ use App\Services\UnclearedItemsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Yajra\DataTables\Facades\DataTables;
@@ -195,9 +197,23 @@ class BankReconciliationController extends Controller
 
             $user = Auth::user();
             $branchId = session('branch_id') ?? ($user->branch_id ?? null);
-            
+
+            // Fallback: use selected bank account's branch or company's first branch
+            if (!$branchId && $request->filled('bank_account_id')) {
+                $bankAccount = BankAccount::find($request->bank_account_id);
+                if ($bankAccount && $bankAccount->branch_id) {
+                    $branchId = $bankAccount->branch_id;
+                }
+            }
+            if (!$branchId && $user->company_id) {
+                $firstBranch = Branch::where('company_id', $user->company_id)->first();
+                if ($firstBranch) {
+                    $branchId = $firstBranch->id;
+                }
+            }
+
             if (!$branchId) {
-                throw new \Exception('Branch ID is required but not found. Please ensure you are assigned to a branch.');
+                throw new \Exception('Branch ID is required but not found. Please ensure you are assigned to a branch or select a bank account that is assigned to a branch.');
             }
 
             // Handle document upload
@@ -248,6 +264,10 @@ class BankReconciliationController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Bank reconciliation create failed', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to create bank reconciliation: ' . $e->getMessage()])
                 ->withInput();
@@ -349,7 +369,7 @@ class BankReconciliationController extends Controller
             ->orderBy('account_name')
             ->get();
         
-        return view('accounting.bank-reconciliation.show', compact(
+        $response = response()->view('accounting.bank-reconciliation.show', compact(
             'bankReconciliation',
             'unreconciledBankItems',
             'unreconciledBookItems',
@@ -366,6 +386,11 @@ class BankReconciliationController extends Controller
             'unclearedItemsSummary',
             'broughtForwardItems'
         ));
+        // Prevent caching so status updates (e.g. after submit for approval) are visible
+        if (request()->query('submitted') || request()->query('t')) {
+            $response->header('Cache-Control', 'no-store, no-cache, must-revalidate');
+        }
+        return $response;
     }
 
     /**
@@ -1323,52 +1348,70 @@ class BankReconciliationController extends Controller
 
     /**
      * Submit bank reconciliation for approval.
+     * Resolves model by hash from route (same as show) to avoid route model binding issues.
      */
-    public function submitForApproval(BankReconciliation $bankReconciliation, Request $request)
+    public function submitForApproval(Request $request)
     {
+        Log::info('Bank reconciliation submit-for-approval requested', [
+            'route_param' => $request->route('bankReconciliation'),
+        ]);
+
+        $hash = $request->route('bankReconciliation');
+        $id = $hash ? \App\Helpers\HashIdHelper::decode($hash) : null;
+        if (!$id) {
+            return redirect()->route('accounting.bank-reconciliation.index')
+                ->with('error', 'Invalid reconciliation.');
+        }
+        $bankReconciliation = BankReconciliation::findOrFail($id);
+
         $user = Auth::user();
-        
-        // Check permission
+
+        // Check permission (redirect with message instead of 403 so user sees it on the page)
         if (!$user->can('submit bank reconciliation for approval')) {
-            abort(403, 'You do not have permission to submit bank reconciliations for approval.');
+            return redirect()->back()->with('error', 'You do not have permission to submit bank reconciliations for approval.');
         }
 
         // Check if reconciliation can be submitted
         if (!in_array($bankReconciliation->status, ['draft', 'rejected'])) {
+            Log::info('Bank reconciliation submit rejected: wrong status', ['status' => $bankReconciliation->status]);
             return redirect()->back()->with('error', 'Reconciliation can only be submitted from draft or rejected status.');
+        }
+
+        // Validate balanced using current state (same as show page) before recalculating
+        if (!$bankReconciliation->isBalanced()) {
+            Log::info('Bank reconciliation submit rejected: not balanced (before recalc)', ['difference' => $bankReconciliation->difference]);
+            return redirect()->back()->with('error', 'Reconciliation must be balanced (difference = 0) before submitting for approval. Current difference: ' . number_format($bankReconciliation->difference, 2) . '. Please ensure all items are reconciled.');
         }
 
         try {
             DB::beginTransaction();
-            
+
             // Load relationships needed for company_id access
             $bankReconciliation->load('bankAccount.chartAccount.accountClassGroup');
-            
-            // Recalculate balances before checking if balanced
+
+            // Recalculate adjusted balances for record-keeping (user already saw balanced state)
             $this->recalculateAdjustedBalances($bankReconciliation);
             $bankReconciliation->refresh();
-
-            // Validate reconciliation is balanced before submission
-            if (!$bankReconciliation->isBalanced()) {
-                DB::rollBack();
-                return redirect()->back()->with('error', 'Reconciliation must be balanced (difference = 0) before submitting for approval. Current difference: ' . number_format($bankReconciliation->difference, 2) . '. Please ensure all items are reconciled.');
-            }
 
             $approvalService = app(ApprovalService::class);
 
             if (!$approvalService->canUserSubmit($bankReconciliation, $user->id)) {
                 DB::rollBack();
+                Log::info('Bank reconciliation submit rejected: canUserSubmit false');
                 return redirect()->back()->with('error', 'You do not have permission to submit this reconciliation.');
             }
 
             $approvalService->submitForApproval($bankReconciliation, $user->id);
-            
+
             DB::commit();
 
-            return redirect()->back()->with('success', 'Bank reconciliation submitted for approval successfully. Notifications have been sent to approvers.');
+            Log::info('Bank reconciliation submitted for approval successfully', ['reconciliation_id' => $bankReconciliation->id]);
+            // Redirect explicitly to show page (with cache-buster) so the updated status is loaded, not a cached page
+            $showUrl = route('accounting.bank-reconciliation.show', $bankReconciliation->getRouteKey()) . '?submitted=1&t=' . time();
+            return redirect($showUrl)->with('success', 'Bank reconciliation submitted for approval successfully. Notifications have been sent to approvers.');
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Bank Reconciliation Submission Error', [
+            Log::error('Bank Reconciliation Submission Error', [
                 'reconciliation_id' => $bankReconciliation->id,
                 'user_id' => $user->id,
                 'error' => $e->getMessage(),

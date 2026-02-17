@@ -253,40 +253,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Supplier Invoices Section (shown when supplier is selected) -->
-                                <div class="row mb-4" id="supplierInvoicesSection" style="display: none;">
-                                    <div class="col-12">
-                                        <div class="card border-primary">
-                                            <div class="card-header bg-primary text-white">
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <h6 class="mb-0 fw-bold">
-                                                        <i class="bx bx-receipt me-2"></i>Unpaid Supplier Invoices
-                                                    </h6>
-                                                    <div>
-                                                        <button type="button" class="btn btn-sm btn-light" id="selectAllInvoices">
-                                                            <i class="bx bx-check-square me-1"></i>Select All
-                                                        </button>
-                                                        <button type="button" class="btn btn-sm btn-light" id="deselectAllInvoices">
-                                                            <i class="bx bx-square me-1"></i>Deselect All
-                                                        </button>
-                                                        <button type="button" class="btn btn-sm btn-light" id="addSelectedInvoices">
-                                                            <i class="bx bx-plus me-1"></i>Add Selected to Line Items
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="card-body">
-                                                <div id="supplierInvoicesContainer">
-                                                    <div class="text-center py-4">
-                                                        <i class="bx bx-loader-alt bx-spin fs-3 text-primary"></i>
-                                                        <p class="mt-2 text-muted">Select a supplier to load invoices...</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
                                 <!-- Payment Method Section -->
                                 <div class="row mb-4">
                                     <div class="col-lg-12">
@@ -308,7 +274,7 @@
                                                                 id="payment_method" name="payment_method" required>
                                                                 <option value="">-- Select Payment Method --</option>
                                                                 <option value="bank_transfer" {{ old('payment_method', $paymentVoucher->payment_method ?? 'bank_transfer') == 'bank_transfer' ? 'selected' : '' }}>Bank Transfer</option>
-                                                                <option value="cash_collateral" id="cash_collateral_option" {{ old('payment_method', $paymentVoucher->payment_method) == 'cash_collateral' ? 'selected' : '' }} style="display: none;">Cash Deposit</option>
+                                                                <option value="cash_deposit" id="cash_deposit_option" {{ old('payment_method', $paymentVoucher->payment_method) == 'cash_deposit' ? 'selected' : '' }} style="display: none;">Cash Deposit</option>
                                                                 <option value="cheque" {{ old('payment_method', $paymentVoucher->payment_method) == 'cheque' ? 'selected' : '' }}>Cheque</option>
                                                             </select>
                                                             @error('payment_method')
@@ -340,20 +306,20 @@
                                                     </div>
 
                                                     <!-- Cash Deposit Section (for Cash Deposit) -->
-                                                    <div class="col-lg-6" id="cash_collateral_section" style="display: none;">
+                                                    <div class="col-lg-6" id="cash_deposit_section" style="display: none;">
                                                         <div class="mb-3">
                                                             <label class="form-label fw-bold">
                                                                 <i class="bx bx-wallet me-1"></i>Customer Account <span class="text-danger">*</span>
                                                             </label>
                                                             <select
-                                                                class="form-select form-select-lg select2-single @error('cash_collateral_id') is-invalid @enderror"
-                                                                id="cash_collateral_id" name="cash_collateral_id">
+                                                                class="form-select form-select-lg select2-single @error('cash_deposit_id') is-invalid @enderror"
+                                                                id="cash_deposit_id" name="cash_deposit_id">
                                                                 <option value="">-- Select Customer Account --</option>
-                                                                @if($paymentVoucher->payment_method === 'cash_collateral' && $paymentVoucher->cash_collateral_id === 'customer_balance')
+                                                                @if($paymentVoucher->payment_method === 'cash_deposit' && $paymentVoucher->cash_deposit_id === 'customer_balance')
                                                                     <option value="customer_balance" selected>Customer Balance</option>
                                                                 @endif
                                                             </select>
-                                                            @error('cash_collateral_id')
+                                                            @error('cash_deposit_id')
                                                                 <div class="invalid-feedback">{{ $message }}</div>
                                                             @enderror
                                                             <small class="text-muted">Only available when payee type is Customer</small>
@@ -416,6 +382,15 @@
                                 </div>
 
                                 <!-- WHT Section -->
+                                @php
+                                    $hasExistingWht = $paymentVoucher->wht_treatment
+                                        && $paymentVoucher->wht_treatment !== 'NONE'
+                                        && (float) ($paymentVoucher->wht_rate ?? 0) > 0;
+                                    // When there is no existing WHT, default the treatment to NONE instead of EXCLUSIVE
+                                    $defaultWhtTreatment = $paymentVoucher->wht_treatment
+                                        ?? ($hasExistingWht ? 'EXCLUSIVE' : 'NONE');
+                                    $selectedWhtTreatment = old('wht_treatment', $defaultWhtTreatment);
+                                @endphp
                                 <div class="row mb-4">
                                     <div class="col-12">
                                         <div class="card border-info">
@@ -432,10 +407,10 @@
                                                         </label>
                                                         <select class="form-select @error('wht_treatment') is-invalid @enderror"
                                                             id="wht_treatment" name="wht_treatment">
-                                                            <option value="EXCLUSIVE" {{ old('wht_treatment', $paymentVoucher->wht_treatment ?? 'EXCLUSIVE') == 'EXCLUSIVE' ? 'selected' : '' }}>Exclusive</option>
-                                                            <option value="INCLUSIVE" {{ old('wht_treatment', $paymentVoucher->wht_treatment) == 'INCLUSIVE' ? 'selected' : '' }}>Inclusive</option>
-                                                            <option value="GROSS_UP" {{ old('wht_treatment', $paymentVoucher->wht_treatment) == 'GROSS_UP' ? 'selected' : '' }}>Gross-Up</option>
-                                                            <option value="NONE" {{ old('wht_treatment', $paymentVoucher->wht_treatment) == 'NONE' ? 'selected' : '' }}>None</option>
+                                                            <option value="EXCLUSIVE" {{ $selectedWhtTreatment === 'EXCLUSIVE' ? 'selected' : '' }}>Exclusive</option>
+                                                            <option value="INCLUSIVE" {{ $selectedWhtTreatment === 'INCLUSIVE' ? 'selected' : '' }}>Inclusive</option>
+                                                            <option value="GROSS_UP" {{ $selectedWhtTreatment === 'GROSS_UP' ? 'selected' : '' }}>Gross-Up</option>
+                                                            <option value="NONE" {{ $selectedWhtTreatment === 'NONE' ? 'selected' : '' }}>None</option>
                                                         </select>
                                                         @error('wht_treatment')
                                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -616,85 +591,33 @@
                                             <div class="card-body">
                                                 <div id="lineItemsContainer">
                                                     <!-- Line items will be added here dynamically -->
-                                                    @php
-                                                        // Get linked invoice payments to identify invoice-based line items
-                                                        $invoicePayments = \App\Models\Payment::where('reference', 'like', $paymentVoucher->reference . '-INV-%')
-                                                            ->orWhere(function($query) use ($paymentVoucher) {
-                                                                $query->where('reference_type', 'purchase_invoice')
-                                                                      ->where('supplier_id', $paymentVoucher->supplier_id)
-                                                                      ->where('date', $paymentVoucher->date)
-                                                                      ->where('user_id', $paymentVoucher->user_id);
-                                                            })
-                                                            ->get()
-                                                            ->keyBy('reference_number'); // Key by invoice_number for easy lookup
-                                                    @endphp
                                                     @foreach($paymentVoucher->paymentItems as $index => $lineItem)
                                                         @php
                                                             $lineItemCount = $index + 1;
-                                                            // Check if this line item is from an invoice
-                                                            // Match by description pattern "Payment for Invoice {number}" or "Payment for Purchase Invoice {number}"
-                                                            $isInvoiceItem = false;
-                                                            $invoiceId = null;
-                                                            $invoiceNumber = null;
-                                                            
-                                                            // Try to match invoice pattern in description
-                                                            if (preg_match('/Payment for (?:Purchase )?Invoice\s+([A-Z0-9\-]+)/i', $lineItem->description ?? '', $matches)) {
-                                                                $invoiceNumber = $matches[1];
-                                                                $invoicePayment = $invoicePayments->get($invoiceNumber);
-                                                                if ($invoicePayment) {
-                                                                    $isInvoiceItem = true;
-                                                                    // Try to find the invoice ID from the invoice number
-                                                                    $purchaseInvoice = \App\Models\Purchase\PurchaseInvoice::where('invoice_number', $invoiceNumber)
-                                                                        ->where('supplier_id', $paymentVoucher->supplier_id)
-                                                                        ->first();
-                                                                    if ($purchaseInvoice) {
-                                                                        $invoiceId = $purchaseInvoice->id;
-                                                                    }
-                                                                }
-                                                            }
-                                                            
-                                                            // Also check if there's a hidden invoice_id field in the form (for items added via JavaScript)
-                                                            // This is a fallback for items that might not match the pattern exactly
                                                         @endphp
-                                                        <div class="line-item-row" @if($isInvoiceItem) data-invoice-item="true" data-invoice-id="{{ $invoiceId }}" @endif>
+                                                        <div class="line-item-row">
                                                             <div class="row">
-                                                                @if($isInvoiceItem)
-                                                                    {{-- Invoice item - hide account field --}}
-                                                                    <input type="hidden" name="line_items[{{ $lineItemCount }}][chart_account_id]" value="{{ $lineItem->chart_account_id }}">
-                                                                    <input type="hidden" name="line_items[{{ $lineItemCount }}][invoice_id]" value="{{ $invoiceId }}">
-                                                                    <input type="hidden" name="line_items[{{ $lineItemCount }}][invoice_number]" value="{{ $invoiceNumber }}">
-                                                                    <div class="col-md-7 mb-2">
-                                                                        <label for="line_items_{{ $lineItemCount }}_description" class="form-label fw-bold">
-                                                                            Description
-                                                                        </label>
-                                                                        <input type="text" class="form-control description-input" 
-                                                                               name="line_items[{{ $lineItemCount }}][description]" 
-                                                                               value="{{ $lineItem->description }}" readonly>
-                                                                    </div>
-                                                                @else
-                                                                    {{-- Regular item - show account field --}}
-                                                                    <div class="col-md-5 mb-2 account-field">
-                                                                        <label for="line_items_{{ $lineItemCount }}_chart_account_id" class="form-label fw-bold">
-                                                                            Account <span class="text-danger">*</span>
-                                                                        </label>
-                                                                        <select class="form-select chart-account-select select2-single" name="line_items[{{ $lineItemCount }}][chart_account_id]" required>
-                                                                            <option value="">--- Select Account ---</option>
-                                                                            @foreach($chartAccounts as $chartAccount)
-                                                                                <option value="{{ $chartAccount->id }}" {{ $lineItem->chart_account_id == $chartAccount->id ? 'selected' : '' }}>
-                                                                                    {{ $chartAccount->account_name }} ({{ $chartAccount->account_code }})
-                                                                                </option>
-                                                                            @endforeach
-                                                                        </select>
-                                                                    </div>
-                                                                    <div class="col-md-4 mb-2">
-                                                                        <label for="line_items_{{ $lineItemCount }}_description" class="form-label fw-bold">
-                                                                            Description
-                                                                        </label>
-                                                                        <input type="text" class="form-control description-input" 
-                                                                               name="line_items[{{ $lineItemCount }}][description]" 
-                                                                               placeholder="Enter description" value="{{ $lineItem->description }}">
-                                                                    </div>
-                                                                @endif
+                                                                <div class="col-md-5 mb-2">
+                                                                    <label for="line_items_{{ $lineItemCount }}_chart_account_id" class="form-label fw-bold">
+                                                                        Account <span class="text-danger">*</span>
+                                                                    </label>
+                                                                    <select class="form-select chart-account-select select2-single" name="line_items[{{ $lineItemCount }}][chart_account_id]" required>
+                                                                        <option value="">--- Select Account ---</option>
+                                                                        @foreach($chartAccounts as $chartAccount)
+                                                                            <option value="{{ $chartAccount->id }}" {{ $lineItem->chart_account_id == $chartAccount->id ? 'selected' : '' }}>
+                                                                                {{ $chartAccount->account_name }} ({{ $chartAccount->account_code }})
+                                                                            </option>
+                                                                        @endforeach
+                                                                    </select>
+                                                                </div>
+                                                                <div class="col-md-4 mb-2">
+                                                                    <label for="line_items_{{ $lineItemCount }}_description" class="form-label fw-bold">
+                                                                        Description
+                                                                    </label>
+                                                                    <input type="text" class="form-control description-input" 
+                                                                           name="line_items[{{ $lineItemCount }}][description]" 
+                                                                           placeholder="Enter description" value="{{ $lineItem->description }}">
+                                                                </div>
                                                                 <div class="col-md-2 mb-2">
                                                                     <label for="line_items_{{ $lineItemCount }}_amount" class="form-label fw-bold">
                                                                         Amount <span class="text-danger">*</span>
@@ -817,32 +740,6 @@
     <script>
         $(document).ready(function () {
             let lineItemCount = {{ $paymentVoucher->paymentItems->count() }};
-            // Track which invoices have been added to line items
-            let addedInvoices = {}; // {invoiceId: {invoiceNumber, amount, rowElement}}
-            
-            // Initialize tracking for existing invoice line items
-            $('.line-item-row[data-invoice-item="true"]').each(function() {
-                const $row = $(this);
-                const invoiceId = $row.data('invoice-id');
-                const invoiceNumber = $row.find('input[name*="[invoice_number]"]').val();
-                const amount = parseFloat($row.find('.amount-input').val()) || 0;
-                
-                if (invoiceId && invoiceNumber) {
-                    addedInvoices[invoiceId] = {
-                        invoice_number: invoiceNumber,
-                        amount: amount,
-                        rowElement: $row
-                    };
-                }
-            });
-
-            // Initialize Select2 for all select fields first (before payee_type handler)
-            $('.select2-single').select2({
-                placeholder: 'Select an option',
-                allowClear: true,
-                width: '100%',
-                theme: 'bootstrap-5'
-            });
 
             // Handle payee type selection
             $('#payee_type').on('change', function() {
@@ -871,86 +768,46 @@
                     $('#customer_id').prop('required', true).prop('disabled', false);
                     // Reinitialize Select2 for customer
                     setTimeout(function() {
-                        // Initialize Select2 with the current value
                         $('#customer_id').select2({
                             placeholder: 'Select Customer',
                             allowClear: true,
                             width: '100%',
                             theme: 'bootstrap-5'
                         });
-                        
-                        // Ensure the value is set in Select2 (in case it wasn't picked up initially)
-                        const currentValue = $('#customer_id').val();
-                        if (currentValue) {
-                            $('#customer_id').val(currentValue).trigger('change.select2');
-                        }
                     }, 100);
                 } else if (payeeType === 'supplier') {
                     $('#supplierSection').show();
                     $('#supplier_id').prop('required', true).prop('disabled', false);
                     // Reinitialize Select2 for supplier
                     setTimeout(function() {
-                        // Initialize Select2 with the current value
                         $('#supplier_id').select2({
                             placeholder: 'Select Supplier',
                             allowClear: true,
                             width: '100%',
                             theme: 'bootstrap-5'
                         });
-                        
-                        // Ensure the value is set in Select2 (in case it wasn't picked up initially)
-                        const currentValue = $('#supplier_id').val();
-                        if (currentValue) {
-                            $('#supplier_id').val(currentValue).trigger('change.select2');
-                        }
-                        
-                        // Load invoices when supplier is selected
-                        $('#supplier_id').off('change.invoiceLoader').on('change.invoiceLoader', function() {
-                            loadSupplierInvoices($(this).val());
-                        });
-                        // Load invoices if supplier is already selected
-                        if (currentValue) {
-                            loadSupplierInvoices(currentValue);
-                        }
                     }, 100);
                 } else if (payeeType === 'employee') {
                     $('#employeeSection').show();
                     $('#employee_id').prop('required', true).prop('disabled', false);
                     // Reinitialize Select2 for employee
                     setTimeout(function() {
-                        // Initialize Select2 with the current value
                         $('#employee_id').select2({
                             placeholder: 'Select Employee',
                             allowClear: true,
                             width: '100%',
                             theme: 'bootstrap-5'
                         });
-                        
-                        // Ensure the value is set in Select2 (in case it wasn't picked up initially)
-                        const currentValue = $('#employee_id').val();
-                        if (currentValue) {
-                            $('#employee_id').val(currentValue).trigger('change.select2');
-                        }
                     }, 100);
                 } else if (payeeType === 'other') {
                     $('#otherPayeeSection').show();
                     $('#payee_name').prop('required', true).prop('disabled', false);
                 }
             });
-            
+
             // Trigger change event on page load if payee_type has a value
-            // This will show the appropriate section and initialize Select2
             if ($('#payee_type').val()) {
                 $('#payee_type').trigger('change');
-            } else {
-                // If no payee type is set, check if customer_id, supplier_id, or employee_id has a value
-                if ($('#customer_id').val()) {
-                    $('#payee_type').val('customer').trigger('change');
-                } else if ($('#supplier_id').val()) {
-                    $('#payee_type').val('supplier').trigger('change');
-                } else if ($('#employee_id').val()) {
-                    $('#payee_type').val('employee').trigger('change');
-                }
             }
 
             // Handle payment method selection
@@ -959,18 +816,18 @@
                 
                 // Hide all sections first
                 $('#bank_account_section').hide();
-                $('#cash_collateral_section').hide();
+                $('#cash_deposit_section').hide();
                 $('#cheque_section').hide();
                 
                 // Remove required attributes and clear values for hidden fields
                 $('#bank_account_id').removeAttr('required').removeClass('is-invalid');
-                $('#cash_collateral_id').removeAttr('required').removeClass('is-invalid');
+                $('#cash_deposit_id').removeAttr('required').removeClass('is-invalid');
                 $('#cheque_number').removeAttr('required').removeClass('is-invalid');
                 $('#cheque_date').removeAttr('required').removeClass('is-invalid');
                 
                 // Clear validation error messages
                 $('#bank_account_id').next('.invalid-feedback').remove();
-                $('#cash_collateral_id').next('.invalid-feedback').remove();
+                $('#cash_deposit_id').next('.invalid-feedback').remove();
                 $('#cheque_number').next('.invalid-feedback').remove();
                 $('#cheque_date').next('.invalid-feedback').remove();
                 
@@ -989,11 +846,11 @@
                         }
                         updateChequePayeeName();
                     }
-                } else if (paymentMethod === 'cash_collateral') {
-                    $('#cash_collateral_section').show();
+                } else if (paymentMethod === 'cash_deposit') {
+                    $('#cash_deposit_section').show();
                     // Only require if payee type is customer
                     if ($('#payee_type').val() === 'customer') {
-                        $('#cash_collateral_id').attr('required', 'required');
+                        $('#cash_deposit_id').attr('required', 'required');
                         loadCashDeposits();
                     }
                 }
@@ -1022,7 +879,7 @@
                 const customerSelect = $('#customer_id');
                 const selectedOption = customerSelect.find('option:selected');
                 const encodedCustomerId = selectedOption.data('encoded-id');
-                const cashDepositSelect = $('#cash_collateral_id');
+                const cashDepositSelect = $('#cash_deposit_id');
                 
                 cashDepositSelect.empty().append('<option value="">-- Select Customer Account --</option>');
                 
@@ -1054,7 +911,7 @@
                             console.error('API returned error:', response.error);
                         } else if (response.data && Array.isArray(response.data) && response.data.length > 0) {
                             cashDepositSelect.append('<option value="">Select Customer Account</option>');
-                            const savedCashDepositId = '{{ $paymentVoucher->cash_collateral_id ?? 'customer_balance' }}';
+                            const savedCashDepositId = '{{ $paymentVoucher->cash_deposit_id ?? 'customer_balance' }}';
                             response.data.forEach(function(deposit) {
                                 // For customer balance, use 'customer_balance' as value
                                 const value = deposit.id === 'customer_balance' ? 'customer_balance' : deposit.id;
@@ -1089,7 +946,7 @@
             // Handle payee type change - show/hide cash deposit option
             function toggleCashDepositOption() {
                 const payeeType = $('#payee_type').val();
-                const cashDepositOption = $('#cash_collateral_option');
+                const cashDepositOption = $('#cash_deposit_option');
                 const paymentMethod = $('#payment_method').val();
                 
                 if (payeeType === 'customer') {
@@ -1100,11 +957,11 @@
                     cashDepositOption.hide();
                     
                     // If cash deposit was selected, clear it and reset to default
-                    if (paymentMethod === 'cash_collateral') {
+                    if (paymentMethod === 'cash_deposit') {
                         $('#payment_method').val('bank_transfer').trigger('change');
                         // Hide cash deposit section
-                        $('#cash_collateral_section').hide();
-                        $('#cash_collateral_id').removeAttr('required').val('').removeClass('is-invalid');
+                        $('#cash_deposit_section').hide();
+                        $('#cash_deposit_id').removeAttr('required').val('').removeClass('is-invalid');
                     }
                 }
             }
@@ -1116,7 +973,7 @@
                 if ($('#payment_method').val() === 'cheque') {
                     updateChequePayeeName();
                 }
-                if ($('#payment_method').val() === 'cash_collateral' && $('#payee_type').val() === 'customer') {
+                if ($('#payment_method').val() === 'cash_deposit' && $('#payee_type').val() === 'customer') {
                     loadCashDeposits();
                 }
             });
@@ -1124,7 +981,7 @@
                 if ($('#payment_method').val() === 'cheque') {
                     updateChequePayeeName();
                 }
-                if ($('#payment_method').val() === 'cash_collateral' && $('#payee_type').val() === 'customer') {
+                if ($('#payment_method').val() === 'cash_deposit' && $('#payee_type').val() === 'customer') {
                     loadCashDeposits();
                 }
             });
@@ -1133,287 +990,22 @@
             // Check if payee type is already set (from old values)
             const initialPayeeType = $('#payee_type').val();
             if (initialPayeeType !== 'customer') {
-                $('#cash_collateral_option').hide();
+                $('#cash_deposit_option').hide();
             }
             toggleCashDepositOption();
             togglePaymentMethodSections();
             
-            // Load invoices if supplier is already selected (for edit form)
-            if ($('#payee_type').val() === 'supplier' && $('#supplier_id').val()) {
-                setTimeout(function() {
-                    loadSupplierInvoices($('#supplier_id').val());
-                }, 500);
-            }
-
-            // Load supplier invoices
-            function loadSupplierInvoices(supplierId) {
-                if (!supplierId) {
-                    $('#supplierInvoicesSection').hide();
-                    return;
-                }
-
-                $('#supplierInvoicesContainer').html(`
-                    <div class="text-center py-4">
-                        <i class="bx bx-loader-alt bx-spin fs-3 text-primary"></i>
-                        <p class="mt-2 text-muted">Loading invoices...</p>
-                    </div>
-                `);
-                $('#supplierInvoicesSection').show();
-
-                $.ajax({
-                    url: '{{ route("accounting.payment-vouchers.supplier-invoices", ":id") }}'.replace(':id', supplierId),
-                    method: 'GET',
-                    success: function(response) {
-                        if (response.data && response.data.length > 0) {
-                            let html = `
-                                <div class="table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th width="50">
-                                                    <input type="checkbox" id="selectAllInvoicesCheckbox">
-                                                </th>
-                                                <th>Invoice #</th>
-                                                <th>Date</th>
-                                                <th>Due Date</th>
-                                                <th>Total Amount</th>
-                                                <th>Paid</th>
-                                                <th>Outstanding</th>
-                                                <th>Amount to Pay</th>
-                                                <th width="100">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                            `;
-                            
-                            response.data.forEach(function(invoice) {
-                                // Check if this invoice is already added to line items
-                                const isAdded = addedInvoices[invoice.id] !== undefined;
-                                const addedAmount = isAdded ? addedInvoices[invoice.id].amount : null;
-                                const displayAmount = isAdded ? addedAmount : invoice.outstanding_amount;
-                                const rowClass = isAdded ? 'table-info' : '';
-                                
-                                html += `
-                                    <tr class="${rowClass}" data-invoice-row-id="${invoice.id}">
-                                        <td>
-                                            <input type="checkbox" class="invoice-checkbox" 
-                                                   data-invoice-id="${invoice.id}" 
-                                                   data-invoice-number="${invoice.invoice_number}"
-                                                   data-outstanding="${invoice.outstanding_amount}"
-                                                   ${isAdded ? 'checked' : ''}>
-                                        </td>
-                                        <td>${invoice.invoice_number}</td>
-                                        <td>${invoice.invoice_date}</td>
-                                        <td>${invoice.due_date || 'N/A'}</td>
-                                        <td>${parseFloat(invoice.total_amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${invoice.currency}</td>
-                                        <td>${parseFloat(invoice.total_paid).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${invoice.currency}</td>
-                                        <td class="fw-bold text-danger">${parseFloat(invoice.outstanding_amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${invoice.currency}</td>
-                                        <td>
-                                            <input type="number" 
-                                                   class="form-control form-control-sm invoice-amount" 
-                                                   data-invoice-id="${invoice.id}"
-                                                   data-max="${invoice.outstanding_amount}"
-                                                   value="${displayAmount}"
-                                                   step="0.01" 
-                                                   min="0" 
-                                                   max="${invoice.outstanding_amount}"
-                                                   style="width: 120px;">
-                                        </td>
-                                        <td>
-                                            ${isAdded ? '<span class="badge bg-success"><i class="bx bx-check me-1"></i>Added</span>' : '<span class="badge bg-secondary">Not Added</span>'}
-                                        </td>
-                                    </tr>
-                                `;
-                            });
-                            
-                            html += `
-                                        </tbody>
-                                    </table>
-                                </div>
-                            `;
-                            
-                            $('#supplierInvoicesContainer').html(html);
-                        } else {
-                            $('#supplierInvoicesContainer').html(`
-                                <div class="text-center py-4">
-                                    <i class="bx bx-info-circle fs-3 text-muted"></i>
-                                    <p class="mt-2 text-muted">No unpaid invoices found for this supplier.</p>
-                                </div>
-                            `);
-                        }
-                    },
-                    error: function(xhr) {
-                        console.error('Failed to load invoices:', xhr);
-                        $('#supplierInvoicesContainer').html(`
-                            <div class="alert alert-danger">
-                                <i class="bx bx-error-circle me-2"></i>Failed to load invoices. Please try again.
-                            </div>
-                        `);
-                    }
-                });
-            }
-            
-            // Function to refresh invoice display (update status and amounts)
-            function refreshInvoiceDisplay() {
-                // Update checkboxes and amounts for already added invoices
-                Object.keys(addedInvoices).forEach(function(invoiceId) {
-                    const invoiceData = addedInvoices[invoiceId];
-                    const checkbox = $(`.invoice-checkbox[data-invoice-id="${invoiceId}"]`);
-                    const amountInput = $(`.invoice-amount[data-invoice-id="${invoiceId}"]`);
-                    const row = $(`tr[data-invoice-row-id="${invoiceId}"]`);
-                    
-                    if (checkbox.length) {
-                        checkbox.prop('checked', true);
-                    }
-                    if (amountInput.length) {
-                        amountInput.val(invoiceData.amount);
-                    }
-                    if (row.length) {
-                        row.addClass('table-info');
-                        const statusCell = row.find('td:last');
-                        statusCell.html('<span class="badge bg-success"><i class="bx bx-check me-1"></i>Added</span>');
-                    }
-                });
-            }
-
-            // Select all invoices
-            $(document).on('change', '#selectAllInvoicesCheckbox', function() {
-                $('.invoice-checkbox').prop('checked', $(this).is(':checked'));
-            });
-
-            // Select all button
-            $('#selectAllInvoices').on('click', function() {
-                $('.invoice-checkbox, #selectAllInvoicesCheckbox').prop('checked', true);
-            });
-
-            // Deselect all button
-            $('#deselectAllInvoices').on('click', function() {
-                $('.invoice-checkbox, #selectAllInvoicesCheckbox').prop('checked', false);
-            });
-
-            // Validate invoice amount when changed
-            $(document).on('input', '.invoice-amount', function() {
-                const max = parseFloat($(this).data('max'));
-                const value = parseFloat($(this).val()) || 0;
-                
-                if (value > max) {
-                    $(this).val(max);
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Amount Exceeded',
-                        text: `Amount cannot exceed outstanding amount of ${max.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`,
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                }
-                if (value < 0) {
-                    $(this).val(0);
-                }
-            });
-
-            // Add selected invoices to line items
-            $('#addSelectedInvoices').on('click', function() {
-                const selectedInvoices = [];
-                $('.invoice-checkbox:checked').each(function() {
-                    const invoiceId = $(this).data('invoice-id');
-                    const invoiceNumber = $(this).data('invoice-number');
-                    const amountInput = $(`.invoice-amount[data-invoice-id="${invoiceId}"]`);
-                    const amount = parseFloat(amountInput.val()) || 0;
-                    
-                    if (amount > 0) {
-                        selectedInvoices.push({
-                            invoice_id: invoiceId,
-                            invoice_number: invoiceNumber,
-                            amount: amount,
-                            max_amount: parseFloat(amountInput.data('max'))
-                        });
-                    }
-                });
-
-                if (selectedInvoices.length === 0) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'No Invoices Selected',
-                        text: 'Please select at least one invoice with amount > 0',
-                        confirmButtonColor: '#dc3545'
-                    });
-                    return;
-                }
-
-                // Get Accounts Payable account ID (default from system settings)
-                const apAccountId = {{ \App\Models\SystemSetting::where('key', 'inventory_default_purchase_payable_account')->value('value') ?? 30 }};
-
-                let addedCount = 0;
-                let updatedCount = 0;
-
-                // Add or update each selected invoice as a line item
-                selectedInvoices.forEach(function(invoice) {
-                    if (addedInvoices[invoice.invoice_id]) {
-                        // Invoice already added - update the existing line item
-                        const existingRow = addedInvoices[invoice.invoice_id].rowElement;
-                        if (existingRow && existingRow.length) {
-                            // Update amount in the line item
-                            existingRow.find('.amount-input').val(invoice.amount);
-                            // Update description if needed
-                            existingRow.find('.description-input').val(`Payment for Invoice ${invoice.invoice_number}`);
-                            // Update tracking
-                            addedInvoices[invoice.invoice_id].amount = invoice.amount;
-                            updatedCount++;
-                        }
-                    } else {
-                        // New invoice - add as new line item
-                        const $newRow = addLineItem(true, invoice.invoice_id, invoice.invoice_number, invoice.amount, apAccountId);
-                        // Track the added invoice
-                        addedInvoices[invoice.invoice_id] = {
-                            invoice_number: invoice.invoice_number,
-                            amount: invoice.amount,
-                            rowElement: $newRow
-                        };
-                        addedCount++;
-                    }
-                });
-
-                // Refresh invoice display to show updated status
-                refreshInvoiceDisplay();
-
-                // Show success message
-                let message = '';
-                if (addedCount > 0 && updatedCount > 0) {
-                    message = `${addedCount} invoice(s) added and ${updatedCount} invoice(s) updated`;
-                } else if (addedCount > 0) {
-                    message = `${addedCount} invoice(s) added to line items`;
-                } else if (updatedCount > 0) {
-                    message = `${updatedCount} invoice(s) updated`;
-                }
-
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Invoices Processed',
-                    text: message,
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-            });
-
-            // Hide invoice section when payee type changes away from supplier
-            $('#payee_type').on('change', function() {
-                if ($(this).val() !== 'supplier') {
-                    $('#supplierInvoicesSection').hide();
-                }
-            });
-
-            // If payment method is cash_collateral and customer is selected, load and select cash deposit
+            // If payment method is cash_deposit and customer is selected, load and select cash deposit
             const initialPaymentMethod = $('#payment_method').val();
             const initialCustomerId = $('#customer_id').val();
-            const initialPayeeTypeForCashDeposit = $('#payee_type').val();
-            if (initialPaymentMethod === 'cash_collateral' && initialPayeeTypeForCashDeposit === 'customer' && initialCustomerId) {
+            if (initialPaymentMethod === 'cash_deposit' && initialPayeeType === 'customer' && initialCustomerId) {
                 // Wait a bit for the section to be shown, then load deposits
                 setTimeout(function() {
                     loadCashDeposits();
                     // Initialize Select2 for cash deposit select after loading
                     setTimeout(function() {
-                        if (!$('#cash_collateral_id').hasClass('select2-hidden-accessible')) {
-                            $('#cash_collateral_id').select2({
+                        if (!$('#cash_deposit_id').hasClass('select2-hidden-accessible')) {
+                            $('#cash_deposit_id').select2({
                                 placeholder: 'Select Customer Account',
                                 allowClear: true,
                                 width: '100%',
@@ -1432,9 +1024,9 @@
                 theme: 'bootstrap-5'
             });
 
-            // Initialize Select2 for existing chart account selects (if not already initialized)
-            $('.chart-account-select').select2({
-                placeholder: 'Select Account',
+            // Initialize Select2 for all select elements with select2-single class
+            $('.select2-single').select2({
+                placeholder: 'Select an option',
                 allowClear: true,
                 width: '100%',
                 theme: 'bootstrap-5'
@@ -1552,26 +1144,10 @@
                 addLineItem();
             });
 
-            // Remove line item - handles both invoice and non-invoice items
+            // Remove line item
             $(document).on('click', '.remove-line-btn', function () {
-                const $row = $(this).closest('.line-item-row');
-                const invoiceId = $row.find('input[name*="[invoice_id]"]').val();
-                
-                // Remove from tracking if it's an invoice item
-                if (invoiceId && addedInvoices[invoiceId]) {
-                    delete addedInvoices[invoiceId];
-                    // Refresh invoice display
-                    refreshInvoiceDisplay();
-                }
-                
-                // Remove the row
-                $row.remove();
-                
-                // Recalculate totals
+                $(this).closest('.line-item-row').remove();
                 calculateTotal();
-                if ($('#wht_enabled_switch').is(':checked')) {
-                    calculateWHT();
-                }
             });
 
             // Calculate total when amounts change
@@ -1595,53 +1171,39 @@
                 this.submit();
             });
 
-            function addLineItem(isInvoiceItem = false, invoiceId = null, invoiceNumber = null, amount = 0, chartAccountId = null, accountName = '', description = '') {
+            function addLineItem(accountName = '', amount = '', description = '') {
                 lineItemCount++;
-                const accountFieldHtml = isInvoiceItem ? `
-                                                    <input type="hidden" name="line_items[${lineItemCount}][chart_account_id]" value="${chartAccountId || ''}">
-                                                    <input type="hidden" name="line_items[${lineItemCount}][invoice_id]" value="${invoiceId || ''}">
-                                                    <input type="hidden" name="line_items[${lineItemCount}][invoice_number]" value="${invoiceNumber || ''}">
-                                                ` : `
-                                                    <div class="col-md-5 mb-2 account-field">
-                                                        <label for="line_items_${lineItemCount}_chart_account_id" class="form-label fw-bold">
-                                                            Account <span class="text-danger">*</span>
-                                                        </label>
-                                                        <select class="form-select chart-account-select select2-single" name="line_items[${lineItemCount}][chart_account_id]" required>
-                                                            <option value="">--- Select Account ---</option>
-                                                            @foreach($chartAccounts as $chartAccount)
-                                                                <option value="{{ $chartAccount->id }}" ${accountName.includes('{{ $chartAccount->account_name }}') ? 'selected' : ''}>
-                                                                    {{ $chartAccount->account_name }} ({{ $chartAccount->account_code }})
-                                                                </option>
-                                                            @endforeach
-                                                        </select>
-                                                    </div>
-                                                `;
-                
-                const descriptionValue = isInvoiceItem ? `Payment for Invoice ${invoiceNumber}` : description;
-                const descriptionReadonly = isInvoiceItem ? 'readonly' : '';
-                const descriptionColClass = isInvoiceItem ? 'col-md-7' : 'col-md-4';
-                
                 const lineItemHtml = `
-                                    <div class="line-item-row" ${isInvoiceItem ? `data-invoice-item="true" data-invoice-id="${invoiceId}"` : ''}>
+                                    <div class="line-item-row">
                                         <div class="row">
-                                            ${accountFieldHtml}
-                                            <div class="${descriptionColClass} mb-2">
+                                            <div class="col-md-5 mb-2">
+                                                <label for="line_items_${lineItemCount}_chart_account_id" class="form-label fw-bold">
+                                                    Account <span class="text-danger">*</span>
+                                                </label>
+                                                <select class="form-select chart-account-select select2-single" name="line_items[${lineItemCount}][chart_account_id]" required>
+                                                    <option value="">--- Select Account ---</option>
+                                                    @foreach($chartAccounts as $chartAccount)
+                                                        <option value="{{ $chartAccount->id }}" ${accountName.includes('{{ $chartAccount->account_name }}') ? 'selected' : ''}>
+                                                            {{ $chartAccount->account_name }} ({{ $chartAccount->account_code }})
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4 mb-2">
                                                 <label for="line_items_${lineItemCount}_description" class="form-label fw-bold">
                                                     Description
                                                 </label>
-                                                <input type="text" class="form-control description-input"
-                                                       name="line_items[${lineItemCount}][description]"
-                                                       placeholder="Enter description"
-                                                       value="${descriptionValue}"
-                                                       ${descriptionReadonly}>
+                                                <input type="text" class="form-control description-input" 
+                                                       name="line_items[${lineItemCount}][description]" 
+                                                       placeholder="Enter description" value="${description}">
                                             </div>
                                             <div class="col-md-2 mb-2">
                                                 <label for="line_items_${lineItemCount}_amount" class="form-label fw-bold">
                                                     Amount <span class="text-danger">*</span>
                                                 </label>
-                                                <input type="number" class="form-control amount-input"
-                                                       name="line_items[${lineItemCount}][amount]"
-                                                       step="0.01" min="0" placeholder="0.00" value="${amount || ''}" required>
+                                                <input type="number" class="form-control amount-input" 
+                                                       name="line_items[${lineItemCount}][amount]" 
+                                                       step="0.01" min="0" placeholder="0.00" value="${amount}" required>
                                             </div>
                                             <div class="col-md-1 mb-2 d-flex align-items-end">
                                                 <button type="button" class="btn btn-outline-danger btn-sm remove-line-btn" title="Remove Line">
@@ -1652,28 +1214,17 @@
                                     </div>
                                 `;
 
-                const $newRow = $(lineItemHtml);
-                $('#lineItemsContainer').append($newRow);
+                $('#lineItemsContainer').append(lineItemHtml);
                 
-                // Initialize Select2 for the new chart account select (only for non-invoice items)
-                if (!isInvoiceItem) {
-                    setTimeout(function() {
-                        $('#lineItemsContainer .chart-account-select').last().select2({
-                            placeholder: 'Select Account',
-                            allowClear: true,
-                            width: '100%',
-                            theme: 'bootstrap-5'
-                        });
-                    }, 100);
-                }
-                
-                // Recalculate total
-                calculateTotal();
-                
-                // Return the row element for tracking (if invoice item)
-                if (isInvoiceItem) {
-                    return $newRow;
-                }
+                // Initialize Select2 for the new chart account select
+                setTimeout(function() {
+                    $('#lineItemsContainer .chart-account-select').last().select2({
+                        placeholder: 'Select Account',
+                        allowClear: true,
+                        width: '100%',
+                        theme: 'bootstrap-5'
+                    });
+                }, 100);
             }
 
             function calculateTotal() {
@@ -1754,34 +1305,13 @@
                 }
 
                 // Check if at least one line item has both account and amount
-                // Handle both regular items (with .chart-account-select) and invoice items (with hidden inputs)
-                // Also ignore empty line items (no amount or no account)
                 let hasValidLineItem = false;
                 $('.line-item-row').each(function () {
-                    const $row = $(this);
-                    const amount = parseFloat($row.find('.amount-input').val()) || 0;
-                    
-                    // Skip if amount is 0 or empty
-                    if (amount <= 0) {
-                        return;
-                    }
-                    
-                    // Check if it's an invoice item (has hidden invoice_id)
-                    const invoiceId = $row.find('input[name*="[invoice_id]"]').val();
-                    if (invoiceId) {
-                        // Invoice item - check if it has hidden chart_account_id
-                        const accountId = $row.find('input[name*="[chart_account_id]"]').val();
-                        if (accountId && accountId !== '') {
-                            hasValidLineItem = true;
-                            return false; // Break out of each loop
-                        }
-                    } else {
-                        // Regular item - check if account is selected
-                        const account = $row.find('.chart-account-select').val();
-                        if (account && account !== '') {
-                            hasValidLineItem = true;
-                            return false; // Break out of each loop
-                        }
+                    const account = $(this).find('.chart-account-select').val();
+                    const amount = parseFloat($(this).find('.amount-input').val()) || 0;
+
+                    if (account && amount > 0) {
+                        hasValidLineItem = true;
                     }
                 });
 
@@ -1789,7 +1319,7 @@
                     Swal.fire({
                         icon: 'error',
                         title: 'Validation Error',
-                        text: 'Please add at least one line item with account and amount greater than 0.',
+                        text: 'Please add at least one line item with account and amount.',
                         confirmButtonColor: '#dc3545'
                     });
                     isValid = false;

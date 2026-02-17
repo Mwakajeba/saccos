@@ -174,15 +174,32 @@ class AccountTransferController extends Controller
 
     /**
      * Show the form for creating a new transfer
+     * From Account: bank accounts for the user's assigned branch only.
+     * To Account: all bank accounts for the company.
      */
     public function create()
     {
         $user = Auth::user();
         $companyId = $user->company_id;
-        
-        $bankAccounts = BankAccount::whereHas('chartAccount.accountClassGroup', function($q) use ($companyId) {
+        $branchId = session('branch_id') ?? ($user->branch_id ?? null);
+
+        $companyBankQuery = BankAccount::whereHas('chartAccount.accountClassGroup', function ($q) use ($companyId) {
             $q->where('company_id', $companyId);
-        })->orderBy('name')->get();
+        });
+
+        // From Account: only accounts for the assigned branch (or all-branches accounts)
+        $bankAccountsFrom = (clone $companyBankQuery)
+            ->where(function ($q) use ($branchId) {
+                $q->where('is_all_branches', true);
+                if ($branchId) {
+                    $q->orWhere('branch_id', $branchId);
+                }
+            })
+            ->orderBy('name')
+            ->get();
+
+        // To Account: all bank accounts for the company
+        $bankAccountsTo = (clone $companyBankQuery)->orderBy('name')->get();
         
         $cashAccounts = CashCollateral::whereHas('customer', function($q) use ($companyId) {
             $q->where('company_id', $companyId);
@@ -204,7 +221,7 @@ class AccountTransferController extends Controller
             ->orderBy('chart_accounts.account_code')
             ->get();
         
-        return view('accounting.account-transfers.create', compact('bankAccounts', 'cashAccounts', 'pettyCashUnits', 'chargesAccounts'));
+        return view('accounting.account-transfers.create', compact('bankAccountsFrom', 'bankAccountsTo', 'cashAccounts', 'pettyCashUnits', 'chargesAccounts'));
     }
 
     /**
@@ -350,11 +367,35 @@ class AccountTransferController extends Controller
         
         $user = Auth::user();
         $companyId = $user->company_id;
-        
-        $bankAccounts = BankAccount::whereHas('chartAccount.accountClassGroup', function($q) use ($companyId) {
+        $branchId = session('branch_id') ?? ($user->branch_id ?? null);
+
+        $companyBankQuery = BankAccount::whereHas('chartAccount.accountClassGroup', function ($q) use ($companyId) {
             $q->where('company_id', $companyId);
-        })->orderBy('name')->get();
-        
+        });
+
+        $bankAccountsFrom = (clone $companyBankQuery)
+            ->where(function ($q) use ($branchId) {
+                $q->where('is_all_branches', true);
+                if ($branchId) {
+                    $q->orWhere('branch_id', $branchId);
+                }
+            })
+            ->orderBy('name')
+            ->get();
+
+        // When editing, include current from account if not in branch list (so existing selection displays)
+        if ($transfer->from_account_type === 'bank') {
+            $fromId = $transfer->from_account_id;
+            if ($bankAccountsFrom->where('id', $fromId)->isEmpty()) {
+                $currentFrom = BankAccount::find($fromId);
+                if ($currentFrom) {
+                    $bankAccountsFrom = $bankAccountsFrom->push($currentFrom)->sortBy('name')->values();
+                }
+            }
+        }
+
+        $bankAccountsTo = (clone $companyBankQuery)->orderBy('name')->get();
+
         // Get expense accounts for charges
         $chargesAccounts = \App\Models\ChartAccount::join('account_class_groups', 'chart_accounts.account_class_group_id', '=', 'account_class_groups.id')
             ->join('account_class', 'account_class_groups.class_id', '=', 'account_class.id')
@@ -363,8 +404,8 @@ class AccountTransferController extends Controller
             ->select('chart_accounts.id', 'chart_accounts.account_name', 'chart_accounts.account_code')
             ->orderBy('chart_accounts.account_code')
             ->get();
-        
-        return view('accounting.account-transfers.edit', compact('transfer', 'bankAccounts', 'chargesAccounts'));
+
+        return view('accounting.account-transfers.edit', compact('transfer', 'bankAccountsFrom', 'bankAccountsTo', 'chargesAccounts'));
     }
 
     /**

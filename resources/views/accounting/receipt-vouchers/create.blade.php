@@ -800,31 +800,26 @@
                 });
             }
 
-            // Handle payment method change
+            // Handle payment method change: show Bank Account only for bank transfer
             $('#payment_method').on('change', function() {
                 const paymentMethod = $(this).val();
                 
-                // Hide all sections
+                // Hide all sections first
                 $('#bank_account_section, #cheque_section').hide();
                 $('#bank_account_id, #cheque_number, #cheque_date').removeAttr('required');
                 
-                if (paymentMethod === 'bank_transfer' || paymentMethod === 'cheque') {
+                if (paymentMethod === 'bank_transfer') {
                     $('#bank_account_section').show();
                     $('#bank_account_id').attr('required', 'required');
-                    
-                    if (paymentMethod === 'cheque') {
-                        $('#cheque_section').show();
-                        $('#cheque_number').attr('required', 'required');
-                        $('#cheque_date').attr('required', 'required');
-                        // Set default cheque date if empty
-                        if (!$('#cheque_date').val()) {
-                            $('#cheque_date').val('{{ date('Y-m-d') }}');
-                        }
+                } else if (paymentMethod === 'cheque') {
+                    $('#cheque_section').show();
+                    $('#cheque_number').attr('required', 'required');
+                    $('#cheque_date').attr('required', 'required');
+                    if (!$('#cheque_date').val()) {
+                        $('#cheque_date').val('{{ date('Y-m-d') }}');
                     }
-                } else if (paymentMethod === 'cash') {
-                    // For cash, bank account is optional
-                    $('#bank_account_section').show();
                 }
+                // For cash or any other method: bank account section stays hidden
             });
             
             // Trigger change on page load if value exists
@@ -1293,9 +1288,25 @@
                 calculateWHT();
             });
 
+            // WHT Switch Toggle: show/hide WHT and VAT section when Enable WHT is checked
+            $('#wht_enabled_switch').on('change', function() {
+                const isEnabled = $(this).is(':checked');
+                if (isEnabled) {
+                    $('#wht_fields_container').slideDown(300);
+                    calculateWHT();
+                } else {
+                    $('#wht_fields_container').slideUp(300);
+                    $('#wht_treatment').val('NONE');
+                    $('#wht_rate').val('0');
+                    calculateWHT();
+                }
+            });
+
             // Calculate WHT when treatment or rate changes
             $('#wht_treatment, #wht_rate, #vat_mode, #vat_rate').on('change input', function() {
-                calculateWHT();
+                if ($('#wht_enabled_switch').is(':checked')) {
+                    calculateWHT();
+                }
             });
 
             function calculateWHT() {

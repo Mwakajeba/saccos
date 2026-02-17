@@ -1,176 +1,376 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
     <title>Budget Export - {{ $budget->name }}</title>
     <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            color: #333;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            color: #000;
         }
-        .header {
+
+        .container {
+            width: 100%;
+        }
+
+        .text-center {
             text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 20px;
         }
-        .header h1 {
-            color: #007bff;
-            margin: 0;
-            font-size: 24px;
+
+        .text-right {
+            text-align: right;
         }
-        .budget-info {
-            margin-bottom: 30px;
+
+        hr {
+            border: none;
+            border-top: 2px solid #3b82f6;
+            margin: 8px 0;
         }
-        .budget-info h2 {
-            color: #007bff;
+
+        /* Header */
+        .logo-section {
+            margin-bottom: 10px;
+        }
+
+        .company-logo {
+            max-height: 80px;
+            max-width: 120px;
+            object-fit: contain;
+        }
+
+        .company-name {
             font-size: 18px;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
-        }
-        .info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .info-item {
-            display: flex;
-            margin-bottom: 8px;
-        }
-        .info-label {
             font-weight: bold;
-            min-width: 120px;
-            color: #555;
+            color: #1e40af;
         }
-        .info-value {
-            color: #333;
+
+        .company-details {
+            font-size: 10px;
         }
-        .budget-lines {
-            margin-top: 30px;
-        }
-        .budget-lines h2 {
-            color: #007bff;
+
+        /* Document title */
+        .invoice-title {
+            font-weight: bold;
+            text-align: center;
             font-size: 18px;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
+            margin: 10px 0;
+            color: #1e40af;
         }
-        table {
+
+        /* Info section */
+        .info-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .bill-to {
+            width: 48%;
+            font-size: 10px;
+        }
+
+        .bill-to strong {
+            color: #1e40af;
+        }
+
+        .invoice-box {
+            width: 48%;
+            text-align: right;
+        }
+
+        .invoice-box table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            font-size: 10px;
+            margin-left: auto;
         }
-        th {
-            background-color: #f8f9fa;
-            border: 1px solid #ddd;
-            padding: 12px 8px;
-            text-align: left;
+
+        .invoice-box td {
+            border: 1px solid #cbd5e1;
+            padding: 4px;
+        }
+
+        .invoice-box td:nth-child(odd) {
             font-weight: bold;
-            color: #495057;
+            color: #1e40af;
         }
-        td {
-            border: 1px solid #ddd;
-            padding: 10px 8px;
-            text-align: left;
-        }
-        .total-row {
-            background-color: #e9ecef;
-            font-weight: bold;
-        }
-        .amount {
+
+        .invoice-box td:nth-child(even) {
             text-align: right;
-            font-family: 'Courier New', monospace;
         }
-        .footer {
-            margin-top: 40px;
+
+        .invoice-box strong {
+            color: #1e40af;
+        }
+
+        /* Budget lines table */
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-top: 10px;
+        }
+
+        .items-table th,
+        .items-table td {
+            border: 1px solid #cbd5e1;
+            padding: 5px;
+        }
+
+        .items-table th {
             text-align: center;
-            font-size: 12px;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
+            font-weight: bold;
+            background-color: #1e3a8a;
+            color: #fff;
         }
-        .category-revenue { color: #28a745; }
-        .category-expense { color: #dc3545; }
-        .category-capital { color: #ffc107; }
+
+        .items-table tbody tr:nth-child(even) {
+            background-color: #dbeafe;
+        }
+
+        .items-table tbody tr:nth-child(odd) {
+            background-color: #fff;
+        }
+
+        .items-table .text-right {
+            text-align: right;
+        }
+
+        .items-table .text-center {
+            text-align: center;
+        }
+
+        .category-revenue { color: #15803d; font-weight: 500; }
+        .category-expense { color: #b91c1c; font-weight: 500; }
+        .category-capital { color: #a16207; font-weight: 500; }
+
+        /* Totals */
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-top: 10px;
+        }
+
+        .totals-table td {
+            padding: 4px 5px;
+            border: none;
+        }
+
+        .totals-table td:last-child {
+            text-align: right;
+            padding-right: 5px;
+        }
+
+        .totals-table tr:last-child td {
+            background-color: #1e3a8a;
+            color: #fff;
+            font-weight: bold;
+            padding: 8px 5px;
+        }
+
+        .totals-table tr:last-child td:last-child {
+            background-color: #dbeafe;
+            color: #1e40af;
+            padding: 8px;
+            border-radius: 3px;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 20px;
+            font-size: 10px;
+        }
+
+        .footer strong {
+            color: #1e40af;
+        }
+
+        .signature {
+            margin-top: 20px;
+        }
+
+        .footer hr {
+            border-top: 1px solid #dbeafe;
+            margin: 15px 0;
+        }
+
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .signature-box {
+            text-align: center;
+            width: 30%;
+        }
+
+        .signature-line {
+            border-top: 1px solid #333;
+            margin-top: 40px;
+            padding-top: 2px;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>BUDGET EXPORT</h1>
-        <p>Generated on {{ now()->format('d M Y, H:i') }}</p>
-    </div>
+    <div class="container">
 
-    <div class="budget-info">
-        <h2>Budget Information</h2>
-        <div class="info-grid">
-            <div class="info-item">
-                <span class="info-label">Budget Name:</span>
-                <span class="info-value">{{ $budget->name }}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Year:</span>
-                <span class="info-value">{{ $budget->year }}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Description:</span>
-                <span class="info-value">{{ $budget->description ?? 'N/A' }}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Created By:</span>
-                <span class="info-value">{{ $budget->user->name ?? 'N/A' }}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Branch:</span>
-                <span class="info-value">{{ $budget->branch->name ?? 'N/A' }}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Created Date:</span>
-                <span class="info-value">{{ $budget->created_at->format('d M Y, H:i') }}</span>
+        {{-- Header: Logo + Company --}}
+        <div class="text-left">
+            @php
+                $company = $budget->company ?? ($budget->branch->company ?? null);
+            @endphp
+            @if($company && $company->logo)
+                @php
+                    $logo = $company->logo;
+                    $logoPath = public_path('storage/' . ltrim($logo, '/'));
+                    $logoBase64 = null;
+                    if (file_exists($logoPath)) {
+                        $imageData = file_get_contents($logoPath);
+                        $imageInfo = @getimagesize($logoPath);
+                        if ($imageInfo !== false) {
+                            $mimeType = $imageInfo['mime'];
+                            $logoBase64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                        }
+                    }
+                @endphp
+                @if($logoBase64 ?? null)
+                    <div class="logo-section" style="float: left; width: 45%;">
+                        <img src="{{ $logoBase64 }}" alt="{{ ($company->name ?? '') . ' logo' }}" class="company-logo">
+                    </div>
+                @endif
+            @endif
+            <div style="float: right; width: 50%; text-align: left; margin-left: 15%;">
+                <div class="company-name">{{ $company->name ?? 'SmartFinance' }}</div>
+                <div class="company-details">
+                    @if($company && $company->address)
+                        P.O Box: {{ $company->address }} <br>
+                    @endif
+                    @if($company && $company->phone)
+                        Phone: {{ $company->phone }} <br>
+                    @endif
+                    @if($company && $company->email)
+                        Email: {{ $company->email }}
+                    @endif
+                </div>
             </div>
         </div>
-    </div>
+        <div style="clear: both;"></div>
 
-    <div class="budget-lines">
-        <h2>Budget Lines</h2>
-        <table>
+        <div class="invoice-title">BUDGET EXPORT</div>
+        <hr>
+
+        {{-- Budget info: left block + right table --}}
+        <div class="info-section">
+            <div class="bill-to" style="float: left; width: 48%;">
+                <strong>Budget details</strong><br><br>
+                <strong>{{ $budget->name }}</strong><br>
+                @if($budget->description)
+                    {{ Str::limit($budget->description, 120) }}<br>
+                @endif
+                <br>
+                <strong>Created by:</strong><br>
+                {{ $budget->user->name ?? 'N/A' }}
+            </div>
+
+            <div class="invoice-box" style="text-align: right; float: left; width: 48%;">
+                <table style="margin-top: 8px;">
+                    <tr>
+                        <td><strong>Year:</strong></td>
+                        <td>{{ $budget->year }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Branch:</strong></td>
+                        <td>{{ $budget->branch->name ?? 'All Branches' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Created date:</strong></td>
+                        <td>{{ $budget->created_at->format('d F Y') }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Generated:</strong></td>
+                        <td>{{ now()->format('d F Y, H:i') }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Status:</strong></td>
+                        <td>{{ ucfirst(str_replace('_', ' ', $budget->status ?? 'draft')) }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div style="clear: both; margin-bottom: 10px;"></div>
+
+        {{-- Budget lines --}}
+        @php $totalAmount = 0; @endphp
+        <table class="items-table">
             <thead>
                 <tr>
+                    <th>#</th>
                     <th>Account Code</th>
                     <th>Account Name</th>
-                    <th>Amount (TZS)</th>
-                    <th>Category</th>
+                    <th class="text-right">Amount (TZS)</th>
+                    <th class="text-center">Category</th>
                 </tr>
             </thead>
             <tbody>
-                @php $totalAmount = 0; @endphp
-                @foreach($budget->budgetLines as $line)
+                @foreach($budget->budgetLines as $index => $line)
                     @php $totalAmount += $line->amount; @endphp
                     <tr>
-                        <td>{{ $line->account->account_code }}</td>
-                        <td>{{ $line->account->account_name }}</td>
-                        <td class="amount">{{ number_format($line->amount, 2) }}</td>
-                        <td class="category-{{ strtolower(str_replace(' ', '-', $line->category)) }}">
-                            {{ $line->category }}
+                        <td class="text-center">{{ $index + 1 }}</td>
+                        <td>{{ $line->account->account_code ?? 'N/A' }}</td>
+                        <td>{{ $line->account->account_name ?? 'N/A' }}</td>
+                        <td class="text-right">{{ number_format($line->amount, 2) }}</td>
+                        <td class="text-center category-{{ strtolower(str_replace(' ', '-', $line->category ?? '')) }}">
+                            {{ $line->category ?? '-' }}
                         </td>
                     </tr>
                 @endforeach
-                <tr class="total-row">
-                    <td colspan="2"><strong>TOTAL</strong></td>
-                    <td class="amount"><strong>{{ number_format($totalAmount, 2) }}</strong></td>
-                    <td></td>
-                </tr>
             </tbody>
         </table>
-    </div>
 
-    <div class="footer">
-        <p>This report was generated on {{ now()->format('d/m/Y H:i:s') }} by {{ $budget->company->name ?? 'System' }}</p>
-        <p>Budget Period: {{ $budget->year }}</p>
+        {{-- Total --}}
+        <table class="totals-table">
+            <tr>
+                <td colspan="3" style="text-align: right;"><strong>TOTAL BUDGET (TZS):</strong></td>
+                <td><strong>{{ number_format($totalAmount, 2) }}</strong></td>
+            </tr>
+        </table>
+
+        {{-- Footer --}}
+        <hr>
+        <div class="footer">
+            <div style="margin-bottom: 10px;">This budget export was generated on {{ now()->format('d/m/Y H:i') }}. Budget period: {{ $budget->year }}.</div>
+
+            <div class="signature-section">
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Prepared by</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">{{ $budget->user->name ?? 'N/A' }}</div>
+                </div>
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Approved by</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px; color: #666;">{{ $budget->approved_at ? (optional($budget->approvedBy)->name ?? 'N/A') : '—' }}</div>
+                </div>
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Authorised by</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px; color: #666;">—</div>
+                </div>
+            </div>
+
+            <div class="text-center" style="font-size: 9px; margin-top: 20px;">
+                Budget: {{ $budget->name }} ({{ $budget->year }}) · {{ $company->name ?? 'SmartFinance' }}<br>
+                Page 1 of 1
+            </div>
+        </div>
     </div>
 </body>
-</html> 
+</html>

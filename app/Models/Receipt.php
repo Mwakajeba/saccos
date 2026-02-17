@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Helpers\AmountInWords;
+use App\Helpers\HashIdHelper;
 use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -229,7 +230,45 @@ class Receipt extends Model
     }
 
     /**
-     * Get the encoded ID attribute.
+     * Get the route key for the model (same as Payment Voucher).
+     */
+    public function getRouteKeyName()
+    {
+        return 'hash_id';
+    }
+
+    /**
+     * Get the hash ID for routing and export links (same as Payment Voucher).
+     */
+    public function getHashIdAttribute()
+    {
+        return HashIdHelper::encode($this->id);
+    }
+
+    /**
+     * Get the route key value.
+     */
+    public function getRouteKey()
+    {
+        return HashIdHelper::encode($this->id);
+    }
+
+    /**
+     * Resolve the model instance for the given hash ID.
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field === 'hash_id' || $field === null) {
+            $id = HashIdHelper::decode($value);
+            if ($id !== null) {
+                return $this->findOrFail($id);
+            }
+        }
+        return $this->findOrFail($value);
+    }
+
+    /**
+     * Get the encoded ID attribute (Vinkla Hashids - legacy).
      */
     public function getEncodedIdAttribute(): string
     {
@@ -312,12 +351,21 @@ class Receipt extends Model
         $branchId = $this->branch_id;
         $userId = $this->user_id;
 
-        // Get WHT Receivable account from system settings
-        $whtReceivableAccountId = (int) (\App\Models\SystemSetting::where('key', 'inventory_default_withholding_tax_account')->value('value') ?? 37);
-        if (!$whtReceivableAccountId) {
-            // Fallback: try to find WHT Receivable account by name
+        // Get WHT Receivable account: setting first, then fallback by name (receipts use WHT Receivable = asset)
+        $whtReceivableAccountId = (int) (\App\Models\SystemSetting::getValue('inventory_default_withholding_tax_account', 37));
+        if ($whtReceivableAccountId <= 0) {
+            $whtReceivableAccountId = 0;
+        }
+        // Verify account exists; if not, find by name
+        if ($whtReceivableAccountId > 0 && !\App\Models\ChartAccount::where('id', $whtReceivableAccountId)->exists()) {
+            $whtReceivableAccountId = 0;
+        }
+        if ($whtReceivableAccountId <= 0) {
             $whtAccount = \App\Models\ChartAccount::where('account_name', 'like', '%WHT%Receivable%')
                 ->orWhere('account_name', 'like', '%Withholding%Tax%Receivable%')
+                ->orWhere('account_name', 'like', '%Withholding%Receivable%')
+                ->orWhere('account_name', 'like', '%WHT%Payable%')
+                ->orWhere('account_name', 'like', '%Withholding%Tax%Payable%')
                 ->first();
             $whtReceivableAccountId = $whtAccount ? $whtAccount->id : 0;
         }
@@ -337,8 +385,14 @@ class Receipt extends Model
         $receiptVatAmount = $this->vat_amount ?? 0;
         $receiptBaseAmount = $this->base_amount ?? $this->amount;
 
-        // Calculate totals for WHT
-        $totalWHT = $this->wht_amount ?? 0;
+        // Calculate totals for WHT (use receipt-level, or sum from items if receipt-level is zero)
+        $totalWHT = round((float) ($this->wht_amount ?? 0), 2);
+        if ($totalWHT <= 0) {
+            foreach ($this->receiptItems as $item) {
+                $totalWHT += round((float) ($item->wht_amount ?? 0), 2);
+            }
+        }
+        $totalWHT = round($totalWHT, 2);
         $totalNetReceivable = $this->net_receivable ?? $this->amount;
 
         // Calculate total VAT amount and total base (prioritize receipt-level, then sum from items)

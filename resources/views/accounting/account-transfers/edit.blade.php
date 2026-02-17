@@ -163,8 +163,8 @@
                                                     id="from_account_id" 
                                                     name="from_account_id" 
                                                     required>
-                                                <option value="">Select Bank Account</option>
-                                                @foreach($bankAccounts as $account)
+                                                <option value="">Select Bank Account (your branch)</option>
+                                                @foreach($bankAccountsFrom as $account)
                                                     <option value="{{ $account->id }}" {{ old('from_account_id', $transfer->from_account_id) == $account->id ? 'selected' : '' }}>
                                                         {{ $account->name }}
                                                     </option>
@@ -197,8 +197,8 @@
                                                     id="to_account_id" 
                                                     name="to_account_id" 
                                                     required>
-                                                <option value="">Select Bank Account</option>
-                                                @foreach($bankAccounts as $account)
+                                                <option value="">Select Bank Account (all banks)</option>
+                                                @foreach($bankAccountsTo as $account)
                                                     <option value="{{ $account->id }}" {{ old('to_account_id', $transfer->to_account_id) == $account->id ? 'selected' : '' }}>
                                                         {{ $account->name }}
                                                     </option>

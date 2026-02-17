@@ -277,7 +277,7 @@ class PaymentVoucherController extends Controller
     {
         $user = Auth::user();
 
-        $payments = Payment::with(['bankAccount', 'customer', 'supplier', 'user', 'approvals', 'branch'])
+        $payments = Payment::with(['bankAccount', 'customer', 'supplier', 'user', 'approvals', 'branch', 'paymentItems'])
             ->where(function ($query) use ($user) {
                 // Include payments with bank accounts (existing filter)
                 $query->whereHas('bankAccount.chartAccount.accountClassGroup', function ($q) use ($user) {
@@ -303,6 +303,13 @@ class PaymentVoucherController extends Controller
                     return $payment->date ? $payment->date->format('M d, Y') : 'N/A';
                 })
                 ->addColumn('reference_link', function ($payment) {
+                    // Use hotel expense routes for hotel expenses
+                    if ($payment->payee_type === 'hotel' && $payment->reference_type === 'hotel_expense') {
+                        return '<a href="' . route('hotel.expenses.show', $payment->hash_id) . '" 
+                                    class="text-primary fw-bold">
+                                    ' . e($payment->reference_number ?? $payment->reference) . '
+                                </a>';
+                    }
                     return '<a href="' . route('accounting.payment-vouchers.show', $payment->hash_id) . '" 
                                 class="text-primary fw-bold">
                                 ' . e($payment->reference) . '
@@ -315,7 +322,21 @@ class PaymentVoucherController extends Controller
                     return optional($payment->bankAccount)->name ?? 'N/A';
                 })
                 ->addColumn('payee_info', function ($payment) {
-                    if ($payment->payee_type == 'customer' && $payment->customer) {
+                    if ($payment->payee_type == 'hotel' && $payment->reference_type == 'hotel_expense') {
+                        // Extract property/room info from payment items description
+                        $scope = 'General';
+                        if ($payment->paymentItems && $payment->paymentItems->count() > 0) {
+                            $firstItem = $payment->paymentItems->first();
+                            if ($firstItem && $firstItem->description) {
+                                if (preg_match('/\(Property:\s*([^)]+)\)/', $firstItem->description, $matches)) {
+                                    $scope = 'Property: ' . $matches[1];
+                                } elseif (preg_match('/\(Room:\s*([^)]+)\)/', $firstItem->description, $matches)) {
+                                    $scope = 'Room: ' . $matches[1];
+                                }
+                            }
+                        }
+                        return '<span class="badge bg-warning me-1">Hotel</span>' . e($scope);
+                    } elseif ($payment->payee_type == 'customer' && $payment->customer) {
                         return '<span class="badge bg-primary me-1">Customer</span>' . e($payment->customer->name ?? 'N/A');
                     } elseif ($payment->payee_type == 'supplier' && $payment->supplier) {
                         return '<span class="badge bg-success me-1">Supplier</span>' . e($payment->supplier->name ?? 'N/A');
@@ -348,46 +369,81 @@ class PaymentVoucherController extends Controller
                 ->addColumn('actions', function ($payment) {
                     $actions = '';
                     
+                    // Check if this is a hotel expense
+                    $isHotelExpense = $payment->payee_type === 'hotel' && $payment->reference_type === 'hotel_expense';
+                    
                     // View action
-                    if (auth()->user()->can('view payment voucher details')) {
-                        $actions .= '<a href="' . route('accounting.payment-vouchers.show', $payment->hash_id) . '" 
+                    if ($isHotelExpense) {
+                        $actions .= '<a href="' . route('hotel.expenses.show', $payment->hash_id) . '" 
                                         class="btn btn-sm btn-outline-success me-1" 
                                         data-bs-toggle="tooltip" 
                                         data-bs-placement="top" 
-                                        title="View payment voucher">
+                                        title="View expense">
                                         <i class="bx bx-show"></i>
                                     </a>';
-                    }
-                    
-                    if ($payment->reference_type === 'manual') {
-                        // Always allow edit/delete for manual vouchers if user has permission
-                        if (auth()->user()->can('edit payment voucher')) {
-                            $actions .= '<a href="' . route('accounting.payment-vouchers.edit', $payment->hash_id) . '" 
+                        
+                        // Edit/Delete for hotel expenses (if not approved)
+                        if (!$payment->approved) {
+                            $actions .= '<a href="' . route('hotel.expenses.edit', $payment->hash_id) . '" 
                                             class="btn btn-sm btn-outline-info me-1" 
                                             data-bs-toggle="tooltip" 
                                             data-bs-placement="top" 
-                                            title="Edit payment voucher">
+                                            title="Edit expense">
                                             <i class="bx bx-edit"></i>
                                         </a>';
-                        }
-                        if (auth()->user()->can('delete payment voucher')) {
+                            
                             $actions .= '<button type="button" 
-                                            class="btn btn-sm btn-outline-danger delete-payment-btn"
+                                            class="btn btn-sm btn-outline-danger delete-hotel-expense-btn"
                                             data-bs-toggle="tooltip" 
                                             data-bs-placement="top" 
-                                            title="Delete payment voucher"
-                                            data-payment-id="' . $payment->hash_id . '"
-                                            data-payment-reference="' . e($payment->reference) . '">
+                                            title="Delete expense"
+                                            data-expense-id="' . $payment->hash_id . '"
+                                            data-expense-reference="' . e($payment->reference_number ?? $payment->reference) . '">
                                             <i class="bx bx-trash"></i>
                                         </button>';
                         }
                     } else {
-                        $actions .= '<button type="button" 
-                                        class="btn btn-sm btn-outline-secondary" 
-                                        title="Edit/Delete locked: Source is ' . ucfirst($payment->reference_type) . ' transaction" 
-                                        disabled>
-                                        <i class="bx bx-lock"></i>
-                                    </button>';
+                        // Regular payment voucher actions
+                        if (auth()->user()->can('view payment voucher details')) {
+                            $actions .= '<a href="' . route('accounting.payment-vouchers.show', $payment->hash_id) . '" 
+                                            class="btn btn-sm btn-outline-success me-1" 
+                                            data-bs-toggle="tooltip" 
+                                            data-bs-placement="top" 
+                                            title="View payment voucher">
+                                            <i class="bx bx-show"></i>
+                                        </a>';
+                        }
+                        
+                        if ($payment->reference_type === 'manual') {
+                            // Always allow edit/delete for manual vouchers if user has permission
+                            if (auth()->user()->can('edit payment voucher')) {
+                                $actions .= '<a href="' . route('accounting.payment-vouchers.edit', $payment->hash_id) . '" 
+                                                class="btn btn-sm btn-outline-info me-1" 
+                                                data-bs-toggle="tooltip" 
+                                                data-bs-placement="top" 
+                                                title="Edit payment voucher">
+                                                <i class="bx bx-edit"></i>
+                                            </a>';
+                            }
+                            if (auth()->user()->can('delete payment voucher')) {
+                                $actions .= '<button type="button" 
+                                                class="btn btn-sm btn-outline-danger delete-payment-btn"
+                                                data-bs-toggle="tooltip" 
+                                                data-bs-placement="top" 
+                                                title="Delete payment voucher"
+                                                data-payment-id="' . $payment->hash_id . '"
+                                                data-payment-reference="' . e($payment->reference) . '">
+                                                <i class="bx bx-trash"></i>
+                                            </button>';
+                            }
+                        } else {
+                            $actions .= '<button type="button" 
+                                            class="btn btn-sm btn-outline-secondary" 
+                                            title="Edit/Delete locked: Source is ' . ucfirst($payment->reference_type) . ' transaction" 
+                                            disabled>
+                                            <i class="bx bx-lock"></i>
+                                        </button>';
+                        }
                     }
                     
                     return '<div class="text-center">' . $actions . '</div>';
@@ -437,14 +493,9 @@ class PaymentVoucherController extends Controller
             ->orderBy('last_name')
             ->get();
 
-        // Get chart accounts for the current company - only expense accounts
+        // Get chart accounts for the current company - all account types
         $chartAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($user) {
-            $query->where('company_id', $user->company_id);
-        })
-            ->whereHas('accountClassGroup.accountClass', function ($query) {
-                $query->where('name', 'like', '%expense%')
-                      ->orWhere('name', 'like', '%cost%')
-                      ->orWhere('name', 'like', '%expenditure%');
+                $query->where('company_id', $user->company_id);
             })
             ->orderBy('account_name')
             ->get();
@@ -463,9 +514,9 @@ class PaymentVoucherController extends Controller
         $validator = Validator::make($request->all(), [
             'date' => 'required|date',
             'reference' => 'nullable|string|max:255',
-            'payment_method' => 'nullable|in:bank_transfer,cash_collateral,cheque',
+            'payment_method' => 'nullable|in:bank_transfer,cash_deposit,cheque',
             'bank_account_id' => 'required_if:payment_method,bank_transfer|required_if:payment_method,cheque|nullable|exists:bank_accounts,id',
-            'cash_collateral_id' => 'required_if:payment_method,cash_collateral|nullable|in:customer_balance',
+            'cash_deposit_id' => 'required_if:payment_method,cash_deposit|nullable|in:customer_balance',
             // Cheque fields
             'cheque_number' => 'required_if:payment_method,cheque|nullable|string|max:50',
             'cheque_date' => 'required_if:payment_method,cheque|nullable|date',
@@ -735,7 +786,7 @@ class PaymentVoucherController extends Controller
                     'user_id' => $user->id,
                     'payment_method' => $paymentMethod,
                     'bank_account_id' => ($paymentMethod === 'cheque' || $paymentMethod === 'bank_transfer') ? $request->bank_account_id : null,
-                    'cash_collateral_id' => ($paymentMethod === 'cash_collateral' && $request->cash_collateral_id !== 'customer_balance') ? $request->cash_collateral_id : null,
+                    'cash_deposit_id' => ($paymentMethod === 'cash_deposit' && $request->cash_deposit_id !== 'customer_balance') ? $request->cash_deposit_id : null,
                     'cheque_id' => $chequeId,
                     'payee_type' => $payeeType,
                     'payee_id' => $payeeId,
@@ -891,7 +942,7 @@ class PaymentVoucherController extends Controller
                                 'user_id' => $user->id,
                                 'payment_method' => $paymentMethod,
                                 'bank_account_id' => ($paymentMethod === 'cheque' || $paymentMethod === 'bank_transfer') ? $request->bank_account_id : null,
-                                'cash_collateral_id' => ($paymentMethod === 'cash_collateral' && $request->cash_collateral_id !== 'customer_balance') ? $request->cash_collateral_id : null,
+                                'cash_deposit_id' => ($paymentMethod === 'cash_deposit' && $request->cash_deposit_id !== 'customer_balance') ? $request->cash_deposit_id : null,
                                 'cheque_id' => $chequeId,
                                 'payee_type' => 'supplier',
                                 'payee_id' => $request->supplier_id,
@@ -1097,14 +1148,9 @@ class PaymentVoucherController extends Controller
             ->orderBy('last_name')
             ->get();
 
-        // Get chart accounts for the current company - only expense accounts
+        // Get chart accounts for the current company - all account types
         $chartAccounts = ChartAccount::whereHas('accountClassGroup', function ($query) use ($user) {
-            $query->where('company_id', $user->company_id);
-        })
-            ->whereHas('accountClassGroup.accountClass', function ($query) {
-                $query->where('name', 'like', '%expense%')
-                      ->orWhere('name', 'like', '%cost%')
-                      ->orWhere('name', 'like', '%expenditure%');
+                $query->where('company_id', $user->company_id);
             })
             ->orderBy('account_name')
             ->get();
@@ -1131,9 +1177,9 @@ class PaymentVoucherController extends Controller
         $validator = Validator::make($request->all(), [
             'date' => 'required|date',
             'reference' => 'nullable|string|max:255',
-            'payment_method' => 'nullable|in:bank_transfer,cash_collateral,cheque',
+            'payment_method' => 'nullable|in:bank_transfer,cash_deposit,cheque',
             'bank_account_id' => 'required_if:payment_method,bank_transfer|required_if:payment_method,cheque|nullable|exists:bank_accounts,id',
-            'cash_collateral_id' => 'required_if:payment_method,cash_collateral|nullable|in:customer_balance',
+            'cash_deposit_id' => 'required_if:payment_method,cash_deposit|nullable|in:customer_balance',
             'cheque_number' => 'required_if:payment_method,cheque|nullable|string|max:50',
             'cheque_date' => 'required_if:payment_method,cheque|nullable|date',
             'currency' => 'nullable|string|size:3',
@@ -1201,30 +1247,48 @@ class PaymentVoucherController extends Controller
                 if (!empty($budgetCheck['warnings'])) {
                     session()->flash('budget_warnings', $budgetCheck['warnings']);
                 }
-                
-                // Check if WHT is enabled (from form switch)
-                $whtEnabled = $request->has('wht_enabled') && $request->wht_enabled == '1';
-                
+
+                // Check if WHT is enabled.
+                // - If the form has an explicit switch (create form), use it
+                // - Otherwise (edit form), infer from the submitted WHT treatment/rate if present,
+                //   falling back to the existing voucher settings when the user hasn't touched WHT.
+                if ($request->has('wht_enabled')) {
+                    $whtEnabled = $request->wht_enabled == '1';
+                } else {
+                    $requestWhtTreatment = $request->input('wht_treatment');
+                    $requestWhtRate = $request->input('wht_rate');
+
+                    if (!is_null($requestWhtTreatment) || !is_null($requestWhtRate)) {
+                        // User has interacted with the WHT fields on the edit form:
+                        // treat WHT as enabled only when treatment is not NONE and rate > 0.
+                        $whtEnabled = $requestWhtTreatment
+                            && $requestWhtTreatment !== 'NONE'
+                            && (float) $requestWhtRate > 0;
+                    } else {
+                        // No new WHT values submitted – preserve existing WHT so it is not reset unintentionally.
+                        $hasExistingWht = $paymentVoucher->wht_treatment
+                            && $paymentVoucher->wht_treatment !== 'NONE'
+                            && (float) ($paymentVoucher->wht_rate ?? 0) > 0;
+                        $whtEnabled = $hasExistingWht;
+                    }
+                }
+
                 $whtService = new \App\Services\WithholdingTaxService();
-                
+
                 // Calculate total amount (sum of line items - may include VAT)
                 $totalAmount = collect($request->line_items)->sum('amount');
-                
+
                 // Get WHT treatment and rate (payment-level or item-level)
-                // If WHT is disabled, set defaults to NONE/0
                 if (!$whtEnabled) {
                     $whtTreatment = 'NONE';
                     $whtRate = 0;
                     $vatMode = 'NONE';
                     $vatRate = 0;
                 } else {
-                    $whtTreatment = $request->wht_treatment ?? 'EXCLUSIVE';
-                    $whtRate = (float) ($request->wht_rate ?? 0);
-                    
-                    // Get VAT mode and rate (payment-level)
-                    // Use system default VAT type if not provided
+                    $whtTreatment = $request->wht_treatment ?? $paymentVoucher->wht_treatment ?? 'EXCLUSIVE';
+                    $whtRate = (float) ($request->wht_rate ?? $paymentVoucher->wht_rate ?? 0);
                     $defaultVatType = get_default_vat_type();
-                    $defaultVatMode = 'EXCLUSIVE'; // Default fallback
+                    $defaultVatMode = 'EXCLUSIVE';
                     if ($defaultVatType == 'inclusive') {
                         $defaultVatMode = 'INCLUSIVE';
                     } elseif ($defaultVatType == 'exclusive') {
@@ -1232,10 +1296,8 @@ class PaymentVoucherController extends Controller
                     } elseif ($defaultVatType == 'no_vat') {
                         $defaultVatMode = 'NONE';
                     }
-                    $vatMode = $request->vat_mode ?? $defaultVatMode;
-                    $vatRate = (float) ($request->vat_rate ?? get_default_vat_rate()); // Use system default VAT rate
-                    
-                    // If supplier is selected and has allow_gross_up, default to GROSS_UP
+                    $vatMode = $request->vat_mode ?? $paymentVoucher->vat_mode ?? $defaultVatMode;
+                    $vatRate = (float) ($request->vat_rate ?? $paymentVoucher->vat_rate ?? get_default_vat_rate());
                     if ($request->payee_type === 'supplier' && $request->supplier_id) {
                         $supplier = \App\Models\Supplier::find($request->supplier_id);
                         if ($supplier && $supplier->allow_gross_up && $whtTreatment === 'EXCLUSIVE') {
@@ -1243,14 +1305,14 @@ class PaymentVoucherController extends Controller
                         }
                     }
                 }
-                
+
                 // Calculate WHT at payment level if rate is provided (with VAT integration)
                 $paymentWHT = 0;
                 $paymentNetPayable = $totalAmount;
                 $paymentTotalCost = $totalAmount;
                 $paymentBaseAmount = $totalAmount;
                 $paymentVatAmount = 0;
-                
+
                 if ($whtEnabled && $whtRate > 0 && $whtTreatment !== 'NONE') {
                     $whtCalc = $whtService->calculateWHT($totalAmount, $whtRate, $whtTreatment, $vatMode, $vatRate);
                     $paymentWHT = $whtCalc['wht_amount'];
@@ -1440,7 +1502,7 @@ class PaymentVoucherController extends Controller
                     'attachment' => $attachmentPath,
                     'payment_method' => $paymentMethod,
                     'bank_account_id' => ($paymentMethod === 'cheque' || $paymentMethod === 'bank_transfer') ? $request->bank_account_id : null,
-                    'cash_collateral_id' => ($paymentMethod === 'cash_collateral' && $request->cash_collateral_id !== 'customer_balance') ? $request->cash_collateral_id : null,
+                    'cash_deposit_id' => ($paymentMethod === 'cash_deposit' && $request->cash_deposit_id !== 'customer_balance') ? $request->cash_deposit_id : null,
                     'cheque_id' => $chequeId,
                     'payee_type' => $payeeType,
                     'payee_id' => $payeeId,
@@ -1607,7 +1669,7 @@ class PaymentVoucherController extends Controller
                                 'user_id' => $user->id,
                                 'payment_method' => $paymentMethod,
                                 'bank_account_id' => ($paymentMethod === 'cheque' || $paymentMethod === 'bank_transfer') ? $request->bank_account_id : null,
-                                'cash_collateral_id' => ($paymentMethod === 'cash_collateral' && $request->cash_collateral_id !== 'customer_balance') ? $request->cash_collateral_id : null,
+                                'cash_deposit_id' => ($paymentMethod === 'cash_deposit' && $request->cash_deposit_id !== 'customer_balance') ? $request->cash_deposit_id : null,
                                 'cheque_id' => $chequeId,
                                 'payee_type' => 'supplier',
                                 'payee_id' => $request->supplier_id,
@@ -2351,50 +2413,14 @@ class PaymentVoucherController extends Controller
                         ]);
                     }
 
-                    // Post to GL if not already posted
+                    // Post to GL if not already posted (use Payment model's method so WHT/VAT are correct)
                     $alreadyPosted = \App\Models\GlTransaction::where('transaction_type', 'payment')
                         ->where('transaction_id', $paymentVoucher->id)
                         ->exists();
 
                     if (!$alreadyPosted) {
                         $paymentVoucher->loadMissing(['bankAccount', 'paymentItems']);
-                        $bankAccount = $paymentVoucher->bankAccount;
-                        $date = $paymentVoucher->date;
-                        $description = $paymentVoucher->description ?: ("Payment voucher {$paymentVoucher->reference}");
-                        $branchId = $paymentVoucher->branch_id;
-                        $userId = $user->id;
-
-                        // Credit bank account with total amount
-                        \App\Models\GlTransaction::create([
-                            'chart_account_id' => $bankAccount?->chart_account_id,
-                            'customer_id' => $paymentVoucher->customer_id,
-                            'supplier_id' => $paymentVoucher->supplier_id,
-                            'amount' => $paymentVoucher->amount,
-                            'nature' => 'credit',
-                            'transaction_id' => $paymentVoucher->id,
-                            'transaction_type' => 'payment',
-                            'date' => $date,
-                            'description' => $description,
-                            'branch_id' => $branchId,
-                            'user_id' => $userId,
-                        ]);
-
-                        // Debit each expense line
-                        foreach ($paymentVoucher->paymentItems as $item) {
-                            \App\Models\GlTransaction::create([
-                                'chart_account_id' => $item->chart_account_id,
-                                'customer_id' => $paymentVoucher->customer_id,
-                                'supplier_id' => $paymentVoucher->supplier_id,
-                                'amount' => $item->amount,
-                                'nature' => 'debit',
-                                'transaction_id' => $paymentVoucher->id,
-                                'transaction_type' => 'payment',
-                                'date' => $date,
-                                'description' => $item->description ?: $description,
-                                'branch_id' => $branchId,
-                                'user_id' => $userId,
-                            ]);
-                        }
+                        $paymentVoucher->createGlTransactions();
                     }
                 }
             });
@@ -2563,7 +2589,7 @@ class PaymentVoucherController extends Controller
             $hasCashDeposits = $customer->cashDeposits()->exists() || $customer->cashCollaterals()->exists();
 
             // Get customer's cash deposit balance (only actual cash deposits)
-            $cashDepositBalance = $customer->cash_collateral_balance ?? 0;
+            $cashDepositBalance = $customer->cash_deposit_balance ?? 0;
 
             // Only return account option if customer has actual deposit records OR has a positive balance
             // If customer has never had any deposits, return empty array
@@ -2580,7 +2606,7 @@ class PaymentVoucherController extends Controller
             \Log::info('Customer cash deposits retrieved', [
                 'customer_id' => $decodedCustomerId,
                 'customer_name' => $customer->name,
-                'has_cash_collaterals' => $hasCashDeposits,
+                'has_cash_deposits' => $hasCashDeposits,
                 'balance' => $cashDepositBalance,
                 'data_count' => count($data)
             ]);

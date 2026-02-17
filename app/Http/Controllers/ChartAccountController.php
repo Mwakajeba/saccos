@@ -186,10 +186,10 @@ class ChartAccountController extends Controller
             return back()->withErrors(['account_code' => "Account code must be between $rangeFrom and $rangeTo for the selected class."])->withInput();
         }
 
-        // Handle boolean fields properly for unchecked checkboxes
+        // Handle boolean fields: hidden sends 0 when unchecked, checkbox sends 1 when checked
         $data = $request->all();
-        $data['has_cash_flow'] = $request->has('has_cash_flow');
-        $data['has_equity'] = $request->has('has_equity');
+        $data['has_cash_flow'] = $request->boolean('has_cash_flow');
+        $data['has_equity'] = $request->boolean('has_equity');
 
         // Set category IDs to null if checkboxes are unchecked
         if (!$data['has_cash_flow']) {
@@ -297,10 +297,10 @@ class ChartAccountController extends Controller
             return back()->withErrors(['account_code' => "Account code must be between $rangeFrom and $rangeTo for the selected class."])->withInput();
         }
 
-        // Handle boolean fields properly for unchecked checkboxes
+        // Handle boolean fields: hidden sends 0 when unchecked, checkbox sends 1 when checked
         $data = $request->all();
-        $data['has_cash_flow'] = $request->has('has_cash_flow');
-        $data['has_equity'] = $request->has('has_equity');
+        $data['has_cash_flow'] = $request->boolean('has_cash_flow');
+        $data['has_equity'] = $request->boolean('has_equity');
 
         // Set category IDs to null if checkboxes are unchecked
         if (!$data['has_cash_flow']) {

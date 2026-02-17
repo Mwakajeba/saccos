@@ -191,8 +191,8 @@
                                  </label>
                                  <div class="input-group">
                                      <span class="input-group-text">TZS</span>
-                                     <input type="number" class="form-control amount-input" 
-                                            name="budget_lines[{index}][amount]" step="0.01" min="0" 
+                                     <input type="text" class="form-control amount-input" 
+                                            name="budget_lines[{index}][amount]" inputmode="decimal"
                                             placeholder="0.00" required>
                                  </div>
                              </div>
@@ -336,13 +336,29 @@ $(document).ready(function() {
         }
     });
     
-    // Format amount inputs
-    // $(document).on('input', '.amount-input', function() {
-    //     const value = parseFloat($(this).val());
-    //     if (!isNaN(value)) {
-    //         $(this).val(value.toFixed(2));
-    //     }
-    // });
+    // Format amount inputs with comma separator on type
+    $(document).on('input', '.amount-input', function() {
+        let value = $(this).val().replace(/,/g, '');
+        if (value === '' || value === '-') {
+            return;
+        }
+        if (!isNaN(parseFloat(value)) && isFinite(value)) {
+            const num = parseFloat(value);
+            if (num >= 0) {
+                $(this).val(num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+            }
+        }
+    });
+
+    // Strip commas from amount inputs before submit so server receives numeric values
+    $('#budgetForm').on('submit', function() {
+        $('.amount-input').each(function() {
+            const raw = $(this).val();
+            if (raw) {
+                $(this).val(raw.replace(/,/g, ''));
+            }
+        });
+    });
     
     // Auto-select current year
     $('select[name="year"]').val('{{ date("Y") }}');

@@ -1510,8 +1510,8 @@ class SettingsController extends Controller
         $roles = \Spatie\Permission\Models\Role::all();
         $users = \App\Models\User::where('company_id', $user->company_id)->get();
         
-        // Load existing approval settings
-        $settings = \App\Models\PaymentVoucherApprovalSetting::where('company_id', $user->company_id)->first();
+        // Load existing approval settings with who last saved
+        $settings = \App\Models\PaymentVoucherApprovalSetting::where('company_id', $user->company_id)->with('updater')->first();
         
         return view('settings.payment-voucher-approval', compact('roles', 'users', 'settings'));
     }
@@ -1621,10 +1621,11 @@ class SettingsController extends Controller
                     ]);
                 }
             } else {
-                // When approvals disabled, clear approval configuration
+                // When approvals disabled, clear approval configuration.
+                // level1_approval_type may be NOT NULL in DB, so use default 'role'.
                 $settings->update([
                     'approval_levels' => 0,
-                    'level1_approval_type' => null,
+                    'level1_approval_type' => 'role',
                     'level1_approvers' => null,
                     'level2_approval_type' => null,
                     'level2_approvers' => null,
@@ -1648,7 +1649,7 @@ class SettingsController extends Controller
      */
     public function updatePaymentVoucherApprovalSettings(Request $request)
     {
-        $requireAll = $request->has('require_approval_for_all');
+        $requireAll = $request->boolean('require_approval_for_all');
 
         $baseRules = [
             'require_approval_for_all' => 'boolean',
@@ -1684,9 +1685,10 @@ class SettingsController extends Controller
                 ]
             );
 
-            // Update settings
+            // Update settings (record who is saving)
             $updateData = [
                 'require_approval_for_all' => $requireAll,
+                'updated_by' => $user->id,
             ];
             if ($requireAll) {
                 // Only approval_levels is strictly needed; keep others as previously configured
@@ -1720,6 +1722,7 @@ class SettingsController extends Controller
                         $settings->update([
                             "level{$level}_approval_type" => $approvalType,
                             "level{$level}_approvers" => $processedApprovers,
+                            'updated_by' => $user->id,
                         ]);
                     }
                 }
@@ -1729,13 +1732,15 @@ class SettingsController extends Controller
                     $settings->update([
                         "level{$level}_approval_type" => null,
                         "level{$level}_approvers" => null,
+                        'updated_by' => $user->id,
                     ]);
                 }
             } else {
-                // When approvals disabled, clear approval configuration
+                // When approvals disabled, clear approval configuration.
+                // level1_approval_type is NOT NULL in DB, so use default 'role'.
                 $settings->update([
                     'approval_levels' => 0,
-                    'level1_approval_type' => null,
+                    'level1_approval_type' => 'role',
                     'level1_approvers' => null,
                     'level2_approval_type' => null,
                     'level2_approvers' => null,
@@ -1745,10 +1750,13 @@ class SettingsController extends Controller
                     'level4_approvers' => null,
                     'level5_approval_type' => null,
                     'level5_approvers' => null,
+                    'updated_by' => $user->id,
                 ]);
             }
 
-            return redirect()->route('settings.payment-voucher-approval')->with('success', 'Payment voucher approval settings updated successfully!');
+            return redirect()->route('settings.payment-voucher-approval')
+                ->with('success', 'Payment voucher approval settings updated successfully!')
+                ->with('saved_by_name', $user->name);
         } catch (\Exception $e) {
             return redirect()->route('settings.payment-voucher-approval')->with('error', 'Failed to update payment voucher approval settings: ' . $e->getMessage());
         }
@@ -1776,7 +1784,7 @@ class SettingsController extends Controller
      */
     public function updateAccountTransferApprovalSettings(Request $request)
     {
-        $requireAll = $request->has('require_approval_for_all');
+        $requireAll = $request->boolean('require_approval_for_all');
 
         $baseRules = [
             'require_approval_for_all' => 'boolean',
@@ -1859,10 +1867,11 @@ class SettingsController extends Controller
                     ]);
                 }
             } else {
-                // When approvals disabled, clear approval configuration
+                // When approvals disabled, clear approval configuration.
+                // level1_approval_type is NOT NULL in DB, so use default 'role'.
                 $settings->update([
                     'approval_levels' => 0,
-                    'level1_approval_type' => null,
+                    'level1_approval_type' => 'role',
                     'level1_approvers' => null,
                     'level2_approval_type' => null,
                     'level2_approvers' => null,
@@ -1875,7 +1884,9 @@ class SettingsController extends Controller
                 ]);
             }
 
-            return redirect()->route('settings.account-transfer-approval')->with('success', 'Account transfer approval settings updated successfully!');
+            return redirect()->route('settings.account-transfer-approval')
+                ->with('success', 'Account transfer approval settings updated successfully!')
+                ->with('saved_by_name', $user->name);
         } catch (\Exception $e) {
             return redirect()->route('settings.account-transfer-approval')->with('error', 'Failed to update account transfer approval settings: ' . $e->getMessage());
         }
@@ -2113,10 +2124,11 @@ class SettingsController extends Controller
                     ]);
                 }
             } else {
-                // Clear all approval settings when disabled
+                // Clear all approval settings when disabled.
+                // level1_approval_type is NOT NULL in DB, so use default 'role'.
                 $settings->update([
                     'approval_levels' => 1,
-                    'level1_approval_type' => null,
+                    'level1_approval_type' => 'role',
                     'level1_approvers' => null,
                     'level2_approval_type' => null,
                     'level2_approvers' => null,
@@ -2152,7 +2164,7 @@ class SettingsController extends Controller
      */
     public function updateLoanWriteoffApprovalSettings(Request $request)
     {
-        $requireAll = $request->has('require_approval_for_all');
+        $requireAll = $request->boolean('require_approval_for_all');
         $baseRules = ['require_approval_for_all' => 'boolean', 'auto_approval_limit' => 'nullable|numeric|min:0'];
         $approvalRules = $requireAll ? [
             'approval_levels' => 'required|integer|min:1|max:5',
@@ -2213,13 +2225,19 @@ class SettingsController extends Controller
                     ]);
                 }
             } else {
+                // level1_approval_type is NOT NULL in DB, so use default 'role'.
                 $settings->update([
                     'approval_levels' => 1,
-                    'level1_approval_type' => null, 'level1_approvers' => null,
-                    'level2_approval_type' => null, 'level2_approvers' => null,
-                    'level3_approval_type' => null, 'level3_approvers' => null,
-                    'level4_approval_type' => null, 'level4_approvers' => null,
-                    'level5_approval_type' => null, 'level5_approvers' => null,
+                    'level1_approval_type' => 'role',
+                    'level1_approvers' => null,
+                    'level2_approval_type' => null,
+                    'level2_approvers' => null,
+                    'level3_approval_type' => null,
+                    'level3_approvers' => null,
+                    'level4_approval_type' => null,
+                    'level4_approvers' => null,
+                    'level5_approval_type' => null,
+                    'level5_approvers' => null,
                 ]);
             }
             return redirect()->route('settings.loan-writeoff-approval')->with('success', 'Loan write-off approval settings updated successfully!');
@@ -2461,10 +2479,11 @@ class SettingsController extends Controller
                     ]);
                 }
             } else {
-                // Clear all approval settings when disabled
+                // Clear all approval settings when disabled.
+                // level1_approval_type is NOT NULL in DB, so use default 'role'.
                 $settings->update([
                     'approval_levels' => 3,
-                    'level1_approval_type' => null,
+                    'level1_approval_type' => 'role',
                     'level1_approvers' => null,
                     'level2_approval_type' => null,
                     'level2_approvers' => null,

@@ -33,7 +33,6 @@
             margin: 8px 0;
         }
 
-        /* Header */
         .logo-section {
             margin-bottom: 10px;
         }
@@ -54,31 +53,7 @@
             font-size: 10px;
         }
 
-        /* Payment methods */
-        .payment-methods {
-            font-size: 10px;
-            margin: 8px 0;
-        }
-
-        .payment-method-bar {
-            background-color: #1e3a8a;
-            color: #fff;
-            padding: 8px;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-
-        .payment-details {
-            padding: 8px;
-            background-color: #f8fafc;
-        }
-
-        .payment-details strong {
-            color: #1e40af;
-        }
-
-        /* Receipt title */
-        .receipt-title {
+        .invoice-title {
             font-weight: bold;
             text-align: center;
             font-size: 18px;
@@ -86,54 +61,56 @@
             color: #1e40af;
         }
 
-        /* Info section */
         .info-section {
             display: flex;
             justify-content: space-between;
             margin-bottom: 10px;
         }
 
-        .received-from {
+        .bill-to {
             width: 48%;
             font-size: 10px;
         }
 
-        .received-from strong {
+        .bill-to strong {
             color: #1e40af;
         }
 
-        .receipt-box {
+        .invoice-box {
             width: 48%;
             text-align: right;
         }
 
-        .receipt-box table {
+        .invoice-box table {
             width: 100%;
             border-collapse: collapse;
             font-size: 10px;
             margin-left: auto;
         }
 
-        .receipt-box td {
+        .invoice-box td {
             border: 1px solid #cbd5e1;
             padding: 4px;
         }
 
-        .receipt-box td:nth-child(even) {
-            text-align: right;
-        }
-
-        .receipt-box strong {
+        .invoice-box td:nth-child(odd) {
+            font-weight: bold;
             color: #1e40af;
         }
 
-        /* Items table */
+        .invoice-box td:nth-child(even) {
+            text-align: right;
+        }
+
+        .invoice-box strong {
+            color: #1e40af;
+        }
+
         .items-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 10px;
             margin-top: 10px;
-            clear: both;
         }
 
         .items-table th,
@@ -157,7 +134,14 @@
             background-color: #fff;
         }
 
-        /* Totals */
+        .items-table .text-right {
+            text-align: right;
+        }
+
+        .items-table .text-center {
+            text-align: center;
+        }
+
         .totals-table {
             width: 100%;
             border-collapse: collapse;
@@ -189,7 +173,6 @@
             border-radius: 3px;
         }
 
-        /* Footer */
         .footer {
             margin-top: 20px;
             font-size: 10px;
@@ -197,10 +180,6 @@
 
         .footer strong {
             color: #1e40af;
-        }
-
-        .signature {
-            margin-top: 20px;
         }
 
         .footer hr {
@@ -224,150 +203,99 @@
             margin-top: 40px;
             padding-top: 2px;
         }
-
-        /* Invoice Summary */
-        .invoice-summary {
-            margin-top: 15px;
-            padding: 10px;
-            background-color: #f8fafc;
-            border: 1px solid #cbd5e1;
-            border-radius: 3px;
-        }
-
-        .invoice-summary-title {
-            font-weight: bold;
-            color: #1e40af;
-            margin-bottom: 8px;
-            font-size: 11px;
-        }
-
-        .invoice-summary-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-            font-size: 10px;
-        }
-
     </style>
-
 </head>
 <body>
     <div class="container">
 
-        {{-- Header --}}
+        {{-- Header: Logo + Company (same as payment voucher: branch/user/auth fallback) --}}
         <div class="text-left">
             @php
-            $company = $invoice->company ?? $receiptVoucher->user->company ?? null;
+                $company = optional($receiptVoucher->branch)->company
+                    ?? optional($receiptVoucher->user)->company
+                    ?? (auth()->check() ? auth()->user()->company : null);
             @endphp
             @if($company && $company->logo)
-            @php
-            // Logo is stored in storage/app/public (via "public" disk)
-            $logo = $company->logo; // e.g. "uploads/companies/company_1_1768466462.png"
-            $logoPath = public_path('storage/' . ltrim($logo, '/'));
-
-            // Convert image to base64 for DomPDF compatibility
-            $logoBase64 = null;
-            if (file_exists($logoPath)) {
-            $imageData = file_get_contents($logoPath);
-            $imageInfo = getimagesize($logoPath);
-            if ($imageInfo !== false) {
-            $mimeType = $imageInfo['mime'];
-            $logoBase64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
-            }
-            }
-            @endphp
-            @if($logoBase64)
-            <div class="logo-section" style="float: left; width: 45%;">
-                <img src="{{ $logoBase64 }}" alt="{{ $company->name . ' logo' }}" class="company-logo">
-            </div>
-            @endif
+                @php
+                    $logo = $company->logo;
+                    $logoPath = public_path('storage/' . ltrim($logo, '/'));
+                    $logoBase64 = null;
+                    if (file_exists($logoPath)) {
+                        $imageData = file_get_contents($logoPath);
+                        $imageInfo = @getimagesize($logoPath);
+                        if ($imageInfo !== false) {
+                            $mimeType = $imageInfo['mime'];
+                            $logoBase64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                        }
+                    }
+                @endphp
+                @if($logoBase64 ?? null)
+                    <div class="logo-section" style="float: left; width: 45%;">
+                        <img src="{{ $logoBase64 }}" alt="{{ (optional($company)->name ?? '') . ' logo' }}" class="company-logo">
+                    </div>
+                @endif
             @endif
             <div style="float: right; width: 50%; text-align: left; margin-left: 15%;">
-                <div class="company-name">{{ $company->name ?? 'SmartFinance' }}</div>
+                <div class="company-name">{{ optional($company)->name ?? 'SmartFinance' }}</div>
                 <div class="company-details">
                     @if($company && $company->address)
-                    P.O Box: {{ $company->address }} <br>
+                        P.O Box: {{ $company->address }} <br>
                     @endif
                     @if($company && $company->phone)
-                    Phone: {{ $company->phone }} <br>
+                        Phone: {{ $company->phone }} <br>
                     @endif
                     @if($company && $company->email)
-                    Email: {{ $company->email }}
+                        Email: {{ $company->email }}
                     @endif
                 </div>
             </div>
         </div>
         <div style="clear: both;"></div>
 
-        @if($receiptVoucher->bankAccount)
-        <div class="payment-method-bar" style="text-align: center;">
-            <strong>PAYMENT METHOD :</strong>
-        </div>
-        <div class="payment-details">
-            <strong>{{ strtoupper($receiptVoucher->bankAccount->name ?? $receiptVoucher->bankAccount->bank_name ?? 'BANK') }}:</strong> {{ $receiptVoucher->bankAccount->account_number ?? 'N/A' }}
-        </div>
-        @endif
-
-        <div class="receipt-title">RECEIPT VOUCHER</div>
+        <div class="invoice-title">RECEIPT VOUCHER</div>
         <hr>
-        {{-- Received From + Receipt Info --}}
+
+        {{-- Received From + Receipt Info (same layout as invoice: bill-to left, invoice-box right) --}}
         <div class="info-section">
-            <div class="received-from" style="float: left; width: 48%;">
-                <strong>Received from :</strong><br>
+            <div class="bill-to" style="float: left; width: 48%;">
+                <strong>Received from:</strong><br>
                 @if($receiptVoucher->payee_type === 'customer' && $receiptVoucher->customer)
-                <strong>{{ $receiptVoucher->customer->name }}</strong><br>
-                @if($receiptVoucher->customer->phone)
-                {{ $receiptVoucher->customer->phone }}<br>
-                @endif
-                @if($receiptVoucher->customer->email)
-                {{ $receiptVoucher->customer->email }}<br>
-                @endif
-                @if($receiptVoucher->customer->address)
-                {{ $receiptVoucher->customer->address }}<br>
-                @endif
+                    <strong>{{ $receiptVoucher->customer->name }}</strong><br>
+                    @if($receiptVoucher->customer->phone){{ $receiptVoucher->customer->phone }}<br>@endif
+                    @if($receiptVoucher->customer->email){{ $receiptVoucher->customer->email }}<br>@endif
+                    @if($receiptVoucher->customer->address){{ $receiptVoucher->customer->address }}<br>@endif
                 @elseif($receiptVoucher->payee_type === 'employee' && $receiptVoucher->employee)
-                <strong>{{ $receiptVoucher->employee->full_name }}</strong><br>
-                @if($receiptVoucher->employee->employee_number)
-                Employee No: {{ $receiptVoucher->employee->employee_number }}<br>
-                @endif
-                @elseif($receiptVoucher->payee_type === 'other')
-                <strong>{{ $receiptVoucher->payee_name ?? 'N/A' }}</strong><br>
+                    <strong>{{ $receiptVoucher->employee->full_name }}</strong><br>
+                    @if($receiptVoucher->employee->employee_number)Employee No: {{ $receiptVoucher->employee->employee_number }}<br>@endif
+                @elseif($receiptVoucher->payee_type === 'other' || $receiptVoucher->payee_name)
+                    <strong>{{ $receiptVoucher->payee_name ?? 'N/A' }}</strong><br>
                 @elseif(isset($invoice) && $invoice->customer)
-                <strong>{{ $invoice->customer->name ?? 'Walk-in Customer' }}</strong><br>
-                @if($invoice->customer->phone)
-                {{ $invoice->customer->phone }}<br>
-                @endif
-                @if($invoice->customer->email)
-                {{ $invoice->customer->email }}<br>
-                @endif
-                @if($invoice->customer->address)
-                {{ $invoice->customer->address }}<br>
-                @endif
+                    <strong>{{ $invoice->customer->name ?? 'Walk-in Customer' }}</strong><br>
+                    @if($invoice->customer->phone){{ $invoice->customer->phone }}<br>@endif
+                    @if($invoice->customer->email){{ $invoice->customer->email }}<br>@endif
+                    @if($invoice->customer->address){{ $invoice->customer->address }}<br>@endif
                 @else
-                <strong>{{ $receiptVoucher->payee_name ?? 'N/A' }}</strong><br>
+                    <strong>{{ $receiptVoucher->payee_name ?? 'N/A' }}</strong><br>
                 @endif
                 <br>
                 <strong>Created By:</strong><br>
                 @php
-                $creator = $receiptVoucher->user ?? null;
-                $creatorRole = $creator && method_exists($creator, 'roles') ? $creator->roles->first() : null;
+                    $creator = $receiptVoucher->user ?? null;
+                    $creatorRole = $creator && method_exists($creator, 'roles') ? $creator->roles->first() : null;
                 @endphp
                 @if($creator)
-                {{ $creator->name }}
-                @if($creatorRole)
-                ({{ $creatorRole->name }})
-                @endif
+                    {{ $creator->name }}@if($creatorRole) ({{ $creatorRole->name }})@endif
                 @else
-                System
+                    System
                 @endif
             </div>
 
-            <div class="receipt-box" style="text-align: right; float: left; width: 48%;">
+            <div class="invoice-box" style="text-align: right; float: left; width: 48%;">
                 <table style="margin-top: 8px;">
                     <tr>
                         <td><strong>Receipt no:</strong></td>
                         <td>{{ $receiptVoucher->reference ?? 'RCP-' . $receiptVoucher->id }}</td>
-                        <td><strong>Date :</strong></td>
+                        <td><strong>Date:</strong></td>
                         <td>{{ $receiptVoucher->date ? $receiptVoucher->date->format('d F Y') : 'N/A' }}</td>
                     </tr>
                     @if(isset($invoice))
@@ -382,6 +310,16 @@
                         <td><strong>Ex Rate:</strong></td>
                         <td>{{ number_format($receiptVoucher->exchange_rate ?? 1, 2) }}</td>
                     </tr>
+                    <tr>
+                        <td><strong>Payment:</strong></td>
+                        <td colspan="3">
+                            @if($receiptVoucher->bankAccount)
+                                {{ $receiptVoucher->bankAccount->name ?? 'Bank' }} ({{ $receiptVoucher->bankAccount->account_number ?? 'N/A' }})
+                            @else
+                                {{ ucfirst(str_replace('_', ' ', $receiptVoucher->payment_method ?? 'Cash')) }}
+                            @endif
+                        </td>
+                    </tr>
                     @if($receiptVoucher->branch)
                     <tr>
                         <td><strong>Branch:</strong></td>
@@ -390,7 +328,7 @@
                     @endif
                     <tr>
                         <td><strong>Time:</strong></td>
-                        <td colspan="3">{{ $receiptVoucher->created_at->format('H:i:s') }}</td>
+                        <td colspan="3">{{ $receiptVoucher->created_at ? $receiptVoucher->created_at->format('H:i:s') : 'N/A' }}</td>
                     </tr>
                 </table>
             </div>
@@ -398,13 +336,13 @@
         <div style="clear: both; margin-bottom: 10px;"></div>
 
         @if($receiptVoucher->description)
-        <div class="notes" style="clear: both; margin-bottom: 10px;">
+        <div style="clear: both; margin-bottom: 10px;">
             <strong>Description:</strong><br>
             {{ $receiptVoucher->description }}
         </div>
         @endif
 
-        {{-- Items --}}
+        {{-- Line items (same table style as purchase invoice) --}}
         @if($receiptVoucher->receiptItems && $receiptVoucher->receiptItems->count() > 0)
         <table class="items-table">
             <thead>
@@ -413,15 +351,15 @@
                     <th>Account</th>
                     <th>Account Code</th>
                     <th>Description</th>
-                    <th>Amount</th>
+                    <th class="text-right">Amount</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($receiptVoucher->receiptItems as $index => $item)
                 <tr>
                     <td class="text-center">{{ $index + 1 }}</td>
-                    <td>{{ $item->chartAccount->account_name ?? 'N/A' }}</td>
-                    <td class="text-center">{{ $item->chartAccount->account_code ?? 'N/A' }}</td>
+                    <td>{{ optional($item->chartAccount)->account_name ?? 'N/A' }}</td>
+                    <td class="text-center">{{ optional($item->chartAccount)->account_code ?? 'N/A' }}</td>
                     <td>{{ $item->description ?: '-' }}</td>
                     <td class="text-right">{{ number_format($item->amount, 2) }}</td>
                 </tr>
@@ -429,18 +367,38 @@
             </tbody>
         </table>
         @else
-        <div style="margin-top: 10px; padding: 10px; text-align: center; color: #999; font-style: italic;">
-            No receipt items found
-        </div>
+        <div style="margin-top: 10px; padding: 10px; text-align: center; color: #999; font-style: italic;">No receipt items found</div>
         @endif
 
-        {{-- Totals --}}
+        {{-- Totals (same style as purchase invoice: optional rows then GRAND TOTAL) --}}
         @php
-        $colspan = 4;
+            $hasWHT = (float)($receiptVoucher->wht_amount ?? 0) > 0;
+            $hasVAT = (float)($receiptVoucher->vat_amount ?? 0) > 0;
+            $colspan = 4;
         @endphp
-        <table class="totals-table" style="margin-top: 10px;">
+        <table class="totals-table">
+            @if($hasVAT && ($receiptVoucher->base_amount ?? 0) > 0)
             <tr>
-                <td colspan="{{ $colspan }}" style="text-align: right;"><strong>GRAND TOTAL: </strong></td>
+                <td colspan="{{ $colspan }}" style="text-align: right;">Base Amount:</td>
+                <td>{{ number_format($receiptVoucher->base_amount ?? $receiptVoucher->amount, 2) }}</td>
+            </tr>
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align: right;">VAT:</td>
+                <td>{{ number_format($receiptVoucher->vat_amount ?? 0, 2) }}</td>
+            </tr>
+            @endif
+            @if($hasWHT)
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align: right;">WHT ({{ number_format($receiptVoucher->wht_rate ?? 0, 1) }}%):</td>
+                <td>{{ number_format($receiptVoucher->wht_amount ?? 0, 2) }}</td>
+            </tr>
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align: right;">Net Receivable:</td>
+                <td>{{ number_format($receiptVoucher->net_receivable ?? $receiptVoucher->amount, 2) }}</td>
+            </tr>
+            @endif
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align: right;"><strong>GRAND TOTAL:</strong></td>
                 <td><strong>{{ number_format($receiptVoucher->amount, 2) }}</strong></td>
             </tr>
         </table>
@@ -451,76 +409,66 @@
         </div>
         @endif
 
-        @if(isset($invoice))
-        <div class="invoice-summary">
-            <div class="invoice-summary-title">INVOICE SUMMARY</div>
-            <div class="invoice-summary-row">
-                <span>Total Invoice:</span>
-                <span><strong>{{ number_format($invoice->total_amount, 2) }}</strong></span>
-            </div>
-            <div class="invoice-summary-row">
-                <span>Total Paid:</span>
-                <span><strong>{{ number_format($invoice->paid_amount, 2) }}</strong></span>
-            </div>
-            <div class="invoice-summary-row">
-                <span>Balance Due:</span>
-                <span><strong>{{ number_format($invoice->balance_due, 2) }}</strong></span>
-            </div>
+        @if(isset($invoice) && $invoice)
+        @php
+            $invTotal = $invoice->total_amount ?? 0;
+            $invPaid = $invoice->total_paid ?? $invoice->paid_amount ?? 0;
+            $invBalance = method_exists($invoice, 'getBalanceDue') ? $invoice->getBalanceDue() : ($invoice->balance_due ?? max(0, (float)$invTotal - (float)$invPaid));
+        @endphp
+        <div style="margin-top:10px; padding: 8px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 3px;">
+            <div style="font-weight: bold; color: #1e40af; margin-bottom: 6px;">INVOICE SUMMARY</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>Total Invoice:</span><span><strong>{{ number_format($invTotal, 2) }}</strong></span></div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>Total Paid:</span><span><strong>{{ number_format($invPaid, 2) }}</strong></span></div>
+            <div style="display: flex; justify-content: space-between;"><span>Balance Due:</span><span><strong>{{ number_format($invBalance, 2) }}</strong></span></div>
         </div>
         @endif
 
-        {{-- Footer --}}
+        {{-- Footer (same as purchase invoice) --}}
         <hr>
         <div class="footer">
+            <div style="margin-bottom: 10px;">Thank you for your payment!</div>
+
             <div class="signature-section">
                 <div class="signature-box">
                     <div class="signature-line"></div>
                     <div style="margin-top: 5px; font-size: 11px;"><strong>Prepared By</strong></div>
-                    <div style="margin-top: 2px; font-size: 10px;">
-                        {{ $receiptVoucher->user->name ?? 'N/A' }}
-                    </div>
+                    <div style="margin-top: 2px; font-size: 10px;">{{ optional($receiptVoucher->user)->name ?? 'N/A' }}</div>
                 </div>
-                
                 <div class="signature-box">
                     <div class="signature-line"></div>
                     <div style="margin-top: 5px; font-size: 11px;"><strong>Approved By</strong></div>
                     <div style="margin-top: 2px; font-size: 10px;">
                         @if($receiptVoucher->approved && $receiptVoucher->approvedBy)
-                        {{ $receiptVoucher->approvedBy->name }}
+                            {{ $receiptVoucher->approvedBy->name }}
                         @elseif($receiptVoucher->approved)
-                        {{ $receiptVoucher->user->name ?? 'N/A' }}
+                            {{ optional($receiptVoucher->user)->name ?? 'N/A' }}
                         @else
-                        <span style="color: #999;">Pending Approval</span>
+                            <span style="color: #999;">Pending Approval</span>
                         @endif
                     </div>
                 </div>
-                
                 <div class="signature-box">
                     <div class="signature-line"></div>
                     <div style="margin-top: 5px; font-size: 11px;"><strong>Received By</strong></div>
                     <div style="margin-top: 2px; font-size: 10px;">
                         @if($receiptVoucher->payee_type === 'customer' && $receiptVoucher->customer)
-                        {{ $receiptVoucher->customer->name }}
+                            {{ $receiptVoucher->customer->name }}
                         @elseif($receiptVoucher->payee_type === 'employee' && $receiptVoucher->employee)
-                        {{ $receiptVoucher->employee->full_name }}
-                        @elseif($receiptVoucher->payee_type === 'other')
-                        {{ $receiptVoucher->payee_name ?? 'N/A' }}
+                            {{ $receiptVoucher->employee->full_name }}
                         @elseif(isset($invoice) && $invoice->customer)
-                        {{ $invoice->customer->name ?? 'Walk-in Customer' }}
+                            {{ $invoice->customer->name ?? 'Customer' }}
                         @else
-                        {{ $receiptVoucher->payee_name ?? 'N/A' }}
+                            {{ $receiptVoucher->payee_name ?? 'N/A' }}
                         @endif
                     </div>
                 </div>
             </div>
 
             <div class="text-center" style="font-size:9px; margin-top: 20px;">
-                Receipt Voucher No: {{ $receiptVoucher->reference ?? 'RCP-' . $receiptVoucher->id }} <br>
-                Page 1 of 1
+                Receipt Voucher No: {{ $receiptVoucher->reference ?? 'RCP-' . $receiptVoucher->id }}<br>
+                {{ optional($company)->name ?? 'SmartFinance' }} · Page 1 of 1
             </div>
         </div>
-
     </div>
-
 </body>
 </html>

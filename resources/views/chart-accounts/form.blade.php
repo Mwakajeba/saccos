@@ -99,8 +99,12 @@ foreach ($accountClasses as $class) {
     <div class="row mb-3">
         <div class="col-md-6">
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="has_cash_flow" value="1" id="has_cash_flow" 
-                    {{ (old('has_cash_flow') || (isset($chartAccount) && $chartAccount->has_cash_flow)) ? 'checked' : '' }}>
+                @php
+                    $cashFlowChecked = old('has_cash_flow') !== null ? (bool) old('has_cash_flow') : (isset($chartAccount) && $chartAccount->has_cash_flow);
+                @endphp
+                <input type="hidden" name="has_cash_flow" value="{{ $cashFlowChecked ? '1' : '0' }}" id="has_cash_flow_value">
+                <input class="form-check-input" type="checkbox" value="1" id="has_cash_flow"
+                    {{ $cashFlowChecked ? 'checked' : '' }}>
                 <label class="form-check-label" for="has_cash_flow">
                     Has Cash Flow Impact
                 </label>
@@ -112,8 +116,12 @@ foreach ($accountClasses as $class) {
 
         <div class="col-md-6">
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="has_equity" value="1" id="has_equity" 
-                    {{ (old('has_equity') || (isset($chartAccount) && $chartAccount->has_equity)) ? 'checked' : '' }}>
+                @php
+                    $equityChecked = old('has_equity') !== null ? (bool) old('has_equity') : (isset($chartAccount) && $chartAccount->has_equity);
+                @endphp
+                <input type="hidden" name="has_equity" value="{{ $equityChecked ? '1' : '0' }}" id="has_equity_value">
+                <input class="form-check-input" type="checkbox" value="1" id="has_equity"
+                    {{ $equityChecked ? 'checked' : '' }}>
                 <label class="form-check-label" for="has_equity">
                     Has Equity Impact
                 </label>
@@ -163,4 +171,27 @@ foreach ($accountClasses as $class) {
         </button>
     </div>
 </form>
+
+<script>
+(function() {
+    var form = document.querySelector('form[action*="chart-accounts"]');
+    if (!form) return;
+    var cashFlowCheck = document.getElementById('has_cash_flow');
+    var cashFlowValue = document.getElementById('has_cash_flow_value');
+    var equityCheck = document.getElementById('has_equity');
+    var equityValue = document.getElementById('has_equity_value');
+    function syncCashFlow() {
+        if (cashFlowValue) cashFlowValue.value = cashFlowCheck && cashFlowCheck.checked ? '1' : '0';
+    }
+    function syncEquity() {
+        if (equityValue) equityValue.value = equityCheck && equityCheck.checked ? '1' : '0';
+    }
+    if (cashFlowCheck) cashFlowCheck.addEventListener('change', syncCashFlow);
+    if (equityCheck) equityCheck.addEventListener('change', syncEquity);
+    form.addEventListener('submit', function() {
+        syncCashFlow();
+        syncEquity();
+    });
+})();
+</script>
 

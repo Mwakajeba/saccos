@@ -28,14 +28,15 @@
                     </button>
                     @endif
                     @can('edit receipt voucher')
-                    <a href="{{ route('accounting.receipt-vouchers.edit', Hashids::encode($receiptVoucher->id)) }}"
+                    <a href="{{ route('accounting.receipt-vouchers.edit', $receiptVoucher->hash_id) }}"
                         class="btn btn-primary me-2">
                         <i class="bx bx-edit me-2"></i>Edit Receipt Voucher
                     </a>
                     @endcan
-                    <a href="{{ route('accounting.receipt-vouchers.export-pdf', Hashids::encode($receiptVoucher->id)) }}" class="btn btn-success me-2">
+                    <a href="{{ route('accounting.receipt-vouchers.export-pdf', $receiptVoucher->hash_id) }}" class="btn btn-success me-2" target="_blank" rel="noopener">
                         <i class="bx bx-file me-2"></i>Export PDF
                     </a>
+                    
                     @can('delete receipt voucher')
                     <button type="button" class="btn btn-outline-danger me-2" onclick="deleteReceiptVoucher()">
                         <i class="bx bx-trash me-2"></i>Delete
@@ -157,7 +158,7 @@
                                     <label class="form-label fw-bold">Attachment</label>
                                     <p class="form-control-plaintext">
                                         @if($receiptVoucher->attachment)
-                                            <a href="{{ route('accounting.receipt-vouchers.download-attachment', Hashids::encode($receiptVoucher->id)) }}"
+                                            <a href="{{ route('accounting.receipt-vouchers.download-attachment', $receiptVoucher->hash_id) }}"
                                                 class="btn btn-sm btn-outline-primary">
                                                 <i class="bx bx-download me-1"></i>Download Attachment
                                             </a>
@@ -397,7 +398,7 @@
 
                                 @if($receiptVoucher->reference_type === 'manual')
                                     @can('edit receipt voucher')
-                                    <a href="{{ route('accounting.receipt-vouchers.edit', Hashids::encode($receiptVoucher->id)) }}"
+                                    <a href="{{ route('accounting.receipt-vouchers.edit', $receiptVoucher->hash_id) }}"
                                         class="btn btn-outline-info">
                                         <i class="bx bx-edit me-1"></i>Edit
                                     </a>
@@ -415,7 +416,7 @@
                                     </button>
                                 @endif
                                 
-                                <a href="{{ route('accounting.receipt-vouchers.export-pdf', Hashids::encode($receiptVoucher->id)) }}" class="btn btn-outline-success">
+                                <a href="{{ route('accounting.receipt-vouchers.export-pdf', $receiptVoucher->hash_id) }}" class="btn btn-outline-success" target="_blank" rel="noopener">
                                     <i class="bx bx-file me-1"></i>Export PDF
                                 </a>
                             </div>
@@ -488,7 +489,7 @@
 
             // Make AJAX request
             $.ajax({
-                url: '{{ route("accounting.receipt-vouchers.deposit-cheque", Hashids::encode($receiptVoucher->id)) }}',
+                url: '{{ route("accounting.receipt-vouchers.deposit-cheque", $receiptVoucher->hash_id) }}',
                 method: 'POST',
                 data: {
                     _token: '{{ csrf_token() }}',
@@ -548,7 +549,7 @@
                 if (result.isConfirmed) {
                     const form = $('<form>', {
                         'method': 'POST',
-                        'action': '{{ route("accounting.receipt-vouchers.destroy", Hashids::encode($receiptVoucher->id)) }}'
+                        'action': '{{ route("accounting.receipt-vouchers.destroy", $receiptVoucher->hash_id) }}'
                     });
 
                     form.append($('<input>', {

@@ -31,6 +31,7 @@ class PaymentVoucherApprovalSetting extends Model
         'level4_approvers',
         'level5_approval_type',
         'level5_approvers',
+        'updated_by',
     ];
 
     protected $casts = [
@@ -54,6 +55,14 @@ class PaymentVoucherApprovalSetting extends Model
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * Get the user who last updated the settings.
+     */
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
     }
 
     /**

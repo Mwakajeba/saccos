@@ -1,446 +1,508 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Transfer #{{ $transfer->transfer_number }}</title>
+    <meta charset="utf-8">
+    <title>Inter-Account Transfer - {{ $transfer->transfer_number }}</title>
     <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 10px;
-            color: #333;
+            font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
+            color: #000;
         }
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 2px solid #0d6efd;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
-        }
-        .header-left {
-            display: flex;
-            align-items: center;
-        }
-        .logo {
-            width: 50px;
-            height: 50px;
-            object-fit: contain;
-            margin-right: 12px;
-        }
-        .company-info {
-            flex: 1;
-        }
-        .company-name {
-            font-size: 18px;
-            font-weight: bold;
-            color: #0d6efd;
-            margin-bottom: 2px;
-        }
-        .document-title {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-        .header-right {
-            text-align: right;
-            font-size: 10px;
-            color: #666;
-        }
-        .transfer-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 15px;
-            font-size: 10px;
-        }
-        .info-section {
-            background-color: #ffffff;
-            border: 1px solid #e9ecef;
-            border-radius: 4px;
-            padding: 8px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-        .info-label {
-            font-weight: bold;
-            color: #666;
-            font-size: 10px;
-            text-transform: uppercase;
-            margin-bottom: 2px;
-        }
-        .section-title {
-            font-size: 11px;
-            font-weight: bold;
-            color: #0d6efd;
-            margin-bottom: 6px;
-            padding-bottom: 3px;
-            border-bottom: 1px solid #0d6efd;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .info-value {
-            font-size: 11px;
-            margin-bottom: 8px;
-        }
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 6px;
-            padding: 4px 8px;
-            background-color: #f8f9fa;
-            border-radius: 3px;
-            border-left: 3px solid #0d6efd;
-        }
-        .info-row:last-child {
-            margin-bottom: 0;
-        }
-        .info-row .info-label {
-            flex: 0 0 40%;
-            margin-bottom: 0;
-            font-weight: bold;
-            color: #495057;
-            font-size: 9px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }
-        .info-row .info-value {
-            flex: 0 0 58%;
-            margin-bottom: 0;
-            text-align: right;
-            font-size: 10px;
-            font-weight: 500;
-            color: #212529;
-        }
-        .amount-section {
-            text-align: right;
-            background-color: #f8f9fa;
-            padding: 8px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-        }
-        .amount-label {
-            font-size: 12px;
-            font-weight: bold;
-            color: #0d6efd;
-        }
-        .amount-value {
-            font-size: 18px;
-            font-weight: bold;
-            color: #0d6efd;
-        }
-        .accounts-section {
-            margin-bottom: 15px;
-        }
-        .accounts-section h3 {
-            color: #0d6efd;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 3px;
-            margin-bottom: 8px;
-            font-size: 12px;
-        }
-        .account-box {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 10px;
-            margin-bottom: 10px;
-        }
-        .account-box.from {
-            border-left: 4px solid #dc3545;
-        }
-        .account-box.to {
-            border-left: 4px solid #198754;
-        }
-        .account-type {
-            font-size: 9px;
-            color: #666;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-        .account-name {
-            font-size: 12px;
-            font-weight: bold;
-            color: #212529;
-        }
-        table {
+
+        .container {
             width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 10px;
-            font-size: 9px;
         }
-        th, td {
-            padding: 6px;
-            text-align: left;
-            border: 1px solid #dee2e6;
-        }
-        th {
-            background-color: #0d6efd;
-            color: white;
-            font-weight: bold;
-            text-transform: uppercase;
-            font-size: 8px;
-        }
-        .text-right {
-            text-align: right;
-        }
+
         .text-center {
             text-align: center;
         }
+
+        .text-right {
+            text-align: right;
+        }
+
+        hr {
+            border: none;
+            border-top: 2px solid #3b82f6;
+            margin: 8px 0;
+        }
+
+        /* Header */
+        .logo-section {
+            margin-bottom: 10px;
+        }
+
+        .company-logo {
+            max-height: 80px;
+            max-width: 120px;
+            object-fit: contain;
+        }
+
+        .company-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1e40af;
+        }
+
+        .company-details {
+            font-size: 10px;
+        }
+
+        /* Document title */
+        .document-title {
+            font-weight: bold;
+            text-align: center;
+            font-size: 18px;
+            margin: 10px 0;
+            color: #1e40af;
+        }
+
+        /* Info section */
+        .info-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .bill-to {
+            width: 48%;
+            font-size: 10px;
+        }
+
+        .bill-to strong {
+            color: #1e40af;
+        }
+
+        .invoice-box {
+            width: 48%;
+            text-align: right;
+        }
+
+        .invoice-box table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-left: auto;
+        }
+
+        .invoice-box td {
+            border: 1px solid #cbd5e1;
+            padding: 4px;
+        }
+
+        .invoice-box td:nth-child(even) {
+            text-align: right;
+        }
+
+        .invoice-box strong {
+            color: #1e40af;
+        }
+
+        /* Account boxes (From / To) */
+        .account-block {
+            margin-bottom: 10px;
+            padding: 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 3px;
+        }
+
+        .account-block.from {
+            background-color: #fef2f2;
+            border-left: 4px solid #dc2626;
+        }
+
+        .account-block.to {
+            background-color: #f0fdf4;
+            border-left: 4px solid #16a34a;
+        }
+
+        .account-block-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 2px;
+        }
+
+        .account-block-name {
+            font-size: 12px;
+            font-weight: bold;
+            color: #1e40af;
+        }
+
+        /* Items / GL table */
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-top: 10px;
+        }
+
+        .items-table th,
+        .items-table td {
+            border: 1px solid #cbd5e1;
+            padding: 5px;
+        }
+
+        .items-table th {
+            text-align: center;
+            font-weight: bold;
+            background-color: #1e3a8a;
+            color: #fff;
+        }
+
+        .items-table tbody tr:nth-child(even) {
+            background-color: #dbeafe;
+        }
+
+        .items-table tbody tr:nth-child(odd) {
+            background-color: #fff;
+        }
+
+        /* Totals */
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-top: 10px;
+        }
+
+        .totals-table td {
+            padding: 4px 5px;
+            border: none;
+        }
+
+        .totals-table td:last-child {
+            text-align: right;
+            padding-right: 5px;
+        }
+
+        .totals-table tr:last-child td {
+            background-color: #1e3a8a;
+            color: #fff;
+            font-weight: bold;
+            padding: 8px 5px;
+        }
+
+        .totals-table tr:last-child td:last-child {
+            background-color: #dbeafe;
+            color: #1e40af;
+            padding: 8px;
+            border-radius: 3px;
+        }
+
+        /* Status badge */
         .status-badge {
             display: inline-block;
-            padding: 3px 8px;
+            padding: 2px 6px;
             border-radius: 3px;
             font-size: 9px;
             font-weight: bold;
             text-transform: uppercase;
         }
-        .status-draft {
-            background-color: #6c757d;
-            color: white;
-        }
-        .status-submitted {
-            background-color: #0dcaf0;
-            color: white;
-        }
-        .status-approved {
-            background-color: #198754;
-            color: white;
-        }
-        .status-rejected {
-            background-color: #dc3545;
-            color: white;
-        }
-        .status-posted {
-            background-color: #0d6efd;
-            color: white;
-        }
+
+        .status-draft { background-color: #64748b; color: #fff; }
+        .status-submitted { background-color: #0ea5e9; color: #fff; }
+        .status-approved { background-color: #16a34a; color: #fff; }
+        .status-rejected { background-color: #dc2626; color: #fff; }
+        .status-posted { background-color: #1e40af; color: #fff; }
+
+        /* Footer */
         .footer {
             margin-top: 20px;
-            padding-top: 10px;
-            border-top: 1px solid #dee2e6;
-            font-size: 9px;
-            color: #666;
-            text-align: center;
-        }
-        .signature-section {
-            margin-top: 30px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        .signature-box {
-            border-top: 1px solid #dee2e6;
-            padding-top: 10px;
-            text-align: center;
-        }
-        .signature-label {
             font-size: 10px;
-            font-weight: bold;
+        }
+
+        .footer strong {
+            color: #1e40af;
+        }
+
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .signature-box {
+            text-align: center;
+            width: 30%;
+        }
+
+        .signature-line {
+            border-top: 1px solid #333;
             margin-top: 40px;
+            padding-top: 2px;
+        }
+
+        .footer hr {
+            border-top: 1px solid #dbeafe;
+            margin: 15px 0;
+        }
+
+        .notes-box {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 3px;
+            font-size: 10px;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="header-left">
-            <div class="company-info">
-                <div class="company-name">{{ $transfer->company->name ?? 'Company Name' }}</div>
-                <div class="document-title">INTER-ACCOUNT TRANSFER</div>
-            </div>
-        </div>
-        <div class="header-right">
-            <div>Generated: {{ now()->format('d M Y, h:i A') }}</div>
-            <div>Page 1 of 1</div>
-        </div>
-    </div>
+    <div class="container">
 
-    <div class="transfer-info">
-        <div class="info-section">
-            <div class="section-title">Transfer Information</div>
-            <div class="info-row">
-                <span class="info-label">Transfer Number:</span>
-                <span class="info-value">{{ $transfer->transfer_number }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Transfer Date:</span>
-                <span class="info-value">{{ $transfer->transfer_date->format('d M Y') }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Status:</span>
-                <span class="info-value">
-                    <span class="status-badge status-{{ $transfer->status }}">{{ ucfirst($transfer->status) }}</span>
-                </span>
-            </div>
-            @if($transfer->reference_number)
-            <div class="info-row">
-                <span class="info-label">Reference Number:</span>
-                <span class="info-value">{{ $transfer->reference_number }}</span>
-            </div>
-            @endif
-        </div>
-
-        <div class="info-section">
-            <div class="section-title">Amount Details</div>
-            <div class="info-row">
-                <span class="info-label">Transfer Amount:</span>
-                <span class="info-value">{{ number_format($transfer->amount, 2) }} {{ $transfer->currency->currency_code ?? 'TZS' }}</span>
-            </div>
-            @if($transfer->charges > 0)
-            <div class="info-row">
-                <span class="info-label">Charges:</span>
-                <span class="info-value">{{ number_format($transfer->charges, 2) }} {{ $transfer->currency->currency_code ?? 'TZS' }}</span>
-            </div>
-            @endif
-            <div class="info-row">
-                <span class="info-label">Total Amount:</span>
-                <span class="info-value" style="font-weight: bold; color: #0d6efd;">
-                    {{ number_format($transfer->amount + ($transfer->charges ?? 0), 2) }} {{ $transfer->currency->currency_code ?? 'TZS' }}
-                </span>
-            </div>
-            @if($transfer->exchange_rate && $transfer->exchange_rate != 1)
-            <div class="info-row">
-                <span class="info-label">Exchange Rate:</span>
-                <span class="info-value">{{ number_format($transfer->exchange_rate, 6) }}</span>
-            </div>
-            @endif
-        </div>
-    </div>
-
-    <div class="accounts-section">
-        <h3>Account Details</h3>
-        <div class="account-box from">
-            <div class="account-type">From Account ({{ ucfirst(str_replace('_', ' ', $transfer->from_account_type)) }})</div>
-            <div class="account-name">
+        {{-- Header (same as purchase invoice) --}}
+        <div class="text-left">
+            @php
+                $company = $transfer->company ?? ($transfer->branch->company ?? null);
+            @endphp
+            @if($company && $company->logo)
                 @php
-                    $fromAccount = $transfer->fromAccount;
+                    $logo = $company->logo;
+                    $logoPath = public_path('storage/' . ltrim($logo, '/'));
+                    $logoBase64 = null;
+                    if (file_exists($logoPath)) {
+                        $imageData = file_get_contents($logoPath);
+                        $imageInfo = getimagesize($logoPath);
+                        if ($imageInfo !== false) {
+                            $mimeType = $imageInfo['mime'];
+                            $logoBase64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                        }
+                    }
                 @endphp
-                {{ $fromAccount ? ($fromAccount->name ?? 'N/A') : 'N/A' }}
+                @if($logoBase64)
+                    <div class="logo-section" style="float: left; width: 45%;">
+                        <img src="{{ $logoBase64 }}" alt="{{ ($company->name ?? 'Company') . ' logo' }}" class="company-logo">
+                    </div>
+                @endif
+            @endif
+            <div style="float: right; width: 50%; text-align: left; margin-left: 15%;">
+                <div class="company-name">{{ $company->name ?? 'Company' }}</div>
+                <div class="company-details">
+                    @if($company && $company->address)
+                        P.O Box: {{ $company->address }} <br>
+                    @endif
+                    @if($company && $company->phone)
+                        Phone: {{ $company->phone }} <br>
+                    @endif
+                    @if($company && $company->email)
+                        Email: {{ $company->email }}
+                    @endif
+                </div>
             </div>
         </div>
-        <div class="account-box to">
-            <div class="account-type">To Account ({{ ucfirst(str_replace('_', ' ', $transfer->to_account_type)) }})</div>
-            <div class="account-name">
-                @php
-                    $toAccount = $transfer->toAccount;
-                @endphp
-                {{ $toAccount ? ($toAccount->name ?? 'N/A') : 'N/A' }}
-            </div>
-        </div>
-    </div>
+        <div style="clear: both;"></div>
 
-    @if($transfer->description)
-    <div class="info-section" style="margin-bottom: 15px;">
-        <div class="section-title">Description</div>
-        <div style="padding: 8px; font-size: 10px; line-height: 1.5;">
+        <div class="document-title">INTER-ACCOUNT TRANSFER</div>
+        <hr>
+
+        {{-- From Account (left) + Transfer Info (right) --}}
+        <div class="info-section">
+            <div class="bill-to" style="float: left; width: 48%;">
+                <strong>From Account:</strong><br>
+                <div class="account-block from" style="margin-top: 6px;">
+                    <div class="account-block-label">{{ ucfirst(str_replace('_', ' ', $transfer->from_account_type)) }}</div>
+                    <div class="account-block-name">
+                        @php $fromAccount = $transfer->fromAccount; @endphp
+                        {{ $fromAccount ? ($fromAccount->name ?? 'N/A') : 'N/A' }}
+                    </div>
+                </div>
+                <strong style="margin-top: 10px; display: block;">To Account:</strong><br>
+                <div class="account-block to" style="margin-top: 6px;">
+                    <div class="account-block-label">{{ ucfirst(str_replace('_', ' ', $transfer->to_account_type)) }}</div>
+                    <div class="account-block-name">
+                        @php $toAccount = $transfer->toAccount; @endphp
+                        {{ $toAccount ? ($toAccount->name ?? 'N/A') : 'N/A' }}
+                    </div>
+                </div>
+                @if($transfer->createdBy)
+                    <strong style="margin-top: 10px;">Created By:</strong><br>
+                    {{ $transfer->createdBy->name }}
+                @endif
+            </div>
+
+            <div class="invoice-box" style="text-align: right; float: left; width: 48%;">
+                <table style="margin-top: 8px;">
+                    <tr>
+                        <td><strong>Transfer No:</strong></td>
+                        <td>{{ $transfer->transfer_number }}</td>
+                        <td><strong>Date:</strong></td>
+                        <td>{{ $transfer->transfer_date->format('d F Y') }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Status:</strong></td>
+                        <td><span class="status-badge status-{{ $transfer->status }}">{{ ucfirst($transfer->status) }}</span></td>
+                        <td><strong>Currency:</strong></td>
+                        <td>{{ $transfer->currency->currency_code ?? 'TZS' }}</td>
+                    </tr>
+                    @if($transfer->exchange_rate && (float) $transfer->exchange_rate != 1)
+                    <tr>
+                        <td><strong>Exchange Rate:</strong></td>
+                        <td>{{ number_format($transfer->exchange_rate, 4) }}</td>
+                        <td><strong>Time:</strong></td>
+                        <td>{{ $transfer->created_at->format('H:i:s') }}</td>
+                    </tr>
+                    @else
+                    <tr>
+                        <td><strong>Time:</strong></td>
+                        <td colspan="3">{{ $transfer->created_at->format('H:i:s') }}</td>
+                    </tr>
+                    @endif
+                    @if($transfer->reference_number)
+                    <tr>
+                        <td><strong>Reference:</strong></td>
+                        <td colspan="3">{{ $transfer->reference_number }}</td>
+                    </tr>
+                    @endif
+                    @if($transfer->branch)
+                    <tr>
+                        <td><strong>Branch:</strong></td>
+                        <td colspan="3">{{ $transfer->branch->name ?? 'N/A' }}</td>
+                    </tr>
+                    @endif
+                </table>
+            </div>
+        </div>
+        <div style="clear: both; margin-bottom: 10px;"></div>
+
+        @if($transfer->description)
+        <div class="notes-box">
+            <strong>Description:</strong><br>
             {{ $transfer->description }}
         </div>
-    </div>
-    @endif
+        @endif
 
-    @if($transfer->charges > 0 && $transfer->chargesAccount)
-    <div class="info-section" style="margin-bottom: 15px;">
-        <div class="section-title">Charges Information</div>
-        <div class="info-row">
-            <span class="info-label">Charges Amount:</span>
-            <span class="info-value">{{ number_format($transfer->charges, 2) }} {{ $transfer->currency->currency_code ?? 'TZS' }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Charges Account:</span>
-            <span class="info-value">{{ $transfer->chargesAccount->account_code }} - {{ $transfer->chargesAccount->account_name }}</span>
-        </div>
-    </div>
-    @endif
-
-    @if($transfer->journal_id && $transfer->journal && $transfer->journal->items)
-    <div class="accounts-section">
-        <h3>General Ledger Entries</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Account Code</th>
-                    <th>Account Name</th>
-                    <th class="text-center">Nature</th>
-                    <th class="text-right">Amount</th>
-                    <th>Description</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach($transfer->journal->items as $item)
-                <tr>
-                    <td>{{ $item->chartAccount->account_code ?? 'N/A' }}</td>
-                    <td>{{ $item->chartAccount->account_name ?? 'N/A' }}</td>
-                    <td class="text-center">
-                        @if($item->nature === 'debit')
-                            <span style="color: #198754; font-weight: bold;">Debit</span>
-                        @else
-                            <span style="color: #dc3545; font-weight: bold;">Credit</span>
-                        @endif
-                    </td>
-                    <td class="text-right">
-                        <strong>{{ number_format($item->amount, 2) }} {{ $transfer->currency->currency_code ?? 'TZS' }}</strong>
-                    </td>
-                    <td>{{ $item->description ?? 'N/A' }}</td>
-                </tr>
-                @endforeach
-            </tbody>
-            <tfoot>
-                <tr>
-                    <th colspan="3" class="text-right">Total:</th>
-                    <th class="text-right">{{ number_format($transfer->journal->items->sum('amount'), 2) }} {{ $transfer->currency->currency_code ?? 'TZS' }}</th>
-                    <th></th>
-                </tr>
-            </tfoot>
+        {{-- Totals (same style as purchase invoice) --}}
+        @php
+            $totalAmount = (float) $transfer->amount + (float) ($transfer->charges ?? 0);
+            $currencyCode = $transfer->currency->currency_code ?? 'TZS';
+        @endphp
+        <table class="totals-table">
+            <tr>
+                <td colspan="4" style="text-align: right;">Transfer Amount:</td>
+                <td>{{ number_format($transfer->amount, 2) }} {{ $currencyCode }}</td>
+            </tr>
+            @if($transfer->charges > 0)
+            <tr>
+                <td colspan="4" style="text-align: right;">Charges:</td>
+                <td>{{ number_format($transfer->charges, 2) }} {{ $currencyCode }}</td>
+            </tr>
+            @endif
+            <tr>
+                <td colspan="4" style="text-align: right;"><strong>GRAND TOTAL:</strong></td>
+                <td><strong>{{ number_format($totalAmount, 2) }} {{ $currencyCode }}</strong></td>
+            </tr>
         </table>
-    </div>
-    @endif
 
-    <div class="info-section" style="margin-bottom: 15px;">
-        <div class="section-title">Additional Information</div>
-        <div class="info-row">
-            <span class="info-label">Created By:</span>
-            <span class="info-value">{{ $transfer->createdBy->name ?? 'N/A' }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Created At:</span>
-            <span class="info-value">{{ $transfer->created_at->format('d M Y, h:i A') }}</span>
-        </div>
-        @if($transfer->approved_by)
-        <div class="info-row">
-            <span class="info-label">Approved By:</span>
-            <span class="info-value">{{ $transfer->approvedBy->name ?? 'N/A' }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Approved At:</span>
-            <span class="info-value">{{ $transfer->approved_at ? $transfer->approved_at->format('d M Y, h:i A') : 'N/A' }}</span>
+        @if($transfer->charges > 0 && $transfer->chargesAccount)
+        <div class="notes-box" style="margin-top: 10px;">
+            <strong>Charges Account:</strong> {{ $transfer->chargesAccount->account_code }} - {{ $transfer->chargesAccount->account_name }}
         </div>
         @endif
-        @if($transfer->approval_notes)
-        <div class="info-row">
-            <span class="info-label">Approval Notes:</span>
-            <span class="info-value">{{ $transfer->approval_notes }}</span>
-        </div>
-        @endif
-        @if($transfer->rejection_reason)
-        <div class="info-row">
-            <span class="info-label">Rejection Reason:</span>
-            <span class="info-value" style="color: #dc3545;">{{ $transfer->rejection_reason }}</span>
-        </div>
-        @endif
-        @if($transfer->branch)
-        <div class="info-row">
-            <span class="info-label">Branch:</span>
-            <span class="info-value">{{ $transfer->branch->name ?? 'N/A' }}</span>
-        </div>
-        @endif
-    </div>
 
-    <div class="footer">
-        <div>This is a computer-generated document. No signature is required.</div>
-        <div style="margin-top: 5px;">Generated on {{ now()->format('d M Y, h:i A') }} by {{ Auth::user()->name ?? 'System' }}</div>
+        {{-- General Ledger Entries (same table style as purchase invoice items) --}}
+        @if($transfer->journal_id && $transfer->journal && $transfer->journal->items && $transfer->journal->items->isNotEmpty())
+        <div style="margin-top: 15px;">
+            <div style="font-weight: bold; color: #1e40af; margin-bottom: 8px; font-size: 11px;">GENERAL LEDGER ENTRIES</div>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>Account Code</th>
+                        <th>Account Name</th>
+                        <th class="text-center">Nature</th>
+                        <th class="text-right">Amount</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($transfer->journal->items as $item)
+                    <tr>
+                        <td>{{ $item->chartAccount->account_code ?? 'N/A' }}</td>
+                        <td>{{ $item->chartAccount->account_name ?? 'N/A' }}</td>
+                        <td class="text-center">
+                            @if($item->nature === 'debit')
+                                <span style="color: #16a34a; font-weight: bold;">Debit</span>
+                            @else
+                                <span style="color: #dc2626; font-weight: bold;">Credit</span>
+                            @endif
+                        </td>
+                        <td class="text-right">{{ number_format($item->amount, 2) }} {{ $currencyCode }}</td>
+                        <td>{{ $item->description ?? '-' }}</td>
+                    </tr>
+                    @endforeach
+                </tbody>
+                <tfoot>
+                    <tr style="background-color: #e0f2fe; font-weight: bold;">
+                        <td colspan="3" class="text-right">Total:</td>
+                        <td class="text-right">{{ number_format($transfer->journal->items->sum('amount'), 2) }} {{ $currencyCode }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        @endif
+
+        {{-- Footer (same as purchase invoice) --}}
+        <hr>
+        <div class="footer">
+            <div style="margin-bottom: 10px;">This is a computer-generated inter-account transfer document.</div>
+
+            <div class="signature-section">
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Prepared By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
+                        {{ $transfer->createdBy->name ?? 'N/A' }}
+                    </div>
+                </div>
+
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Approved By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
+                        @if($transfer->approvedBy)
+                            {{ $transfer->approvedBy->name }}
+                            @if($transfer->approved_at)
+                                <br><small>{{ $transfer->approved_at->format('d M Y, H:i') }}</small>
+                            @endif
+                        @else
+                            <span style="color: #999;">{{ in_array($transfer->status, ['approved', 'posted']) ? 'N/A' : 'Pending Approval' }}</span>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="signature-box">
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-size: 11px;"><strong>Authorized By</strong></div>
+                    <div style="margin-top: 2px; font-size: 10px;">
+                        <span style="color: #999;">-</span>
+                    </div>
+                </div>
+            </div>
+
+            @if($transfer->approval_notes)
+            <div style="margin-top: 10px; padding: 6px; background-color: #f8fafc; border-radius: 3px; font-size: 10px;">
+                <strong>Approval Notes:</strong> {{ $transfer->approval_notes }}
+            </div>
+            @endif
+            @if($transfer->rejection_reason)
+            <div style="margin-top: 10px; padding: 6px; background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 3px; font-size: 10px; color: #dc2626;">
+                <strong>Rejection Reason:</strong> {{ $transfer->rejection_reason }}
+            </div>
+            @endif
+
+            <div class="text-center" style="font-size: 9px; margin-top: 20px;">
+                Inter-Account Transfer No: {{ $transfer->transfer_number }} &nbsp;|&nbsp;
+                Generated: {{ now()->format('d M Y, H:i') }} &nbsp;|&nbsp;
+                Page 1 of 1
+            </div>
+        </div>
     </div>
 </body>
 </html>
-

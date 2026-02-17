@@ -22,6 +22,12 @@
                         <h6 class="mb-0"><i class="bx bx-plus-circle me-2"></i>New Bank Reconciliation</h6>
                     </div>
                     <div class="card-body">
+                        @if ($errors->has('error'))
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                <i class="bx bx-error-circle me-2"></i>{{ $errors->first('error') }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        @endif
                         <form action="{{ route('accounting.bank-reconciliation.store') }}" method="POST" enctype="multipart/form-data">
                             @csrf
                             

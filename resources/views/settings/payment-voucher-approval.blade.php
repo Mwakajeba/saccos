@@ -24,8 +24,21 @@
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
                             <i class="bx bx-check-circle me-2"></i>
                             {{ session('success') }}
+                            @if(session('saved_by_name'))
+                                <span class="d-block mt-1 small">Saved by <strong>{{ session('saved_by_name') }}</strong></span>
+                            @endif
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
+                        @endif
+
+                        @if(isset($settings) && $settings && ($settings->updater || $settings->updated_at))
+                        <p class="text-muted small mb-3">
+                            <i class="bx bx-user me-1"></i>
+                            Last saved by <strong>{{ $settings->updater->name ?? '—' }}</strong>
+                            @if($settings->updated_at)
+                                on {{ $settings->updated_at->format('M j, Y \a\t g:i A') }}
+                            @endif
+                        </p>
                         @endif
 
                         @if(isset($errors) && $errors->any())
@@ -41,9 +54,13 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('settings.payment-voucher-approval.update') }}" method="POST">
+                        @php
+                            $requireApprovalEnabled = filter_var(old('require_approval_for_all', $settings->require_approval_for_all ?? false), FILTER_VALIDATE_BOOLEAN);
+                        @endphp
+                        <form action="{{ route('settings.payment-voucher-approval.update') }}" method="POST" id="payment_voucher_approval_form">
                             @csrf
                             @method('PUT')
+                            <input type="hidden" name="require_approval_for_all" id="require_approval_for_all_value" value="{{ $requireApprovalEnabled ? '1' : '0' }}">
 
                             <div class="row">
                                 <!-- Approval Levels -->
@@ -52,7 +69,7 @@
                                 <!-- Require Approval for All -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="require_approval_for_all" name="require_approval_for_all" value="1" {{ old('require_approval_for_all', $settings->require_approval_for_all ?? false) ? 'checked' : '' }}>
+                                        <input class="form-check-input" type="checkbox" id="require_approval_for_all" value="1" {{ $requireApprovalEnabled ? 'checked' : '' }} aria-label="Require Approval for All Vouchers">
                                         <label class="form-check-label" for="require_approval_for_all">
                                             Require Approval for All Vouchers
                                         </label>
@@ -62,7 +79,7 @@
                             </div>
                                 
                             <!-- Direct posting note when approvals are disabled -->
-                            <div class="row" id="direct_post_note" style="display:none;">
+                            <div class="row" id="direct_post_note" style="display:{{ $requireApprovalEnabled ? 'none' : 'block' }};">
                                 <div class="col-12">
                                     <div class="alert alert-info">
                                         <i class="bx bx-info-circle me-2"></i>
@@ -72,7 +89,7 @@
                             </div>
 
                             <!-- Approval Configuration (visible only if require_approval_for_all is checked) -->
-                            <div id="approval_config">
+                            <div id="approval_config" style="display:{{ $requireApprovalEnabled ? 'block' : 'none' }};">
                             <div class="row">
                                 <div class="col-md-6 mb-3" id="levels_block">
                                     <label for="approval_levels" class="form-label">Number of Approval Levels</label>
@@ -407,12 +424,27 @@
 document.addEventListener('DOMContentLoaded', function() {
     const approvalLevelsSelect = document.getElementById('approval_levels');
     const requireAllCheckbox = document.getElementById('require_approval_for_all');
+    const requireApprovalHidden = document.getElementById('require_approval_for_all_value');
     const approvalConfig = document.getElementById('approval_config');
     const directPostNote = document.getElementById('direct_post_note');
     const levelsBlock = document.getElementById('levels_block');
     const assignmentsBlock = document.getElementById('assignments_block');
     const approvalCards = document.querySelectorAll('[id^="level"]');
-    
+    const form = document.getElementById('payment_voucher_approval_form');
+
+    function syncRequireApprovalHidden() {
+        if (requireApprovalHidden && requireAllCheckbox) {
+            requireApprovalHidden.value = requireAllCheckbox.checked ? '1' : '0';
+        }
+    }
+
+    if (form) {
+        form.addEventListener('submit', function() {
+            syncRequireApprovalHidden();
+        });
+    }
+    requireAllCheckbox.addEventListener('change', syncRequireApprovalHidden);
+
     function toggleApprovalConfig() {
         const enabled = requireAllCheckbox.checked;
         approvalConfig.style.display = enabled ? 'block' : 'none';
