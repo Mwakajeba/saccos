@@ -43,9 +43,19 @@
                                 <td>{{ optional($loan->branch)->name ?? 'N/A' }}</td>
                                 <td>{{ $loan->date_applied }}</td>
                                 <td>
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="openRepaymentModal({{ $loan->id }}, '{{ $loan->loanNo ?? $loan->id }}', '{{ optional($loan->customer)->name ?? 'N/A' }}')">
-                                        Repayment Receipt
-                                    </button>
+                                    @php
+                                        $writeoff = \App\Models\LoanWriteoff::where('loan_id', $loan->id)
+                                            ->where('status', 'posted')
+                                            ->whereNull('reversed_by_id')
+                                            ->first();
+                                    @endphp
+                                    @if($writeoff && $writeoff->writeoff_type === 'provision')
+                                        <a href="{{ route('loans.writeoffs.receipt.create', $writeoff) }}" class="btn btn-primary btn-sm">
+                                            <i class="bx bx-receipt me-1"></i> Writeoff Receipt
+                                        </a>
+                                    @else
+                                        <span class="text-muted">N/A</span>
+                                    @endif
                                 </td>
                             </tr>
                         @empty

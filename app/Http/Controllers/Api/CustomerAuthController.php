@@ -95,6 +95,9 @@ class CustomerAuthController extends Controller
                 }
             }
 
+            // Dispatch penalty accrual job (runs in background)
+            \App\Jobs\AccruePenaltyJob::dispatch();
+
             // Return successful response
             return response()->json([
                 'message' => 'Login successful',

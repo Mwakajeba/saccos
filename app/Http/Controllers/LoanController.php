@@ -23,6 +23,7 @@ use App\Models\ReceiptItem;
 use App\Models\Penalty;
 use App\Models\Journal;
 use App\Models\JournalItem;
+use App\Models\AccruedPenalty;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\ArrearsClassification;
@@ -4163,8 +4164,48 @@ class LoanController extends Controller
         }
 
         $bankAccounts = BankAccount::forCurrentBranch()->with('chartAccount')->orderBy('name')->get();
+        $customers = \App\Models\Customer::all();
+        
+        // Get chart accounts - include the provision income account from loan product
+        $chartAccounts = collect();
+        if ($product->income_provision_account_id) {
+            $provisionAccount = \App\Models\ChartAccount::find($product->income_provision_account_id);
+            if ($provisionAccount) {
+                $chartAccounts->push((object) [
+                    'id' => $provisionAccount->id,
+                    'account_name' => $provisionAccount->account_name,
+                    'account_code' => $provisionAccount->account_code,
+                ]);
+            }
+        }
+        
+        // Also get other income accounts for flexibility
+        $incomeAccountIds = \DB::table('chart_accounts')
+            ->whereIn('account_name', ['Interest income', 'FEE INCOME', 'Penalty Income', 'Service income', 'Other income', 'Provision Income'])
+            ->pluck('id');
+        
+        $otherChartAccounts = \App\Models\ChartAccount::whereIn('id', $incomeAccountIds)->get();
+        foreach ($otherChartAccounts as $account) {
+            if (!$chartAccounts->contains('id', $account->id)) {
+                $chartAccounts->push((object) [
+                    'id' => $account->id,
+                    'account_name' => $account->account_name,
+                    'account_code' => $account->account_code,
+                ]);
+            }
+        }
+        
+        // Default line item with provision income account
+        $defaultLineItem = null;
+        if ($product->income_provision_account_id) {
+            $defaultLineItem = (object) [
+                'chart_account_id' => $product->income_provision_account_id,
+                'amount' => $writeoff->outstanding,
+                'description' => 'Loan write-off recovery - Provision Income',
+            ];
+        }
 
-        return view('loans.writeoffs.receipt', compact('writeoff', 'bankAccounts'));
+        return view('loans.writeoffs.receipt', compact('writeoff', 'bankAccounts', 'customers', 'chartAccounts', 'defaultLineItem'));
     }
 
     /**
@@ -4193,71 +4234,120 @@ class LoanController extends Controller
         }
 
         $validated = $request->validate([
-            'amount' => 'required|numeric|min:0.01',
-            'payment_date' => 'required|date|before_or_equal:today',
+            'date' => 'required|date|before_or_equal:today',
             'bank_account_id' => 'required|exists:bank_accounts,id',
-            'description' => 'nullable|string|max:500',
+            'payee_type' => 'required|string',
+            'customer_id' => 'nullable|exists:customers,id',
+            'payee_name' => 'nullable|string',
+            'description' => 'nullable|string',
+            'attachment' => 'nullable|file|mimes:pdf|max:2048',
+            'line_items' => 'required|array|min:1',
+            'line_items.*.chart_account_id' => 'required|exists:chart_accounts,id',
+            'line_items.*.amount' => 'required|numeric|min:0.01',
+            'line_items.*.description' => 'nullable|string',
         ]);
+
+        // Handle file upload
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = $request->file('attachment')->store('receipts', 'public');
+        }
 
         $bankAccount = BankAccount::findOrFail($validated['bank_account_id']);
         $user = auth()->user();
         $description = $validated['description'] ?: 'Loan write-off recovery - ' . ($writeoff->loan->loanNo ?? 'Loan #' . $writeoff->loan_id);
+        $totalAmount = collect($validated['line_items'])->sum('amount');
 
-        DB::transaction(function () use ($writeoff, $validated, $bankAccount, $user, $description) {
+        // Determine payee info
+        $payeeId = null;
+        $payeeName = null;
+        $customerId = null;
+        
+        if ($validated['payee_type'] === 'customer') {
+            $payeeId = $validated['customer_id'] ?? $writeoff->customer_id;
+            $customerId = $payeeId;
+            $customer = \App\Models\Customer::find($payeeId);
+            $payeeName = $customer ? $customer->name : optional($writeoff->customer)->name;
+        } else {
+            $payeeName = $validated['payee_name'];
+        }
+
+        DB::beginTransaction();
+        try {
+            // Create receipt
             $receipt = Receipt::create([
                 'reference' => $writeoff->id,
                 'reference_type' => 'loan_writeoff_recovery',
                 'reference_number' => $writeoff->loan->loanNo ?? null,
-                'amount' => $validated['amount'],
-                'date' => $validated['payment_date'],
+                'amount' => $totalAmount,
+                'date' => $validated['date'],
                 'description' => $description,
-                'user_id' => $user->id,
                 'bank_account_id' => $bankAccount->id,
-                'payee_type' => 'customer',
-                'payee_id' => $writeoff->customer_id,
-                'payee_name' => optional($writeoff->customer)->name,
-                'customer_id' => $writeoff->customer_id,
+                'payee_type' => $validated['payee_type'],
+                'payee_id' => $payeeId,
+                'payee_name' => $payeeName,
+                'customer_id' => $customerId,
+                'attachment' => $attachmentPath,
+                'user_id' => $user->id,
                 'branch_id' => $user->branch_id,
                 'approved' => true,
                 'approved_by' => $user->id,
                 'approved_at' => now(),
             ]);
 
-            ReceiptItem::create([
-                'receipt_id' => $receipt->id,
-                'chart_account_id' => $writeoff->loan->product->income_provision_account_id,
-                'amount' => $validated['amount'],
-                'description' => $description,
-            ]);
+            // Save receipt items
+            foreach ($validated['line_items'] as $item) {
+                ReceiptItem::create([
+                    'receipt_id' => $receipt->id,
+                    'chart_account_id' => $item['chart_account_id'],
+                    'amount' => $item['amount'],
+                    'description' => $item['description'] ?? null,
+                ]);
+            }
 
+            // GL Transactions
+            // Debit Bank Account (total amount)
             GlTransaction::create([
                 'chart_account_id' => $bankAccount->chart_account_id,
-                'customer_id' => $writeoff->customer_id,
-                'amount' => $validated['amount'],
+                'customer_id' => $customerId,
+                'amount' => $totalAmount,
                 'nature' => 'debit',
                 'transaction_id' => $receipt->id,
                 'transaction_type' => 'receipt',
-                'date' => $validated['payment_date'],
+                'date' => $validated['date'],
                 'description' => $description,
                 'branch_id' => $user->branch_id,
                 'user_id' => $user->id,
             ]);
 
-            GlTransaction::create([
-                'chart_account_id' => $writeoff->loan->product->income_provision_account_id,
-                'customer_id' => $writeoff->customer_id,
-                'amount' => $validated['amount'],
-                'nature' => 'credit',
-                'transaction_id' => $receipt->id,
-                'transaction_type' => 'receipt',
-                'date' => $validated['payment_date'],
-                'description' => $description,
-                'branch_id' => $user->branch_id,
-                'user_id' => $user->id,
-            ]);
-        });
+            // Credit each line item account
+            foreach ($validated['line_items'] as $item) {
+                GlTransaction::create([
+                    'chart_account_id' => $item['chart_account_id'],
+                    'customer_id' => $customerId,
+                    'amount' => $item['amount'],
+                    'nature' => 'credit',
+                    'transaction_id' => $receipt->id,
+                    'transaction_type' => 'receipt',
+                    'date' => $validated['date'],
+                    'description' => $item['description'] ?? $description,
+                    'branch_id' => $user->branch_id,
+                    'user_id' => $user->id,
+                ]);
+            }
 
-        return redirect()->route('loans.writeoffs.show', $writeoff)->with('success', 'Recovery receipt recorded successfully.');
+            DB::commit();
+
+            return redirect()->route('loans.writeoffs.show', $writeoff)->with('success', 'Recovery receipt recorded successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error creating writeoff receipt: ' . $e->getMessage(), [
+                'writeoff_id' => $writeoff->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return redirect()->back()->withErrors(['error' => 'Failed to create receipt: ' . $e->getMessage()])->withInput();
+        }
     }
 
     /**
@@ -5078,5 +5168,161 @@ class LoanController extends Controller
         $pdf->setPaper('A4', 'landscape');
 
         return $pdf->download('NPL_Report_' . now()->format('Y-m-d') . '.pdf');
+    }
+
+    /**
+     * Reverse an accrued penalty
+     */
+    public function reversePenalty(Request $request, $penaltyId)
+    {
+        $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $accruedPenalty = AccruedPenalty::with(['loan', 'loanSchedule', 'journal'])->findOrFail($penaltyId);
+
+            // Check if already reversed
+            if ($accruedPenalty->isReversed()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This penalty has already been reversed.'
+                ], 400);
+            }
+
+            $loan = $accruedPenalty->loan;
+            $schedule = $accruedPenalty->loanSchedule;
+            $penaltyAmount = $accruedPenalty->penalty_amount;
+            $originalJournal = $accruedPenalty->journal;
+
+            if (!$loan || !$schedule) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Loan or schedule not found for this penalty.'
+                ], 404);
+            }
+
+            // Get penalty accounts from the original journal items
+            $originalJournalItems = JournalItem::where('journal_id', $originalJournal->id)->get();
+            $penaltyReceivableAccountId = null;
+            $penaltyIncomeAccountId = null;
+
+            foreach ($originalJournalItems as $item) {
+                if ($item->nature === 'debit') {
+                    $penaltyReceivableAccountId = $item->chart_account_id;
+                } elseif ($item->nature === 'credit') {
+                    $penaltyIncomeAccountId = $item->chart_account_id;
+                }
+            }
+
+            if (!$penaltyReceivableAccountId || !$penaltyIncomeAccountId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Could not determine penalty accounts from original journal entry.'
+                ], 400);
+            }
+
+            // Create reversal journal entry
+            $reversalJournal = Journal::create([
+                'date' => now(),
+                'reference' => 'PEN-REV-' . $accruedPenalty->id . '-' . now()->format('YmdHis'),
+                'reference_type' => 'Penalty Reversal',
+                'customer_id' => $loan->customer_id,
+                'description' => "Reversal of penalty accrual #{$accruedPenalty->id} for loan {$loan->loanNo}, schedule {$schedule->id}" . ($request->reason ? " - {$request->reason}" : ''),
+                'branch_id' => $loan->branch_id,
+                'user_id' => auth()->id(),
+            ]);
+
+            // Create reversal journal items (opposite nature)
+            // Credit: Penalty Receivable (reverse the debit)
+            JournalItem::create([
+                'journal_id' => $reversalJournal->id,
+                'chart_account_id' => $penaltyReceivableAccountId,
+                'amount' => $penaltyAmount,
+                'nature' => 'credit', // Opposite of original debit
+                'description' => "Reversal of penalty receivable for loan {$loan->loanNo}",
+            ]);
+
+            // Debit: Penalty Income (reverse the credit)
+            JournalItem::create([
+                'journal_id' => $reversalJournal->id,
+                'chart_account_id' => $penaltyIncomeAccountId,
+                'amount' => $penaltyAmount,
+                'nature' => 'debit', // Opposite of original credit
+                'description' => "Reversal of penalty income for loan {$loan->loanNo}",
+            ]);
+
+            // Reverse GL transactions (create opposite nature transactions)
+            // Credit: Penalty Receivable (reverse the original debit)
+            GlTransaction::create([
+                'chart_account_id' => $penaltyReceivableAccountId,
+                'customer_id' => $loan->customer_id,
+                'amount' => $penaltyAmount,
+                'nature' => 'credit', // Opposite of original
+                'transaction_id' => $accruedPenalty->id,
+                'transaction_type' => 'Penalty Reversal',
+                'date' => now(),
+                'description' => "Reversal of penalty accrual #{$accruedPenalty->id} for loan {$loan->loanNo}",
+                'branch_id' => $loan->branch_id,
+                'user_id' => auth()->id(),
+            ]);
+
+            // Debit: Penalty Income (reverse the original credit)
+            GlTransaction::create([
+                'chart_account_id' => $penaltyIncomeAccountId,
+                'customer_id' => $loan->customer_id,
+                'amount' => $penaltyAmount,
+                'nature' => 'debit', // Opposite of original
+                'transaction_id' => $accruedPenalty->id,
+                'transaction_type' => 'Penalty Reversal',
+                'date' => now(),
+                'description' => "Reversal of penalty income for loan {$loan->loanNo}",
+                'branch_id' => $loan->branch_id,
+                'user_id' => auth()->id(),
+            ]);
+
+            // Decrement penalty amount in loan schedule
+            $schedule->decrement('penalty_amount', $penaltyAmount);
+
+            // Mark penalty as reversed
+            $accruedPenalty->update([
+                'reversed_at' => now(),
+                'reversal_journal_id' => $reversalJournal->id,
+            ]);
+
+            DB::commit();
+
+            Log::info("Penalty reversed successfully", [
+                'penalty_id' => $accruedPenalty->id,
+                'loan_id' => $loan->id,
+                'loan_no' => $loan->loanNo,
+                'penalty_amount' => $penaltyAmount,
+                'reversal_journal_id' => $reversalJournal->id,
+                'user_id' => auth()->id(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Penalty reversed successfully.',
+                'data' => [
+                    'penalty_id' => $accruedPenalty->id,
+                    'reversal_journal_id' => $reversalJournal->id,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Failed to reverse penalty", [
+                'penalty_id' => $penaltyId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to reverse penalty: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

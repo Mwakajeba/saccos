@@ -192,6 +192,122 @@
                     </div>
                 </div>
             </div>
+        <!-- Penalty Accrual Details Card (for penalty accrual jobs) -->
+        @elseif($jobLog->job_name === 'AccruePenaltyJob' && !empty($details))
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bx bx-error-circle me-2"></i>Penalty Accrual Details</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Summary Stats -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card bg-light-primary border-0">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted mb-1">Total Schedules Processed</h6>
+                                    <h4 class="mb-0 text-primary">{{ count($details) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light-danger border-0">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted mb-1">Total Penalty Accrued</h6>
+                                    <h4 class="mb-0 text-danger">TZS {{ number_format(collect($details)->sum('penalty_amount'), 2) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light-info border-0">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted mb-1">Accrual Date</h6>
+                                    <h4 class="mb-0 text-info">{{ $details[0]['accrual_date'] ?? 'N/A' }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Details Table -->
+                    <div class="table-responsive">
+                        <table id="jobDetailsTable" class="table table-bordered table-striped w-100">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Loan No</th>
+                                    <th>Customer Name</th>
+                                    <th>Due Date</th>
+                                    <th class="text-end">Base Amount</th>
+                                    <th>Penalty Rate</th>
+                                    <th>Deduction Type</th>
+                                    <th class="text-end">Penalty Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($details as $index => $detail)
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>
+                                            @if(isset($detail['loan_id']))
+                                                <a href="{{ route('loans.show', \Vinkla\Hashids\Facades\Hashids::encode($detail['loan_id'])) }}" target="_blank">
+                                                    {{ $detail['loan_no'] ?? 'N/A' }}
+                                                </a>
+                                            @else
+                                                {{ $detail['loan_no'] ?? 'N/A' }}
+                                            @endif
+                                        </td>
+                                        <td>{{ $detail['customer_name'] ?? 'N/A' }}</td>
+                                        <td>{{ isset($detail['due_date']) ? \Carbon\Carbon::parse($detail['due_date'])->format('d-m-Y') : 'N/A' }}</td>
+                                        <td class="text-end">
+                                            {{ isset($detail['base_amount']) ? 'TZS ' . number_format($detail['base_amount'], 2) : '-' }}
+                                        </td>
+                                        <td>
+                                            @if(isset($detail['penalty_type']) && $detail['penalty_type'] === 'percentage')
+                                                <strong>{{ number_format($detail['penalty_rate'] ?? 0, 2) }}%</strong>
+                                                <br><small class="text-muted">{{ $detail['frequency_cycle'] ?? 'monthly' }}</small>
+                                            @else
+                                                <strong>TZS {{ number_format($detail['penalty_rate'] ?? 0, 2) }}</strong>
+                                                <br><small class="text-muted">{{ $detail['frequency_cycle'] ?? 'monthly' }}</small>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @php
+                                                $deductionType = $detail['deduction_type'] ?? '';
+                                                $deductionLabels = [
+                                                    'over_due_principal_amount' => 'Overdue Principal',
+                                                    'over_due_interest_amount' => 'Overdue Interest',
+                                                    'over_due_principal_and_interest' => 'Principal + Interest',
+                                                    'total_principal_amount_released' => 'Total Principal'
+                                                ];
+                                            @endphp
+                                            <small>{{ $deductionLabels[$deductionType] ?? $deductionType }}</small>
+                                        </td>
+                                        <td class="text-end">
+                                            <strong class="text-danger">
+                                                {{ isset($detail['penalty_amount']) ? 'TZS ' . number_format($detail['penalty_amount'], 2) : '-' }}
+                                            </strong>
+                                        </td>
+                                        <td>
+                                            @if(isset($detail['error']))
+                                                <span class="badge bg-danger" title="{{ $detail['error'] }}">Failed</span>
+                                            @else
+                                                <span class="badge bg-success">Success</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                            <tfoot class="table-secondary">
+                                <tr>
+                                    <th colspan="7" class="text-end">TOTAL:</th>
+                                    <th class="text-end text-danger">TZS {{ number_format(collect($details)->sum('penalty_amount'), 2) }}</th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
         @elseif(empty($details))
             <div class="card border-0 shadow-sm">
                 <div class="card-body text-center py-5">
@@ -214,14 +330,24 @@
 @push('scripts')
 <script>
     $(document).ready(function() {
-        @if($jobLog->job_name === 'CalculateDailyInterestJob' && !empty($details))
-            $('#jobDetailsTable').DataTable({
-                pageLength: 25,
-                order: [[4, 'desc']], // Sort by interest accrued descending
-                language: {
-                    search: "Search loans:"
-                }
-            });
+        @if(($jobLog->job_name === 'CalculateDailyInterestJob' || $jobLog->job_name === 'AccruePenaltyJob') && !empty($details))
+            @if($jobLog->job_name === 'CalculateDailyInterestJob')
+                $('#jobDetailsTable').DataTable({
+                    pageLength: 25,
+                    order: [[4, 'desc']], // Sort by interest accrued descending
+                    language: {
+                        search: "Search loans:"
+                    }
+                });
+            @elseif($jobLog->job_name === 'AccruePenaltyJob')
+                $('#jobDetailsTable').DataTable({
+                    pageLength: 25,
+                    order: [[4, 'desc']], // Sort by penalty amount descending
+                    language: {
+                        search: "Search loans:"
+                    }
+                });
+            @endif
         @endif
     });
 </script>

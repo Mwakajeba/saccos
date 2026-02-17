@@ -164,13 +164,42 @@ document.addEventListener('DOMContentLoaded', function() {
         directNote.style.display = enabled ? 'none' : 'block';
         approvalConfig.querySelectorAll('input, select').forEach(el => { el.disabled = !enabled; });
         if (enabled) toggleLevels();
+        
+        // Update hidden input value to ensure it's always sent
+        if (reqAllHidden) {
+            reqAllHidden.value = enabled ? '1' : '0';
+        }
     }
+    
     function toggleLevels() {
         const n = parseInt(levelsSelect.value) || 5;
         document.querySelectorAll('.level-card').forEach(card => {
             card.style.display = parseInt(card.dataset.level) <= n ? 'block' : 'none';
         });
     }
+    
+    // Update hidden input when checkbox changes
+    if (reqAll && reqAllHidden) {
+        reqAll.addEventListener('change', function() {
+            reqAllHidden.value = this.checked ? '1' : '0';
+            toggle();
+        });
+        
+        // Initialize hidden input value based on checkbox state
+        reqAllHidden.value = reqAll.checked ? '1' : '0';
+    }
+    
+    // Ensure hidden input is updated before form submission
+    const form = document.getElementById('loanWriteoffApprovalForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (reqAll && reqAllHidden) {
+                reqAllHidden.value = reqAll.checked ? '1' : '0';
+            }
+        });
+    }
+    
+    // Initialize
     toggle();
     reqAll.addEventListener('change', toggle);
     levelsSelect.addEventListener('change', toggleLevels);
