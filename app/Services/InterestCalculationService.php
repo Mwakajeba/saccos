@@ -26,6 +26,23 @@ class InterestCalculationService
             return null;
         }
 
+        // Check if interest accrual should be frozen based on arrears days
+        $product = $loan->product;
+        if ($product && $product->can_freeze_interest_accrual && $product->arrears_days_to_stop_interest_accrual) {
+            // Ensure schedule is loaded with repayments to calculate days in arrears correctly
+            $loan->loadMissing(['schedule' => function ($query) {
+                $query->with('repayments');
+            }]);
+            
+            // Calculate days in arrears as of the accrual date (not today)
+            $daysInArrears = $this->calculateDaysInArrears($loan, $date);
+            
+            if ($daysInArrears >= $product->arrears_days_to_stop_interest_accrual) {
+                Log::info("Loan {$loan->loanNo} interest accrual frozen: Days in arrears ({$daysInArrears}) >= threshold ({$product->arrears_days_to_stop_interest_accrual}) as of {$date->toDateString()}. Skipping interest calculation.");
+                return null;
+            }
+        }
+
         // Treat interest as ANNUAL percentage from loan product if available, otherwise fall back to loan's own interest
         // Rule: Daily = annual_interest / 365
         $product = $loan->product;
@@ -73,5 +90,43 @@ class InterestCalculationService
             'principal_balance' => $principalRemaining,
             'accrual' => $accrual,
         ];
+    }
+
+    /**
+     * Calculate days in arrears for a loan as of a specific date
+     * 
+     * @param Loan $loan
+     * @param Carbon $asOfDate
+     * @return int
+     */
+    private function calculateDaysInArrears(Loan $loan, Carbon $asOfDate): int
+    {
+        $firstOverdueDate = null;
+
+        foreach ($loan->schedule->sortBy('due_date') as $scheduleItem) {
+            $dueDate = Carbon::parse($scheduleItem->due_date);
+
+            // If the due date has passed as of the accrual date and there's a remaining amount
+            if ($dueDate->lt($asOfDate)) {
+                // Calculate remaining amount: total due - paid
+                $interestAmount = $scheduleItem->accrued_interest ?? $scheduleItem->interest ?? 0;
+                $totalDue = $scheduleItem->principal + $interestAmount + $scheduleItem->fee_amount + $scheduleItem->penalty_amount;
+                $paidAmount = $scheduleItem->repayments ? $scheduleItem->repayments->sum(function ($rep) {
+                    return $rep->principal + $rep->interest + $rep->fee_amount + $rep->penalt_amount;
+                }) : 0;
+                $remainingAmount = max(0, $totalDue - $paidAmount);
+
+                if ($remainingAmount > 0) {
+                    $firstOverdueDate = $dueDate;
+                    break; // We found the first overdue date
+                }
+            }
+        }
+
+        if ($firstOverdueDate) {
+            return round($firstOverdueDate->diffInDays($asOfDate));
+        }
+
+        return 0; // No arrears
     }
 }

@@ -161,6 +161,8 @@ class LoanProductController extends Controller
             'repayment_order' => 'nullable',
             'allow_push_to_ess' => 'nullable|boolean',
             'allowed_in_app' => 'nullable|boolean',
+            'can_freeze_interest_accrual' => 'nullable|boolean',
+            'arrears_days_to_stop_interest_accrual' => 'nullable|required_if:can_freeze_interest_accrual,1|integer|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -239,6 +241,15 @@ class LoanProductController extends Controller
             $data['has_top_up'] = in_array('1', Arr::wrap($hasTopUpValue), true);
             $data['has_contribution'] = in_array('1', Arr::wrap($hasContributionValue), true);
             $data['has_share'] = in_array('1', Arr::wrap($hasShareValue), true);
+            
+            // Handle can_freeze_interest_accrual checkbox
+            $canFreezeInterestValue = $request->input('can_freeze_interest_accrual');
+            $data['can_freeze_interest_accrual'] = in_array('1', Arr::wrap($canFreezeInterestValue), true);
+            
+            // If can_freeze_interest_accrual is false, set arrears_days_to_stop_interest_accrual to null
+            if (!$data['can_freeze_interest_accrual']) {
+                $data['arrears_days_to_stop_interest_accrual'] = null;
+            }
 
             // Default interest rate: if not provided, fall back to minimum_interest_rate
             if (!array_key_exists('default_interest_rate', $data) || $data['default_interest_rate'] === null || $data['default_interest_rate'] === '') {
@@ -479,6 +490,8 @@ class LoanProductController extends Controller
             'repayment_order' => 'nullable',
             'allow_push_to_ess' => 'nullable|boolean',
             'allowed_in_app' => 'nullable|boolean',
+            'can_freeze_interest_accrual' => 'nullable|boolean',
+            'arrears_days_to_stop_interest_accrual' => 'nullable|required_if:can_freeze_interest_accrual,1|integer|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -561,6 +574,15 @@ class LoanProductController extends Controller
             $data['has_top_up'] = in_array('1', Arr::wrap($hasTopUpValue), true);
             $data['has_contribution'] = in_array('1', Arr::wrap($hasContributionValue), true);
             $data['has_share'] = in_array('1', Arr::wrap($hasShareValue), true);
+            
+            // Handle can_freeze_interest_accrual checkbox
+            $canFreezeInterestValue = $request->input('can_freeze_interest_accrual');
+            $data['can_freeze_interest_accrual'] = in_array('1', Arr::wrap($canFreezeInterestValue), true);
+            
+            // If can_freeze_interest_accrual is false, set arrears_days_to_stop_interest_accrual to null
+            if (!$data['can_freeze_interest_accrual']) {
+                $data['arrears_days_to_stop_interest_accrual'] = null;
+            }
 
             // Default interest rate: if not provided, fall back to minimum_interest_rate
             if (!array_key_exists('default_interest_rate', $data) || $data['default_interest_rate'] === null || $data['default_interest_rate'] === '') {

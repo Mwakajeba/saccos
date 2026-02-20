@@ -54,6 +54,8 @@ class LoanProduct extends Model
         'share_product_id',
         'share_value_type',
         'share_value',
+        'can_freeze_interest_accrual',
+        'arrears_days_to_stop_interest_accrual',
     ];
 
     public function incomeProvisionAccount(): BelongsTo
@@ -98,6 +100,8 @@ class LoanProduct extends Model
         'contribution_value' => 'decimal:15',
         'has_share' => 'boolean',
         'share_value' => 'decimal:15',
+        'can_freeze_interest_accrual' => 'boolean',
+        'arrears_days_to_stop_interest_accrual' => 'integer',
     ];
 
 
