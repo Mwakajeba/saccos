@@ -60,15 +60,17 @@ class CalculateDailyInterestJob implements ShouldQueue
             $totalProcessed = 0;
             $totalSuccessful = 0;
             $totalFailed = 0;
+            $totalSkipped = 0; // Track skipped loans (frozen, no principal, etc.)
             $totalInterestAccrued = 0;
             $perLoanDetails = [];
 
             // Use chunking to process loans in batches of 200 for better memory management
             // Only include loans disbursed before today (interest starts accruing the day after disbursement)
+            // Load schedule with repayments to calculate days in arrears for freeze check
             Loan::where('status', Loan::STATUS_ACTIVE)
                 ->whereNotNull('disbursed_on')
                 ->where('disbursed_on', '<', $this->date)
-                ->with(['product', 'customer', 'branch', 'repayments'])
+                ->with(['product', 'customer', 'branch', 'repayments', 'schedule.repayments'])
                 ->chunk(200, function ($loans) use (&$totalProcessed, &$totalSuccessful, &$totalFailed, &$totalInterestAccrued, &$perLoanDetails) {
                     foreach ($loans as $loan) {
                         $totalProcessed++;
@@ -91,6 +93,22 @@ class CalculateDailyInterestJob implements ShouldQueue
                                     'principal_balance' => (float) $result['principal_balance'],
                                     'interest_accrued' => (float) $result['interest_amount'],
                                     'accrual_date' => $this->date->toDateString(),
+                                    'status' => 'success',
+                                ];
+                            } else {
+                                // Loan was skipped (frozen, no principal, zero interest, or already processed)
+                                $totalSkipped++;
+                                $skipReason = $this->getSkipReason($loan);
+                                $perLoanDetails[] = [
+                                    'loan_id' => $loan->id,
+                                    'loan_no' => $loan->loanNo ?? ('#' . $loan->id),
+                                    'customer_name' => $loan->customer ? $loan->customer->name : 'N/A',
+                                    'customer_id' => $loan->customer_id,
+                                    'principal_balance' => null,
+                                    'interest_accrued' => null,
+                                    'accrual_date' => $this->date->toDateString(),
+                                    'status' => 'skipped',
+                                    'skip_reason' => $skipReason,
                                 ];
                             }
                         } catch (\Exception $e) {
@@ -102,6 +120,8 @@ class CalculateDailyInterestJob implements ShouldQueue
                                 'customer_id' => $loan->customer_id,
                                 'principal_balance' => null,
                                 'interest_accrued' => null,
+                                'accrual_date' => $this->date->toDateString(),
+                                'status' => 'failed',
                                 'error' => $e->getMessage(),
                             ];
                             Log::error("Failed to calculate interest for loan {$loan->id}: " . $e->getMessage());
@@ -110,7 +130,7 @@ class CalculateDailyInterestJob implements ShouldQueue
                     }
                     
                     // Log progress after each chunk
-                    Log::info("Processed chunk: {$totalProcessed} loans so far (Success: {$totalSuccessful}, Failed: {$totalFailed})");
+                    Log::info("Processed chunk: {$totalProcessed} loans so far (Success: {$totalSuccessful}, Skipped: {$totalSkipped}, Failed: {$totalFailed})");
                 });
             
             $endTime = now();
@@ -128,14 +148,15 @@ class CalculateDailyInterestJob implements ShouldQueue
                 'successful' => $totalSuccessful,
                 'failed' => $totalFailed,
                 'total_amount' => $totalInterestAccrued,
-                'summary' => "Processed {$totalProcessed} loans. Interest accrued: TZS " . number_format($totalInterestAccrued, 2),
+                'summary' => "Processed {$totalProcessed} loans. Successful: {$totalSuccessful}, Skipped: {$totalSkipped}, Failed: {$totalFailed}. Interest accrued: TZS " . number_format($totalInterestAccrued, 2),
                 'completed_at' => $endTime,
                 'duration_seconds' => $duration,
             ]);
 
-            Log::info("Daily interest calculation completed. Processed {$totalProcessed} loans. Total interest accrued: TZS " . number_format($totalInterestAccrued, 2), [
+            Log::info("Daily interest calculation completed. Processed {$totalProcessed} loans. Successful: {$totalSuccessful}, Skipped: {$totalSkipped}, Failed: {$totalFailed}. Total interest accrued: TZS " . number_format($totalInterestAccrued, 2), [
                 'job_log_id' => $jobLog->id,
                 'successful' => $totalSuccessful,
+                'skipped' => $totalSkipped,
                 'failed' => $totalFailed,
                 'duration' => $duration . 's'
             ]);
@@ -195,5 +216,86 @@ class CalculateDailyInterestJob implements ShouldQueue
             Log::error("Error processing interest for loan {$loan->id}: " . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Get the reason why a loan was skipped
+     * 
+     * @param Loan $loan
+     * @return string
+     */
+    private function getSkipReason(Loan $loan): string
+    {
+        // Check principal remaining
+        $principalRemaining = $loan->getPrincipalRemaining();
+        if ($principalRemaining <= 0) {
+            return 'No principal remaining';
+        }
+
+        // Check if interest accrual is frozen
+        $product = $loan->product;
+        if ($product && $product->can_freeze_interest_accrual && $product->arrears_days_to_stop_interest_accrual) {
+            // Ensure schedule is loaded with repayments
+            $loan->loadMissing(['schedule' => function ($query) {
+                $query->with('repayments');
+            }]);
+            
+            // Calculate days in arrears as of the accrual date
+            $daysInArrears = $this->calculateDaysInArrears($loan, $this->date);
+            
+            if ($daysInArrears >= $product->arrears_days_to_stop_interest_accrual) {
+                return "Interest accrual frozen (Days in arrears: {$daysInArrears} >= threshold: {$product->arrears_days_to_stop_interest_accrual})";
+            }
+        }
+
+        // Check if already processed (would be caught by firstOrCreate, but check here for completeness)
+        $existingAccrual = \App\Models\DailyInterestAccrual::where('loan_id', $loan->id)
+            ->where('accrual_date', $this->date)
+            ->first();
+        
+        if ($existingAccrual) {
+            return 'Already processed';
+        }
+
+        // Default skip reason
+        return 'Skipped (zero interest or other reason)';
+    }
+
+    /**
+     * Calculate days in arrears for a loan as of a specific date
+     * 
+     * @param Loan $loan
+     * @param Carbon $asOfDate
+     * @return int
+     */
+    private function calculateDaysInArrears(Loan $loan, Carbon $asOfDate): int
+    {
+        $firstOverdueDate = null;
+
+        foreach ($loan->schedule->sortBy('due_date') as $scheduleItem) {
+            $dueDate = Carbon::parse($scheduleItem->due_date);
+
+            // If the due date has passed as of the accrual date and there's a remaining amount
+            if ($dueDate->lt($asOfDate)) {
+                // Calculate remaining amount: total due - paid
+                $interestAmount = $scheduleItem->accrued_interest ?? $scheduleItem->interest ?? 0;
+                $totalDue = $scheduleItem->principal + $interestAmount + $scheduleItem->fee_amount + $scheduleItem->penalty_amount;
+                $paidAmount = $scheduleItem->repayments ? $scheduleItem->repayments->sum(function ($rep) {
+                    return $rep->principal + $rep->interest + $rep->fee_amount + $rep->penalt_amount;
+                }) : 0;
+                $remainingAmount = max(0, $totalDue - $paidAmount);
+
+                if ($remainingAmount > 0) {
+                    $firstOverdueDate = $dueDate;
+                    break; // We found the first overdue date
+                }
+            }
+        }
+
+        if ($firstOverdueDate) {
+            return round($firstOverdueDate->diffInDays($asOfDate));
+        }
+
+        return 0; // No arrears
     }
 }

@@ -164,6 +164,32 @@
             @error('maximum_number_of_loans') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
+        <!-- Interest Accrual Freeze Configuration -->
+        <div class="col-12">
+            <h5 class="mb-3 text-primary mt-4">Interest Accrual Freeze Configuration</h5>
+        </div>
+
+        <div class="col-md-6 mb-3">
+            <div class="form-check">
+                <input type="hidden" name="can_freeze_interest_accrual" value="0">
+                <input class="form-check-input" type="checkbox" name="can_freeze_interest_accrual" id="can_freeze_interest_accrual" value="1" 
+                    {{ old('can_freeze_interest_accrual', $loanProduct->can_freeze_interest_accrual ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="can_freeze_interest_accrual">
+                    Can Freeze Interest Accrual
+                </label>
+                <small class="form-text text-muted d-block">If checked, interest accrual will stop when loan reaches specified arrears days</small>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-3" id="arrears_days_to_stop_interest_accrual_div" style="display: none;">
+            <label class="form-label">Number of Arrears Days to Stop Accrued Interest <span class="text-danger">*</span></label>
+            <input type="number" name="arrears_days_to_stop_interest_accrual" min="1"
+                class="form-control @error('arrears_days_to_stop_interest_accrual') is-invalid @enderror"
+                value="{{ old('arrears_days_to_stop_interest_accrual', $loanProduct->arrears_days_to_stop_interest_accrual ?? '') }}"
+                placeholder="Enter number of days">
+            <small class="text-muted">Interest accrual will stop when loan is in arrears for this many days or more</small>
+            @error('arrears_days_to_stop_interest_accrual') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        </div>
 
         <div class="col-md-6 mb-3">
             <label class="form-label">Penalty Criteria Deduction <span class="text-danger">*</span></label>
@@ -1080,12 +1106,25 @@
             setDisplay('approval_levels_div', isChecked);
         }
 
+                function toggleInterestAccrualFreeze() {
+            var canFreeze = document.getElementById('can_freeze_interest_accrual');
+            var isChecked = canFreeze && canFreeze.checked;
+            setDisplay('arrears_days_to_stop_interest_accrual_div', isChecked);
+            
+            // Make field required if checkbox is checked
+            var arrearsDaysInput = document.querySelector('input[name="arrears_days_to_stop_interest_accrual"]');
+            if (arrearsDaysInput) {
+                arrearsDaysInput.required = isChecked;
+            }
+        }
+
                 document.addEventListener('DOMContentLoaded', function () {
             // Initial state
             toggleTopUp();
             toggleContribution();
             toggleShare();
             toggleApprovalLevels();
+            toggleInterestAccrualFreeze();
 
             // Listeners
             var hasTopUp = document.getElementById('has_top_up');
@@ -1113,6 +1152,9 @@
 
             var hasApproval = document.getElementById('has_approval_levels');
             if (hasApproval) hasApproval.addEventListener('change', toggleApprovalLevels);
+
+            var canFreezeInterest = document.getElementById('can_freeze_interest_accrual');
+            if (canFreezeInterest) canFreezeInterest.addEventListener('change', toggleInterestAccrualFreeze);
         });
     })();
     </script>
