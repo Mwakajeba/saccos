@@ -71,7 +71,7 @@ class CalculateDailyInterestJob implements ShouldQueue
                 ->whereNotNull('disbursed_on')
                 ->where('disbursed_on', '<', $this->date)
                 ->with(['product', 'customer', 'branch', 'repayments', 'schedule.repayments'])
-                ->chunk(200, function ($loans) use (&$totalProcessed, &$totalSuccessful, &$totalFailed, &$totalInterestAccrued, &$perLoanDetails) {
+                ->chunk(200, function ($loans) use (&$totalProcessed, &$totalSuccessful, &$totalFailed, &$totalSkipped, &$totalInterestAccrued, &$perLoanDetails) {
                     foreach ($loans as $loan) {
                         $totalProcessed++;
                         
